@@ -21,7 +21,7 @@ pub fn AppMainPage(props: AppPageProps) -> Element {
 
     match *page {
         AppPages::Home => rsx! { div {"home page"} },
-        AppPages::Gallery => rsx! { div {"gallery page"} },
+        AppPages::Gallery => rsx! { div { crate::gallery::Gallery {} } },
         _ => rsx! { div{"failed to find page"} },
     }
 }

@@ -21,7 +21,7 @@ fn App() -> Element {
             background-color: #a0a0a0
     }"#;
 
-    let mut page_signal = use_signal(|| AppPages::Home);
+    let page_signal = use_signal(|| AppPages::Home);
 
     rsx! {
         style { "{app_style}" }
