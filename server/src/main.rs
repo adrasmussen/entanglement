@@ -77,6 +77,7 @@ async fn download_file(axum::extract::Path(file): axum::extract::Path<String>) -
 
     hyper::Response::builder()
         .status(StatusCode::OK)
+        .header("Access-Control-Allow-Origin", "*")
         .body(boxed_body)
         .unwrap()
 
