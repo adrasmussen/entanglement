@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow;
 
 use dioxus::prelude::*;
@@ -12,6 +10,7 @@ pub struct ImageProps {
     url: String,
 }
 
+#[component]
 pub fn Image(props: ImageProps) -> Element {
     rsx! {
         div {
@@ -22,13 +21,13 @@ pub fn Image(props: ImageProps) -> Element {
             flex_direction: "column",
 
             img {
-                src: "{props.url}"
+                src: "{props.url}",
             }
         }
     }
 }
 
-
+#[component]
 pub fn Gallery() -> Element {
     let search_filter: Signal<ImageFilter> = use_signal(|| ImageFilter {
         filter: String::from(".*"),
@@ -48,6 +47,7 @@ pub fn Gallery() -> Element {
     };
 
     rsx! {
+        GalleryNavBar { search_filter_signal: search_filter }
         div {
             match images {
                 Some(images) => rsx! {
@@ -63,6 +63,66 @@ pub fn Gallery() -> Element {
 
                 },
                 None => rsx! { p {"error finding images: {status}"} }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct GalleryNavBarProps {
+    search_filter_signal: Signal<ImageFilter>
+}
+
+#[component]
+fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
+    let mut signal = props.search_filter_signal.clone();
+    let search_filter = &*signal.read().filter;
+
+    let style = r#"
+        .subnav {
+            overflow: hidden;
+            background-color: #2196F3;
+        }
+
+        .subnav span {
+            float: left;
+            display: block;
+            color: black;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+            font-size: 17px;
+        }
+
+        .subnav span:hover {
+            background-color: #eaeaea;
+            color: black;
+        }
+
+        .subnav input[type=text] {
+            float: left;
+            padding: 6px;
+            border: none;
+            margin-top: 8px;
+            margin-right: 16px;
+            margin-left: 6px;
+            font-size: 17px;
+  "#;
+
+    // change this to a form and use onsubmit
+    rsx! {
+        div {
+            style { "{style}" }
+            div {
+                class: "subnav",
+                input {
+                    r#type: "text",
+                    value: "{search_filter}",
+                    oninput: move |event| {
+                        signal.set(ImageFilter{filter: event.value()})
+                    }
+                },
+                span { "Search History" },
             }
         }
     }

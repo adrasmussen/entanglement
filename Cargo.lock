@@ -2933,6 +2933,7 @@ dependencies = [
  "api",
  "dioxus",
  "dioxus-logger",
+ "dioxus-router",
  "gloo-console 0.3.0",
  "gloo-net 0.5.0",
  "serde",

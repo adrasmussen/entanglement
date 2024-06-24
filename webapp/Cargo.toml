@@ -10,6 +10,7 @@ edition = "2021"
 api = { path = "../api" }
 anyhow = "1.0.86"
 dioxus = { version = "0.5", features = ["web"] }
+dioxus-router = "0.5.0"
 gloo-console = "0.3.0"
 gloo-net = "0.5.0"
 serde = { version = "1.0", features = ["derive"] }
