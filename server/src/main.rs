@@ -1,3 +1,13 @@
+mod db;
+mod fs;
+mod http;
+mod service;
+
+
+
+// everything that follows here is the temporary http implementation
+
+
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
 
