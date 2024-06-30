@@ -2,11 +2,11 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::{match_images, ImageFilter, MatchedImages};
+use api::{match_images, ImageMatchReq, ImageMatchResp};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ImageProps {
-    sha: String,
+    uuid: String,
     url: String,
 }
 
@@ -29,12 +29,12 @@ pub fn Image(props: ImageProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter: Signal<ImageFilter> = use_signal(|| ImageFilter {
+    let search_filter: Signal<ImageMatchReq> = use_signal(|| ImageMatchReq {
         filter: String::from(".*"),
     });
 
     // call to the api server
-    let matching_images: Resource<anyhow::Result<MatchedImages>> =
+    let matching_images: Resource<anyhow::Result<ImageMatchResp>> =
         use_resource(move || async move { match_images(&search_filter()).await });
 
     // rebind to get around the issues with &*
@@ -57,7 +57,7 @@ pub fn Gallery() -> Element {
                         grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
 
                         for (k, v) in images.images.iter() {
-                            Image { sha: "{k}", url: "{v.url}" }
+                            Image { uuid: "{k}", url: "{v.url}" }
                         }
                     }
 
@@ -70,7 +70,7 @@ pub fn Gallery() -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryNavBarProps {
-    search_filter_signal: Signal<ImageFilter>
+    search_filter_signal: Signal<ImageMatchReq>
 }
 
 #[component]
@@ -119,7 +119,7 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                     r#type: "text",
                     value: "{search_filter}",
                     oninput: move |event| {
-                        signal.set(ImageFilter{filter: event.value()})
+                        signal.set(ImageMatchReq{filter: event.value()})
                     }
                 },
                 span { "Search History" },

@@ -97,33 +97,5 @@ async fn download_file(axum::extract::Path(file): axum::extract::Path<String>) -
 
 #[tokio::main]
 async fn main() {
-    let addr = SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081));
-
-    let middleware = ServiceBuilder::new();
-
-    let router: Router<()> = Router::new()
-        .route("/api/*file", get(download_file))
-        .layer(middleware);
-
-    let service = hyper::service::service_fn(move |request: Request<Incoming>| {
-        router.clone().call(request)
-    });
-
-    // for the moment, we just fail if the socket is in use
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-
-    while let Ok((stream, _)) = listener.accept().await {
-        let service = service.clone();
-
-        let io = hyper_util::rt::TokioIo::new(stream);
-
-        tokio::task::spawn(async move {
-            match hyper_util::server::conn::auto::Builder::new(
-                hyper_util::rt::TokioExecutor::new()
-            ).serve_connection(io, service.clone()).await {
-                Ok(()) => (),
-                Err(err) => println!("{}", err.to_string())
-            }
-        });
-    };
+    panic!("oh no")
 }
