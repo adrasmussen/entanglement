@@ -31,13 +31,29 @@ pub enum ESM {
 // config
 pub struct ESConfig {}
 
+// consider a universal service pattern that differs only on the State, and then
+// have an impl for specific internal states
+//
+// in this model, the message_handler is semi-programatically defined by the
+// messages themselves, tied to the State struct instead of the server wrapper
+//
+// overall this is much cleaner (since it means the tokio channels are persistent)
+// and does a better job enforcing the mutability of the state -- though we must
+// check that the message handler uses an immutable reference for thread safety
+//
+// probably want an ESInnerState trait that sets the message handler details,
+// maybe even going so far as to have Arc<Self> as the reciever
+//
+// also consider using tokio::select! on the server futures to check if the other
+// threads have failed
+
 #[async_trait]
 pub trait EntanglementService: Send + Sync + 'static {
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Arc<Self>);
+    type State: Send + Sync + 'static;
 
-    async fn message_handler(self: Arc<Self>, esm: ESM) -> anyhow::Result<()>;
+    fn create(config: Arc<ESConfig>) -> (ESMSender, Self);
 
-    async fn start(self: Arc<Self>, senders: HashMap<ESM, ESMSender>) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<()>>>;
+    async fn start(&self, senders: HashMap<ESM, ESMSender>) -> anyhow::Result<()>;
 }
 
 // we need all of this artifice because the message_handler subfunctions might

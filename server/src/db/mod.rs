@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use futures::TryStreamExt;
 
-use crate::service::{ESMResp, EntanglementService};
+use crate::service::{ESM, ESMResp, EntanglementService};
 
 pub mod msg;
 pub mod query;
@@ -29,8 +29,10 @@ trait ESDbQuery<T: ESDbConn> {
 }
 
 #[async_trait]
-trait ESDbService: EntanglementService {
-    async fn get_filtered_images(self: Arc<Self>, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
+trait ESDbService: Sync + Send + 'static {
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()>;
 
-    async fn edit_album(self: Arc<Self>, resp: ESMResp<()>, user: String, album: String, data: ()) -> anyhow::Result<()>;
+    async fn get_filtered_images(&self, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
+
+    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, data: ()) -> anyhow::Result<()>;
 }
