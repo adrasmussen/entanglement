@@ -3148,6 +3148,7 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "api",
  "async-trait",
  "async_cell",
  "axum 0.7.5",

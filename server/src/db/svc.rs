@@ -10,16 +10,11 @@ use mysql_async::{prelude::*, Pool};
 use tokio::sync::Mutex;
 
 use crate::db::msg::DbMsg;
-use crate::service::{ESConfig, ESMReceiver, ESMResp, ESMSender, EntanglementService, ESM};
+use crate::service::{ESConfig, ESMReceiver, ESMResp, ESMSender, EntanglementService, ESM, ESInner};
 
 use super::ESDbService;
 
-pub struct MySQLService {
-    config: Arc<ESConfig>,
-    sender: ESMSender,
-    receiver: Arc<Mutex<ESMReceiver>>,
-    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-}
+
 
 pub struct MySQLState {
     //conn: mysql_async::Conn,
@@ -45,6 +40,13 @@ impl ESDbService for MySQLState {
     ) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+#[async_trait]
+impl ESInner for MySQLState {
+    fn new () -> Self {
+        MySQLState {}
+    }
 
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
@@ -65,9 +67,16 @@ impl ESDbService for MySQLState {
     }
 }
 
+pub struct MySQLService {
+    config: Arc<ESConfig>,
+    sender: ESMSender,
+    receiver: Arc<Mutex<ESMReceiver>>,
+    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+}
+
 #[async_trait]
 impl EntanglementService for MySQLService {
-    type State = MySQLState;
+    type Inner = MySQLState;
 
     fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);

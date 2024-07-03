@@ -39,3 +39,10 @@ pub async fn match_images(_filter: &ImageMatchReq) -> anyhow::Result<ImageMatchR
 
     Ok(match_data)
 }
+
+#[derive(Debug)]
+pub enum ImageVisibility {
+    Private,
+    Public,
+    Hidden,
+}

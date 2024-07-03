@@ -7,11 +7,22 @@ use async_trait::async_trait;
 
 use futures::TryStreamExt;
 
-use crate::service::{ESM, ESMResp, EntanglementService};
+use crate::service::{ESInner, ESMResp, EntanglementService, ESM};
 
 pub mod msg;
 pub mod query;
 pub mod svc;
+
+// these are the database RPC calls that any backend server must be able to process
+//
+// note that the response to the caller is in the ESMResp, and that the actuall return
+// of the RPC functions are for successfully sending the reponse
+#[async_trait]
+trait ESDbService: ESInner {
+    async fn get_filtered_images(&self, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
+
+    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, data: ()) -> anyhow::Result<()>;
+}
 
 // marker trait to allow specific implementations of the ESDbQuery
 trait ESDbConn {}
@@ -26,13 +37,4 @@ trait ESDbQuery<T: ESDbConn> {
         self,
         conn: T,
     ) -> anyhow::Result<Option<impl TryStreamExt<Item = Result<Self::QueryOutput, impl Error>>>>;
-}
-
-#[async_trait]
-trait ESDbService: Sync + Send + 'static {
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()>;
-
-    async fn get_filtered_images(&self, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
-
-    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, data: ()) -> anyhow::Result<()>;
 }
