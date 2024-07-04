@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use tokio::sync::{Mutex, RwLock};
 
-use api::ImageVisibility;
+use api::Visibility;
 
 use crate::service::*;
 
@@ -15,7 +15,7 @@ use crate::cache::msg::CacheMsg;
 use crate::cache::ESCacheService;
 
 pub struct Caches {
-    image_visibility: Arc<RwLock<HashMap<String, ImageVisibility>>>,
+    image_visibility: Arc<RwLock<HashMap<String, Visibility>>>,
 }
 
 #[async_trait]
@@ -29,7 +29,7 @@ impl ESCacheService for Caches {
 
     async fn get_image_visibility(
         &self,
-        resp: ESMResp<ImageVisibility>,
+        resp: ESMResp<Visibility>,
         image: String,
     ) -> anyhow::Result<()> {
         let inner = async {
@@ -46,7 +46,7 @@ impl ESCacheService for Caches {
             //
             // then, after we commit changes to any images, refresh just that image
 
-            Ok(ImageVisibility::Hidden)
+            Ok(Visibility::Private)
         };
 
         resp.send(inner.await)
@@ -66,7 +66,7 @@ impl ESInner for Caches {
         match esm {
             ESM::Cache(message) => match message {
                 CacheMsg::ClearAllCaches { resp } => self.clear_all_caches(resp).await,
-                CacheMsg::_GetImageVisibility { resp, image } => {
+                CacheMsg::GetImageVisibility { resp, image } => {
                     self.get_image_visibility(resp, image).await
                 }
                 _ => Err(anyhow::Error::msg("not implemented")),

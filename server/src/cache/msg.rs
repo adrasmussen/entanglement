@@ -1,5 +1,5 @@
 
-use api::ImageVisibility;
+use api::Visibility;
 
 use crate::service::ESMResp;
 
@@ -8,8 +8,8 @@ pub enum CacheMsg {
     ClearAllCaches {
         resp: ESMResp<()>,
     },
-    _GetImageVisibility {
-        resp: ESMResp<ImageVisibility>,
+    GetImageVisibility {
+        resp: ESMResp<Visibility>,
         image: String,
     }
 }

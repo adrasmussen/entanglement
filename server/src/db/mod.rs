@@ -7,7 +7,8 @@ use async_trait::async_trait;
 
 use futures::TryStreamExt;
 
-use crate::service::{ESInner, ESMResp, EntanglementService, ESM};
+use api::AlbumMetadata;
+use crate::service::{ESInner, ESMResp};
 
 pub mod msg;
 pub mod query;
@@ -21,7 +22,7 @@ pub mod svc;
 trait ESDbService: ESInner {
     async fn get_filtered_images(&self, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
 
-    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, data: ()) -> anyhow::Result<()>;
+    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, change: AlbumMetadata) -> anyhow::Result<()>;
 }
 
 // marker trait to allow specific implementations of the ESDbQuery

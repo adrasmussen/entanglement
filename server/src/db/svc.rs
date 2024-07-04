@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use api::AlbumMetadata;
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -36,7 +37,7 @@ impl ESDbService for MySQLState {
         resp: ESMResp<()>,
         user: String,
         album: String,
-        data: (),
+        change: AlbumMetadata,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -54,12 +55,12 @@ impl ESInner for MySQLState {
                 DbMsg::ImageListQuery { resp, user, filter } => {
                     self.get_filtered_images(resp, user, filter).await
                 }
-                DbMsg::EditAlbum {
+                DbMsg::UpdateAlbum {
                     resp,
                     user,
                     album,
-                    data,
-                } => self.edit_album(resp, user, album, data).await,
+                    change,
+                } => self.edit_album(resp, user, album, change).await,
                 _ => Err(anyhow::Error::msg("not implemented")),
             },
             _ => Err(anyhow::Error::msg("not implemented")),

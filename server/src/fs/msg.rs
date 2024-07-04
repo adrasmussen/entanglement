@@ -4,10 +4,15 @@ use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum FsMsg {
-    _Status,
-    _ScanLibrary {
+    Status {
+        resp: ESMResp<()>
+    },
+    ScanLibrary {
         resp: ESMResp<()>,
-        conn: (), // generalized db connection object
-        libdir: PathBuf,
+        library: String,
+    },
+    RescanFile {
+        resp: ESMResp<()>,
+        file: PathBuf,
     }
 }
