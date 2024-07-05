@@ -1,43 +1,59 @@
-use api::{Album, AlbumMetadata, Image, ImageMetadata, Library, LibraryMetadata};
+use api::*;
 
 use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum DbMsg {
-    _GetConn,
     AddImage {
         resp: ESMResp<()>,
         image: Image,
     },
+    GetImage {
+        resp: ESMResp<Image>,
+        uuid: ImageUUID,
+    },
+    UpdateImage {
+        resp: ESMResp<()>,
+        user: String,
+        uuid: ImageUUID,
+        change: ImageMetadata,
+    },
+    FilterImages {
+        resp: ESMResp<()>,
+        user: String,
+        filter: String, // eventually replace with ImageFIlter object from lib
+    },
     AddAlbum {
         resp: ESMResp<()>,
-        album: Album,
+        uuid: Album,
+    },
+    GetAlbum {
+        resp: ESMResp<Album>,
+        uuid: AlbumUUID,
+    },
+    UpdateAlbum {
+        resp: ESMResp<()>,
+        user: String,
+        uuid: AlbumUUID,
+        change: AlbumMetadata,
+    },
+    FilterAlbums {
+        resp: ESMResp<()>,
+        user: String,
+        filter: String, // eventually replace with AlbumFIlter object from lib
     },
     AddLibrary {
         resp: ESMResp<()>,
         library: Library,
     },
-    ImageListQuery {
-        resp: ESMResp<()>,
-        user: String,
-        filter: String, // eventually replace with ImageFIlter object from lib
-    },
-    UpdateImage {
-        resp: ESMResp<()>,
-        user: String,
-        image: String,
-        change: ImageMetadata,
-    },
-    UpdateAlbum {
-        resp: ESMResp<()>,
-        user: String,
-        album: String,
-        change: AlbumMetadata,
+    GetLibary {
+        resp: ESMResp<Library>,
+        uuid: LibraryUUID,
     },
     UpdateLibrary {
         resp: ESMResp<()>,
         user: String,
-        library: String,
+        uuid: LibraryUUID,
         change: LibraryMetadata,
     },
 }

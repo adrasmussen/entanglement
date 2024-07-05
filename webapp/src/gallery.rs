@@ -2,7 +2,7 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::{match_images, ImageMatchReq, ImageMatchResp};
+use api::{filter_images, ImageMatchReq, ImageMatchResp};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ImageProps {
@@ -35,7 +35,7 @@ pub fn Gallery() -> Element {
 
     // call to the api server
     let matching_images: Resource<anyhow::Result<ImageMatchResp>> =
-        use_resource(move || async move { match_images(&search_filter()).await });
+        use_resource(move || async move { filter_images(&search_filter()).await });
 
     // rebind to get around the issues with &*
     let matching_images = &*matching_images.read();

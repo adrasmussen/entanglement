@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::error::Error;
+use std::sync::Arc;
 
 use anyhow;
 
@@ -7,12 +7,13 @@ use async_trait::async_trait;
 
 use futures::TryStreamExt;
 
-use api::AlbumMetadata;
 use crate::service::{ESInner, ESMResp};
+use api::*;
 
 pub mod msg;
 pub mod query;
 pub mod svc;
+pub mod mysql;
 
 // these are the database RPC calls that any backend server must be able to process
 //
@@ -20,15 +21,59 @@ pub mod svc;
 // of the RPC functions are for successfully sending the reponse
 #[async_trait]
 trait ESDbService: ESInner {
-    async fn get_filtered_images(&self, resp: ESMResp<()>, user: String, filter: String) -> anyhow::Result<()>;
+    async fn add_image(&self, resp: ESMResp<()>, image: Image) -> anyhow::Result<()>;
 
-    async fn edit_album(&self, resp: ESMResp<()>, user: String, album: String, change: AlbumMetadata) -> anyhow::Result<()>;
+    async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUUID) -> anyhow::Result<()>;
+
+    async fn update_image(
+        &self,
+        resp: ESMResp<()>,
+        user: String,
+        uuid: ImageUUID,
+        change: ImageMetadata,
+    ) -> anyhow::Result<()>;
+
+    async fn filter_images(
+        &self,
+        resp: ESMResp<()>,
+        user: String,
+        filter: String,
+    ) -> anyhow::Result<()>;
+
+    async fn add_album(&self, resp: ESMResp<()>, album: Album) -> anyhow::Result<()>;
+
+    async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUUID) -> anyhow::Result<()>;
+
+    async fn update_album(
+        &self,
+        resp: ESMResp<()>,
+        user: String,
+        uuid: AlbumUUID,
+        change: AlbumMetadata,
+    ) -> anyhow::Result<()>;
+
+    async fn filter_albums(
+        &self,
+        resp: ESMResp<()>,
+        user: String,
+        filter: String,
+    ) -> anyhow::Result<()>;
+
+    async fn add_library(&self, resp: ESMResp<()>, library: Library) -> anyhow::Result<()>;
+
+    async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUUID) -> anyhow::Result<()>;
+
+    async fn update_library(
+        &self,
+        resp: ESMResp<()>,
+        user: String,
+        uuid: LibraryUUID,
+        change: LibraryMetadata,
+    ) -> anyhow::Result<()>;
 }
 
 // marker trait to allow specific implementations of the ESDbQuery
 trait ESDbConn {}
-
-impl ESDbConn for mysql_async::Conn {}
 
 #[async_trait]
 trait ESDbQuery<T: ESDbConn> {

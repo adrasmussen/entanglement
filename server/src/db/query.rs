@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use mysql_async::{prelude::*, BinaryProtocol, ResultSetStream};
 
-use crate::db::ESDbQuery;
+use crate::db::{ESDbConn, ESDbQuery};
 
 type StreamReturn<T> =
     anyhow::Result<Option<ResultSetStream<'static, 'static, 'static, T, BinaryProtocol>>>;
@@ -14,6 +14,8 @@ struct ImagePerms {
     image: String,
     mode: u32,
 }
+
+impl ESDbConn for mysql_async::Conn {}
 
 #[async_trait]
 impl ESDbQuery<mysql_async::Conn> for ImagePerms {

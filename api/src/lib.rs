@@ -6,11 +6,25 @@ use serde::{self, Deserialize, Serialize};
 
 pub const URL_MATCH_IMAGES: &str = "http://localhost:8081/api/img.json";
 
+pub type ImageUUID = String;
+pub type AlbumUUID = String;
+pub type LibraryUUID = String;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Visibility {
     Private,
     Public,
     Hidden,
+}
+
+impl From<String> for Visibility {
+    fn from(string: String) -> Visibility {
+        match string.as_str() {
+            "Public" | "public" => Visibility::Public,
+            "Hidden" | "hidden" => Visibility::Hidden,
+            _ => Visibility::Private,
+        }
+    }
 }
 
 // the core image data struct
@@ -43,10 +57,10 @@ pub struct ImageFileData {
 // database columns should be NOT NULL and thus any read or initial write should be Some()
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageMetadata {
-    visibility: Option<Visibility>,
-    orientation: Option<()>,
-    date: Option<u64>,
-    note: Option<String>,
+    pub visibility: Option<Visibility>,
+    pub orientation: Option<i32>,
+    pub date: Option<u64>,
+    pub note: Option<String>,
 }
 
 
@@ -58,7 +72,7 @@ pub struct ImageLogs {}
 pub struct ImageUpdateReq {
     // if the old version is not version - 1, refresh the page?
     pub version: u32,
-    pub image: String,
+    pub uuid: ImageUUID,
     pub metadata: ImageMetadata,
 }
 
@@ -84,7 +98,7 @@ pub struct ImageMatchResp {
     pub images: HashMap<String, Image>,
 }
 
-pub async fn match_images(_filter: &ImageMatchReq) -> anyhow::Result<ImageMatchResp> {
+pub async fn filter_images(_filter: &ImageMatchReq) -> anyhow::Result<ImageMatchResp> {
     // when the search system is working, we can post() the filter_data and parse the response
     let match_data: ImageMatchResp = Request::get(URL_MATCH_IMAGES).send().await?.json().await?;
 
@@ -106,7 +120,7 @@ pub struct AlbumLogs {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlbumUpdateReq {
-    pub album: String,
+    pub uuid: AlbumUUID,
     pub metadata: AlbumMetadata,
 }
 
@@ -132,7 +146,7 @@ pub struct LibraryLogs {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryUpdateReq {
-    pub library: String,
+    pub uuid: LibraryUUID,
     pub metadata: LibraryMetadata,
 }
 
