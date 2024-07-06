@@ -5,17 +5,17 @@ use crate::service::ESMResp;
 #[derive(Debug)]
 pub enum DbMsg {
     AddImage {
-        resp: ESMResp<()>,
+        resp: ESMResp<ImageUuid>,
         image: Image,
     },
     GetImage {
         resp: ESMResp<Image>,
-        uuid: ImageUUID,
+        uuid: ImageUuid,
     },
     UpdateImage {
         resp: ESMResp<()>,
         user: String,
-        uuid: ImageUUID,
+        uuid: ImageUuid,
         change: ImageMetadata,
     },
     FilterImages {
@@ -29,12 +29,12 @@ pub enum DbMsg {
     },
     GetAlbum {
         resp: ESMResp<Album>,
-        uuid: AlbumUUID,
+        uuid: AlbumUuid,
     },
     UpdateAlbum {
         resp: ESMResp<()>,
         user: String,
-        uuid: AlbumUUID,
+        uuid: AlbumUuid,
         change: AlbumMetadata,
     },
     FilterAlbums {
@@ -48,12 +48,12 @@ pub enum DbMsg {
     },
     GetLibary {
         resp: ESMResp<Library>,
-        uuid: LibraryUUID,
+        uuid: LibraryUuid,
     },
     UpdateLibrary {
         resp: ESMResp<()>,
         user: String,
-        uuid: LibraryUUID,
+        uuid: LibraryUuid,
         change: LibraryMetadata,
     },
 }

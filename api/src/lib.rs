@@ -6,9 +6,9 @@ use serde::{self, Deserialize, Serialize};
 
 pub const URL_MATCH_IMAGES: &str = "http://localhost:8081/api/img.json";
 
-pub type ImageUUID = String;
-pub type AlbumUUID = String;
-pub type LibraryUUID = String;
+pub type ImageUuid = u64;
+pub type AlbumUuid = u64;
+pub type LibraryUuid = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Visibility {
@@ -23,6 +23,16 @@ impl From<String> for Visibility {
             "Public" | "public" => Visibility::Public,
             "Hidden" | "hidden" => Visibility::Hidden,
             _ => Visibility::Private,
+        }
+    }
+}
+
+impl Into<String> for Visibility {
+    fn into(self) -> String {
+        match self {
+            Visibility::Private => String::from("Private"),
+            Visibility::Public => String::from("Public"),
+            Visibility::Hidden => String::from("Hidden"),
         }
     }
 }
@@ -72,7 +82,7 @@ pub struct ImageLogs {}
 pub struct ImageUpdateReq {
     // if the old version is not version - 1, refresh the page?
     pub version: u32,
-    pub uuid: ImageUUID,
+    pub uuid: ImageUuid,
     pub metadata: ImageMetadata,
 }
 
@@ -120,7 +130,7 @@ pub struct AlbumLogs {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlbumUpdateReq {
-    pub uuid: AlbumUUID,
+    pub uuid: AlbumUuid,
     pub metadata: AlbumMetadata,
 }
 
@@ -146,7 +156,7 @@ pub struct LibraryLogs {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryUpdateReq {
-    pub uuid: LibraryUUID,
+    pub uuid: LibraryUuid,
     pub metadata: LibraryMetadata,
 }
 

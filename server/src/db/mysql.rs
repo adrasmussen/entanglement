@@ -5,9 +5,9 @@ use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
 
-use futures::{FutureExt, future::BoxFuture};
+use futures::{future::BoxFuture, FutureExt};
 
-use mysql_async::{prelude::*, BinaryProtocol, Opts, Pool, ResultSetStream};
+use mysql_async::{from_row_opt, prelude::*, BinaryProtocol, Opts, Pool, ResultSetStream};
 
 use tokio::sync::Mutex;
 
@@ -21,21 +21,78 @@ pub struct MySQLState {
     pool: Pool,
 }
 
+// database RPC handler functions
+//
+// these functions take a somewhat strange form to ensure that we can correctly capture all errors,
+// either to pass them back to the client or to log them in the server logs
+//
+// it's entirely possible that some of these *should* be unwraps, since being unable to respond to
+// inter-service messages is a good reason to halt the server process.  however, this method gives
+// us more flexibilty, since a failure can instead cause the server to gracefully stop other tasks
+//
+// thus, we have the inner async {} -> Result and resp.send(inner.await)
+//
+// the other somewhat unfortunate pattern is having to manipulate the query result iterator so we
+// can use from_row_opt() instead of prepackaged Query::first(conn), fetch(conn), and other tools
+//
+// every query needs the run(conn).await? portion, which actually executes the query and returns
+// the result iterator, which is more complicated because there are result "sets"
+//
+// several of the internal mechanisms call .next().await?, which moves through result sets and
+// fails if they have been otherwise consumed by something else from that connection
+//
+// if we do so manually (like wanting just the first result), we have to unpack the Option<> first
+// and then the Result<_, FromRowError> on the inside
+
 #[async_trait]
 impl ESDbService for MySQLState {
-    async fn add_image(&self, resp: ESMResp<()>, image: Image) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUUID) -> anyhow::Result<()> {
+    async fn add_image(&self, resp: ESMResp<ImageUuid>, image: Image) -> anyhow::Result<()> {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            // this doesn't compile but it's closer to what we want
+            let visibility: String = image.metadata.visibility.ok_or_else(|| anyhow::Error::msg("missing visibility"))?.into();
+            let orientation: i32 = image.metadata.orientation.ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
+            let date: u64 = image.metadata.date.ok_or_else(|| anyhow::Error::msg("missing date"))?;
+            let note: String = image.metadata.note.ok_or_else(|| anyhow::Error::msg("missing note"))?;
+
+            let result: u64 = r"
+                INSERT INTO images (uuid, owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note)
+                OUTPUT INSERTED.uuid
+                VALUES (UUID_SHORT(), :owner, :path, :size, :mtime, :x_pixel, :y_pixel, :visibilty, :orientation, :date, :note)"
+                .with(params! {
+                    "owner" => image.file.owner,
+                    "path" => image.file.path,
+                    "size" => image.file.size,
+                    "mtime" => image.file.mtime,
+                    "x_pixel" => image.file.x_pixel,
+                    "y_pixel" => image.file.y_pixel,
+                    "visibility" => visibility,
+                    "orientation" => orientation,
+                    "date" => date,
+                    "note" => note,
+                })
+                .run(conn).await?
+                .next().await?
+                .map(|row| from_row_opt(row))
+                .ok_or_else(|| anyhow::Error::msg(format!("failed to return inserted uuid")))??;
+
+            Ok(result)
+        };
+
+        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to add_image"))
+    }
+
+    async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUuid) -> anyhow::Result<()> {
+        let inner = async {
+            let conn = self.pool.get_conn().await?;
+
             let result: (String, String, String, String, i32, i32, String, i32, u64, String) = r"
                 SELECT (owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note) FROM images WHERE uuid = :uuid"
                 .with(params! {"uuid" => &uuid})
-                .first(conn).catch_unwind().await??.ok_or_else(|| anyhow::Error::msg(format!("unknown image {uuid}")))?;
+                .run(conn).await?
+                .next().await?
+                .map(|row| from_row_opt(row))
+                .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))??;
 
             let output = Image {
                 url: String::from(""),
@@ -58,15 +115,14 @@ impl ESDbService for MySQLState {
             Ok(output)
         };
 
-        resp.send(inner.await)
-            .map_err(|_| anyhow::Error::msg("failed to respond to get_image"))
+        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to get_image"))
     }
 
     async fn update_image(
         &self,
         resp: ESMResp<()>,
         user: String,
-        uuid: ImageUUID,
+        uuid: ImageUuid,
         change: ImageMetadata,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -85,14 +141,14 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
-    async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUUID) -> anyhow::Result<()> {
+    async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUuid) -> anyhow::Result<()> {
         Ok(())
     }
     async fn update_album(
         &self,
         resp: ESMResp<()>,
         user: String,
-        uuid: AlbumUUID,
+        uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -111,7 +167,7 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
-    async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUUID) -> anyhow::Result<()> {
+    async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUuid) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -119,7 +175,7 @@ impl ESDbService for MySQLState {
         &self,
         resp: ESMResp<()>,
         user: String,
-        uuid: LibraryUUID,
+        uuid: LibraryUuid,
         change: LibraryMetadata,
     ) -> anyhow::Result<()> {
         Ok(())
