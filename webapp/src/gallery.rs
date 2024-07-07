@@ -2,7 +2,7 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::{filter_images, ImageMatchReq, ImageMatchResp};
+use api::{filter_images, FilterImageReq, FilterImageResp};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ImageProps {
@@ -29,12 +29,12 @@ pub fn Image(props: ImageProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter: Signal<ImageMatchReq> = use_signal(|| ImageMatchReq {
+    let search_filter: Signal<FilterImageReq> = use_signal(|| FilterImageReq {
         filter: String::from(".*"),
     });
 
     // call to the api server
-    let matching_images: Resource<anyhow::Result<ImageMatchResp>> =
+    let matching_images: Resource<anyhow::Result<FilterImageResp>> =
         use_resource(move || async move { filter_images(&search_filter()).await });
 
     // rebind to get around the issues with &*
@@ -56,8 +56,8 @@ pub fn Gallery() -> Element {
                         gap: "5px",
                         grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
 
-                        for (k, v) in images.images.iter() {
-                            Image { uuid: "{k}", url: "{v.url}" }
+                        for (k, _) in images.images.iter() {
+                            Image { uuid: "{k}", url: "http://localhost:8081/api/thumbnails/{k}.jpg" }
                         }
                     }
 
@@ -70,7 +70,7 @@ pub fn Gallery() -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryNavBarProps {
-    search_filter_signal: Signal<ImageMatchReq>
+    search_filter_signal: Signal<FilterImageReq>
 }
 
 #[component]
@@ -119,7 +119,7 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                     r#type: "text",
                     value: "{search_filter}",
                     oninput: move |event| {
-                        signal.set(ImageMatchReq{filter: event.value()})
+                        signal.set(FilterImageReq{filter: event.value()})
                     }
                 },
                 span { "Search History" },

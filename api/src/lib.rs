@@ -40,9 +40,6 @@ impl Into<String> for Visibility {
 // the core image data struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Image {
-    // this is filled in by the http service to match the mapping from file paths -> urls,
-    // but is not actually recorded in the database
-    pub url: String,
     pub file: ImageFileData,
     pub metadata: ImageMetadata,
 }
@@ -68,11 +65,10 @@ pub struct ImageFileData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageMetadata {
     pub visibility: Option<Visibility>,
-    pub orientation: Option<i32>,
+    pub orientation: Option<i8>,
     pub date: Option<u64>,
     pub note: Option<String>,
 }
-
 
 // the idea here is that each change can be expressed as a "this field changed from X to Y"
 pub struct ImageLogs {}
@@ -98,19 +94,55 @@ pub async fn update_image() -> anyhow::Result<ImageUpdateResp> {
 //
 // note that the response should automatically take into account the user who is
 // making the request, so all of these images should be available
+
+// we don't allow unrestricted SQL queries, but instead use a structured search that
+// can set each of these
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ImageMatchReq {
+pub struct ImageFilterFragment {
+    pub field: ImageFilterField,
+    pub search: ImageFilterSearch,
+    pub join: ImageFilterJoin,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ImageFilterField {
+    Owner,
+    Year,
+    Note,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ImageFilterSearch {
+    Contains,
+    Exact,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ImageFilterJoin {
+    And,
+    Or,
+}
+
+// the hash key is the index of the search fragment, since order matters
+// when computing AND/OR of the the WHERE clauses
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ImageFilter {
+    pub filter: HashMap<i32, ImageFilterFragment>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilterImageReq {
     pub filter: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ImageMatchResp {
-    pub images: HashMap<String, Image>,
+pub struct FilterImageResp {
+    pub images: HashMap<ImageUuid, Image>,
 }
 
-pub async fn filter_images(_filter: &ImageMatchReq) -> anyhow::Result<ImageMatchResp> {
+pub async fn filter_images(_filter: &FilterImageReq) -> anyhow::Result<FilterImageResp> {
     // when the search system is working, we can post() the filter_data and parse the response
-    let match_data: ImageMatchResp = Request::get(URL_MATCH_IMAGES).send().await?.json().await?;
+    let match_data: FilterImageResp = Request::get(URL_MATCH_IMAGES).send().await?.json().await?;
 
     Ok(match_data)
 }
@@ -118,7 +150,7 @@ pub async fn filter_images(_filter: &ImageMatchReq) -> anyhow::Result<ImageMatch
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Album {
     pub owner: String,
-    pub metadata: AlbumMetadata
+    pub metadata: AlbumMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -144,7 +176,7 @@ pub async fn update_album() -> anyhow::Result<AlbumUpdateResp> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub owner: String,
-    pub metadata: LibraryMetadata
+    pub metadata: LibraryMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

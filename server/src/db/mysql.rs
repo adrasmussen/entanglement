@@ -51,7 +51,7 @@ impl ESDbService for MySQLState {
             let conn = self.pool.get_conn().await?;
 
             let visibility: String = image.metadata.visibility.ok_or_else(|| anyhow::Error::msg("missing visibility"))?.into();
-            let orientation: i32 = image.metadata.orientation.ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
+            let orientation: i8 = image.metadata.orientation.ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
             let date: u64 = image.metadata.date.ok_or_else(|| anyhow::Error::msg("missing date"))?;
             let note: String = image.metadata.note.ok_or_else(|| anyhow::Error::msg("missing note"))?;
 
@@ -86,7 +86,7 @@ impl ESDbService for MySQLState {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            let result: (String, String, String, String, i32, i32, String, i32, u64, String) = r"
+            let result: (String, String, String, String, i32, i32, String, i8, u64, String) = r"
                 SELECT (owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note) FROM images WHERE uuid = :uuid"
                 .with(params! {"uuid" => &uuid})
                 .run(conn).await?
@@ -95,7 +95,6 @@ impl ESDbService for MySQLState {
                 .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))??;
 
             let output = Image {
-                url: String::from(""),
                 file: ImageFileData {
                     owner: result.0,
                     path: result.1,
@@ -130,9 +129,10 @@ impl ESDbService for MySQLState {
 
     async fn filter_images(
         &self,
-        resp: ESMResp<()>,
+        resp: ESMResp<HashMap<ImageUuid, Image>
+        >,
         user: String,
-        filter: String,
+        filter: ImageFilter,
     ) -> anyhow::Result<()> {
         Ok(())
     }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -34,9 +35,9 @@ trait ESDbService: ESInner {
 
     async fn filter_images(
         &self,
-        resp: ESMResp<()>,
+        resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
-        filter: String,
+        filter: ImageFilter,
     ) -> anyhow::Result<()>;
 
     async fn add_album(&self, resp: ESMResp<()>, album: Album) -> anyhow::Result<()>;

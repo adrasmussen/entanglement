@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use api::*;
 
 use crate::service::ESMResp;
@@ -19,9 +21,9 @@ pub enum DbMsg {
         change: ImageMetadata,
     },
     FilterImages {
-        resp: ESMResp<()>,
+        resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
-        filter: String, // eventually replace with ImageFIlter object from lib
+        filter: ImageFilter,
     },
     AddAlbum {
         resp: ESMResp<()>,
