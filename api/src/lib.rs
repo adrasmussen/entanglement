@@ -71,13 +71,18 @@ pub struct ImageMetadata {
 }
 
 // the idea here is that each change can be expressed as a "this field changed from X to Y"
-pub struct ImageLogs {}
+pub struct ImageLog {
+    pub uuid: ImageUuid,
+    pub date: u64,
+    pub user: String,
+    pub log: String,
+}
 
 // update the image metadata, including visibility and other properties'
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageUpdateReq {
     // if the old version is not version - 1, refresh the page?
-    pub version: u32,
+    pub version: i32,
     pub uuid: ImageUuid,
     pub metadata: ImageMetadata,
 }

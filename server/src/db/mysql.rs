@@ -7,7 +7,10 @@ use async_trait::async_trait;
 
 use futures::{future::BoxFuture, FutureExt};
 
-use mysql_async::{from_row_opt, prelude::*, BinaryProtocol, Opts, Pool, ResultSetStream};
+use mysql_async::binlog::events::RowsEvent;
+use mysql_async::{
+    from_row, from_row_opt, prelude::*, BinaryProtocol, Opts, Pool, ResultSetStream, Row,
+};
 
 use tokio::sync::Mutex;
 
@@ -50,12 +53,25 @@ impl ESDbService for MySQLState {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            let visibility: String = image.metadata.visibility.ok_or_else(|| anyhow::Error::msg("missing visibility"))?.into();
-            let orientation: i8 = image.metadata.orientation.ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
-            let date: u64 = image.metadata.date.ok_or_else(|| anyhow::Error::msg("missing date"))?;
-            let note: String = image.metadata.note.ok_or_else(|| anyhow::Error::msg("missing note"))?;
+            let visibility: String = image
+                .metadata
+                .visibility
+                .ok_or_else(|| anyhow::Error::msg("missing visibility"))?
+                .into();
+            let orientation: i8 = image
+                .metadata
+                .orientation
+                .ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
+            let date: u64 = image
+                .metadata
+                .date
+                .ok_or_else(|| anyhow::Error::msg("missing date"))?;
+            let note: String = image
+                .metadata
+                .note
+                .ok_or_else(|| anyhow::Error::msg("missing note"))?;
 
-            let result: u64 = r"
+            let query= r"
                 INSERT INTO images (uuid, owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note)
                 OUTPUT INSERTED.uuid
                 VALUES (UUID_SHORT(), :owner, :path, :size, :mtime, :x_pixel, :y_pixel, :visibilty, :orientation, :date, :note)"
@@ -70,51 +86,76 @@ impl ESDbService for MySQLState {
                     "orientation" => orientation,
                     "date" => date,
                     "note" => note,
-                })
-                .run(conn).await?
-                .next().await?
-                .map(|row| from_row_opt(row))
-                .ok_or_else(|| anyhow::Error::msg(format!("failed to return inserted uuid")))??;
+                });
 
-            Ok(result)
+            let mut result = query.run(conn).await?;
+
+            let mut rows = result.collect::<Row>().await?;
+
+            let row = rows.pop().ok_or_else(|| {
+                anyhow::Error::msg(format!("failed to return uuid for inserted image"))
+            })?;
+
+            let data: ImageUuid = from_row_opt(row)?;
+
+            Ok(data)
         };
 
-        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to add_image"))
+        resp.send(inner.await)
+            .map_err(|_| anyhow::Error::msg("failed to respond to add_image"))
     }
 
     async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUuid) -> anyhow::Result<()> {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            let result: (String, String, String, String, i32, i32, String, i8, u64, String) = r"
+            let query = r"
                 SELECT (owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note) FROM images WHERE uuid = :uuid"
-                .with(params! {"uuid" => &uuid})
-                .run(conn).await?
-                .next().await?
-                .map(|row| from_row_opt(row))
-                .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))??;
+                .with(params! {"uuid" => &uuid});
+
+            let mut result = query.run(conn).await?;
+
+            let mut rows = result.collect::<Row>().await?;
+
+            let row = rows
+                .pop()
+                .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))?;
+
+            let data: (
+                String,
+                String,
+                String,
+                String,
+                i32,
+                i32,
+                String,
+                i8,
+                u64,
+                String,
+            ) = from_row_opt(row)?;
 
             let output = Image {
                 file: ImageFileData {
-                    owner: result.0,
-                    path: result.1,
-                    size: result.2,
-                    mtime: result.3,
-                    x_pixel: result.4,
-                    y_pixel: result.5,
+                    owner: data.0,
+                    path: data.1,
+                    size: data.2,
+                    mtime: data.3,
+                    x_pixel: data.4,
+                    y_pixel: data.5,
                 },
                 metadata: ImageMetadata {
-                    visibility: Some(Visibility::from(result.6)),
-                    orientation: Some(result.7),
-                    date: Some(result.8),
-                    note: Some(result.9),
+                    visibility: Some(Visibility::from(data.6)),
+                    orientation: Some(data.7),
+                    date: Some(data.8),
+                    note: Some(data.9),
                 },
             };
 
             Ok(output)
         };
 
-        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to get_image"))
+        resp.send(inner.await)
+            .map_err(|_| anyhow::Error::msg("failed to respond to get_image"))
     }
 
     async fn update_image(
@@ -124,13 +165,28 @@ impl ESDbService for MySQLState {
         uuid: ImageUuid,
         change: ImageMetadata,
     ) -> anyhow::Result<()> {
-        Ok(())
+        let inner = async {
+            let conn = self.pool.get_conn().await?;
+
+            let query = r"".with(params!{"" => ""});
+
+            let mut result = query.run(conn).await?;
+
+            let mut rows = result.collect::<Row>().await?;
+
+            let _ = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg(format!("failed to return row for updated image {uuid}")))?;
+
+            Ok(())
+        };
+
+        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to update_image"))
     }
 
     async fn filter_images(
         &self,
-        resp: ESMResp<HashMap<ImageUuid, Image>
-        >,
+        resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
         filter: ImageFilter,
     ) -> anyhow::Result<()> {
