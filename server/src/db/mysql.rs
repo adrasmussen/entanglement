@@ -168,15 +168,14 @@ impl ESDbService for MySQLState {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
+            /*match change.visibility {
+                None => {}
+                Some(v) => {self.cache_sender(ESM::Cache(CacheMsg::SetImageVisbiliity))}
+            }*/
+
             let query = r"".with(params!{"" => ""});
 
-            let mut result = query.run(conn).await?;
-
-            let mut rows = result.collect::<Row>().await?;
-
-            let _ = rows
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg(format!("failed to return row for updated image {uuid}")))?;
+            let _result = query.run(conn).await?;
 
             Ok(())
         };
@@ -200,6 +199,7 @@ impl ESDbService for MySQLState {
     async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUuid) -> anyhow::Result<()> {
         Ok(())
     }
+
     async fn update_album(
         &self,
         resp: ESMResp<()>,
@@ -207,7 +207,17 @@ impl ESDbService for MySQLState {
         uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
-        Ok(())
+        let inner = async {
+            let conn = self.pool.get_conn().await?;
+
+            let query = r"".with(params!{"" => ""});
+
+            let _result = query.run(conn).await?;
+
+            Ok(())
+        };
+
+        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to update_album"))
     }
 
     async fn filter_albums(

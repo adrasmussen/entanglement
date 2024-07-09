@@ -112,6 +112,7 @@ pub struct ImageFilterFragment {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ImageFilterField {
     Owner,
+    Visibility,
     Year,
     Note,
 }
@@ -156,11 +157,12 @@ pub async fn filter_images(_filter: &FilterImageReq) -> anyhow::Result<FilterIma
 pub struct Album {
     pub owner: String,
     pub metadata: AlbumMetadata,
+    pub images: Vec<ImageUuid>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlbumMetadata {
-    visibility: Option<Visibility>,
+    pub visibility: Option<Visibility>,
 }
 
 pub struct AlbumLogs {}
