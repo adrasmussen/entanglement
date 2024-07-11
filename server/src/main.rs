@@ -1,4 +1,4 @@
-mod cache;
+mod auth;
 mod db;
 mod fs;
 mod http;
