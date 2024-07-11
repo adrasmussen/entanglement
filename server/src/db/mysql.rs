@@ -18,7 +18,7 @@ use crate::db::{msg::DbMsg, ESDbConn, ESDbService};
 use crate::service::{
     ESConfig, ESInner, ESMReceiver, ESMResp, ESMSender, EntanglementService, ESM,
 };
-use api::*;
+use api::image::*;
 
 pub struct MySQLState {
     pool: Pool,
@@ -53,39 +53,23 @@ impl ESDbService for MySQLState {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            let visibility: String = image
-                .metadata
-                .visibility
-                .ok_or_else(|| anyhow::Error::msg("missing visibility"))?
-                .into();
-            let orientation: i8 = image
-                .metadata
-                .orientation
-                .ok_or_else(|| anyhow::Error::msg("missing orientation"))?;
-            let date: u64 = image
-                .metadata
-                .date
-                .ok_or_else(|| anyhow::Error::msg("missing date"))?;
-            let note: String = image
-                .metadata
-                .note
-                .ok_or_else(|| anyhow::Error::msg("missing note"))?;
-
             let query= r"
-                INSERT INTO images (uuid, owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note)
+                INSERT INTO images (uuid, owner, path, size, mtime, date, x_pixel, y_pixel, orientation, year, month, day, note)
                 OUTPUT INSERTED.uuid
-                VALUES (UUID_SHORT(), :owner, :path, :size, :mtime, :x_pixel, :y_pixel, :visibilty, :orientation, :date, :note)"
+                VALUES (UUID_SHORT(), :owner, :path, :size, :mtime, :date, :x_pixel, :y_pixel, :orientation, :date, :note)"
                 .with(params! {
                     "owner" => image.file.owner,
                     "path" => image.file.path,
                     "size" => image.file.size,
                     "mtime" => image.file.mtime,
+                    "date" => image.file.date.unwrap_or_else(|| 0),
                     "x_pixel" => image.file.x_pixel,
                     "y_pixel" => image.file.y_pixel,
-                    "visibility" => visibility,
-                    "orientation" => orientation,
-                    "date" => date,
-                    "note" => note,
+                    "orientation" => image.metadata.orientation.unwrap_or_else(|| 0),
+                    "year" => image.metadata.year.unwrap_or_else(|| String::from("")),
+                    "month" => image.metadata.month.unwrap_or_else(|| String::from("")),
+                    "day" => image.metadata.day.unwrap_or_else(|| String::from("")),
+                    "note" => image.metadata.note.unwrap_or_else(|| String::from("")),
                 });
 
             let mut result = query.run(conn).await?;
@@ -173,14 +157,15 @@ impl ESDbService for MySQLState {
                 Some(v) => {self.cache_sender(ESM::Cache(CacheMsg::SetImageVisbiliity))}
             }*/
 
-            let query = r"".with(params!{"" => ""});
+            let query = r"".with(params! {"" => ""});
 
             let _result = query.run(conn).await?;
 
             Ok(())
         };
 
-        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to update_image"))
+        resp.send(inner.await)
+            .map_err(|_| anyhow::Error::msg("failed to respond to update_image"))
     }
 
     async fn filter_images(
@@ -210,14 +195,15 @@ impl ESDbService for MySQLState {
         let inner = async {
             let conn = self.pool.get_conn().await?;
 
-            let query = r"".with(params!{"" => ""});
+            let query = r"".with(params! {"" => ""});
 
             let _result = query.run(conn).await?;
 
             Ok(())
         };
 
-        resp.send(inner.await).map_err(|_| anyhow::Error::msg("failed to respond to update_album"))
+        resp.send(inner.await)
+            .map_err(|_| anyhow::Error::msg("failed to respond to update_album"))
     }
 
     async fn filter_albums(
@@ -267,7 +253,7 @@ impl ESInner for MySQLState {
                     uuid,
                     change,
                 } => self.update_image(resp, user, uuid, change).await,
-                DbMsg::FilterImages { resp, user, filter } => {
+                DbMsg::SearchImages { resp, user, filter } => {
                     self.filter_images(resp, user, filter).await
                 }
                 DbMsg::AddAlbum { resp, uuid } => self.add_album(resp, uuid).await,
@@ -278,7 +264,7 @@ impl ESInner for MySQLState {
                     uuid,
                     change,
                 } => self.update_album(resp, user, uuid, change).await,
-                DbMsg::FilterAlbums { resp, user, filter } => {
+                DbMsg::SearchAlbums { resp, user, filter } => {
                     self.filter_albums(resp, user, filter).await
                 }
                 DbMsg::AddLibrary { resp, library } => self.add_library(resp, library).await,

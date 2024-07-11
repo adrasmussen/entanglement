@@ -1,15 +1,28 @@
-
-use api::Visibility;
-
+use crate::auth::AuthType;
 use crate::service::ESMResp;
 
 #[derive(Debug)]
-pub enum CacheMsg {
-    ClearAllCaches {
+pub enum AuthMsg {
+    ClearGroupCache {
         resp: ESMResp<()>,
     },
-    GetImageVisibility {
-        resp: ESMResp<Visibility>,
-        image: String,
-    }
+    ClearAccessCache {
+        resp: ESMResp<()>,
+    },
+    IsValidUser {
+        resp: ESMResp<bool>,
+        auth_type: AuthType,
+        uid: String,
+        password: String,
+    },
+    IsGroupMember {
+        resp: ESMResp<bool>,
+        uid: String,
+        gid: String,
+    },
+    CanAccessFile {
+        resp: ESMResp<bool>,
+        uid: String,
+        file: String,
+    },
 }

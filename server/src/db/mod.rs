@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::TryStreamExt;
 
 use crate::service::{ESInner, ESMResp};
-use api::*;
+use api::{auth::*, image::*};
 
 pub mod msg;
 pub mod mysql;
@@ -17,10 +17,28 @@ pub mod svc;
 
 // these are the database RPC calls that any backend server must be able to process
 //
-// note that the response to the caller is in the ESMResp, and that the actuall return
+// note that the response to the caller is in the ESMResp, and that the actual return
 // of the RPC functions are for successfully sending the reponse
 #[async_trait]
 trait ESDbService: ESInner {
+    // authdb functions
+    async fn add_user(&self, resp: ESMResp<()>, user: User) -> anyhow::Result<()>;
+
+    async fn get_user(&self, resp: ESMResp<()>, uid: String) -> anyhow::Result<()>;
+
+    async fn delete_user(&self, resp: ESMResp<()>, uid: String) -> anyhow::Result<()>;
+
+    async fn add_group(&self, resp: ESMResp<()>, group: Group) -> anyhow::Result<()>;
+
+    async fn get_group(&self, resp: ESMResp<()>, gid: String) -> anyhow::Result<()>;
+
+    async fn delete_group(&self, resp: ESMResp<()>, gid: String) -> anyhow::Result<()>;
+
+    async fn add_user_to_group(&self, resp: ESMResp<()>, uid: String, gid: String) -> anyhow::Result<()>;
+
+    async fn rm_user_from_group(&self, resp: ESMResp<()>, uid: String, gid: String) -> anyhow::Result<()>;
+
+    // image functions
     async fn add_image(&self, resp: ESMResp<ImageUuid>, image: Image) -> anyhow::Result<()>;
 
     async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUuid) -> anyhow::Result<()>;
@@ -37,9 +55,10 @@ trait ESDbService: ESInner {
         &self,
         resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
-        filter: ImageFilter,
+        filter: String,
     ) -> anyhow::Result<()>;
 
+    // album functions
     async fn add_album(&self, resp: ESMResp<()>, album: Album) -> anyhow::Result<()>;
 
     async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUuid) -> anyhow::Result<()>;
@@ -59,6 +78,7 @@ trait ESDbService: ESInner {
         filter: String,
     ) -> anyhow::Result<()>;
 
+    // library functions
     async fn add_library(&self, resp: ESMResp<()>, library: Library) -> anyhow::Result<()>;
 
     async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUuid) -> anyhow::Result<()>;

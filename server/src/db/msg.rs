@@ -1,17 +1,30 @@
 use std::collections::HashMap;
 
-use api::*;
+use api::image::*;
+use api::auth::{User, Group};
 
 use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum DbMsg {
+    AddUser,
+    GetUser,
+    DeleteUser,
+    AddGroup,
+    GetGroup {
+        resp: ESMResp<Group>, // this should fail if the group does not exist
+        gid: String,
+    },
+    DeleteGroup,
+    AddUserToGroup,
+    RmUserFromGroup,
     AddImage {
         resp: ESMResp<ImageUuid>,
         image: Image,
     },
     GetImage {
         resp: ESMResp<Image>,
+        user: String,
         uuid: ImageUuid,
     },
     UpdateImage {
@@ -20,17 +33,24 @@ pub enum DbMsg {
         uuid: ImageUuid,
         change: ImageMetadata,
     },
-    FilterImages {
+    SearchImages {
         resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
-        filter: ImageFilter,
+        filter: String,
     },
     AddAlbum {
         resp: ESMResp<()>,
-        uuid: Album,
+        user: String,
+        uuid: AlbumUuid,
     },
     GetAlbum {
-        resp: ESMResp<Album>,
+        resp: ESMResp<AlbumUuid>,
+        user: String,
+        uuid: AlbumUuid,
+    },
+    DeleteAlbum {
+        resp: ESMResp<()>,
+        user: String,
         uuid: AlbumUuid,
     },
     UpdateAlbum {
@@ -39,10 +59,10 @@ pub enum DbMsg {
         uuid: AlbumUuid,
         change: AlbumMetadata,
     },
-    FilterAlbums {
+    SearchAlbums {
         resp: ESMResp<()>,
         user: String,
-        filter: String, // eventually replace with AlbumFIlter object from lib
+        filter: String,
     },
     AddLibrary {
         resp: ESMResp<()>,

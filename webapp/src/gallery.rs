@@ -2,7 +2,7 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::{filter_images, FilterImageReq, FilterImageResp};
+use api::image::{filter_images, FilterImageReq, FilterImageResp};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ImageProps {
