@@ -8,7 +8,6 @@ use anyhow;
 
 use async_trait::async_trait;
 
-use hyper::service::Service;
 use tokio;
 
 // config

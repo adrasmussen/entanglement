@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use tokio::sync::{Mutex, RwLock};
 
-use api::auth::Group;
+use api::{auth::User, MediaUuid};
 
 use crate::service::*;
 
@@ -18,8 +18,10 @@ use crate::db::msg::DbMsg;
 
 struct AuthCache {
     db_svc_sender: ESMSender,
-    group_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
-    access_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
+    // uid: set(gid)
+    user_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
+    // uuid: set(gid)
+    access_cache: Arc<RwLock<HashMap<MediaUuid, HashSet<String>>>>,
 }
 
 // should we attempt to optimize the rwlock logic to batch writes?
@@ -36,25 +38,39 @@ struct AuthCache {
 // then, after we commit changes to any images, refresh just that image
 #[async_trait]
 impl ESAuthService for AuthCache {
-    async fn clear_group_cache(&self) -> anyhow::Result<()> {
-        let group_cache = self.group_cache.clone();
+    async fn clear_user_cache(&self, uid: Option<String>) -> anyhow::Result<()> {
+        let user_cache = self.user_cache.clone();
 
         {
-            let mut group_cache = group_cache.write().await;
+            let mut user_cache = user_cache.write().await;
 
-            group_cache.drain();
+            match uid {
+                Some(uid) => {
+                    user_cache.remove(&uid);
+                }
+                None => {
+                    user_cache.drain();
+                }
+            }
         }
 
         Ok(())
     }
 
-    async fn clear_access_cache(&self) -> anyhow::Result<()> {
+    async fn clear_access_cache(&self, media: Option<MediaUuid>) -> anyhow::Result<()> {
         let access_cache = self.access_cache.clone();
 
         {
             let mut access_cache = access_cache.write().await;
 
-            access_cache.drain();
+            match media {
+                Some(media) => {
+                    access_cache.remove(&media);
+                }
+                None => {
+                    access_cache.drain();
+                }
+            }
         }
 
         Ok(())
@@ -72,56 +88,82 @@ impl ESAuthService for AuthCache {
         }
     }
 
-    async fn is_group_member(&self, uid: String, gid: String) -> anyhow::Result<bool> {
-        let group_cache = self.group_cache.clone();
+    async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
+        let user_cache = self.user_cache.clone();
 
         {
-            let group_cache = group_cache.read().await;
+            let user_cache = user_cache.read().await;
 
-            match group_cache.get(&gid) {
-                Some(members) => return Ok(members.contains(&uid)),
+            match user_cache.get(&uid) {
+                Some(members) => return Ok(members.intersection(&gid).count() > 0),
                 None => {}
             }
         }
 
         let db_svc_sender = self.db_svc_sender.clone();
 
-        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<Group>>();
+        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<User>>();
 
         db_svc_sender
-            .send(ESM::Db(DbMsg::GetGroup { resp: tx, gid: gid }))
+            .send(ESM::Db(DbMsg::GetUser { resp: tx, uid: uid }))
             .await?;
 
-        // this should fail if the group doesn't exist, so we are safe to add the group
+        // this should fail if the user doesn't exist, so we are safe to add the user
         // to the cache after it returns
-        let group = rx.await??;
+        let user = rx.await??;
 
-        let in_group = group.members.contains(&uid);
+        let groups = user.groups;
 
         {
-            let mut group_cache = group_cache.write().await;
+            let mut user_cache = user_cache.write().await;
 
-            group_cache.insert(
-                group.gid,
-                if in_group {
-                    HashSet::from([uid])
-                } else {
-                    HashSet::new()
-                },
-            );
+            user_cache.insert(user.uid, groups.clone());
         }
 
-        Ok(in_group)
+        Ok(groups.intersection(&gid).count() > 0)
     }
 
-    async fn can_access_file(&self, uid: String, file: String) -> anyhow::Result<bool> {
+    async fn can_access_media(&self, uid: String, uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
-        {
-            let access_cache = access_cache.read().await;
-        }
+        // in order to get the HashSet out of the HashMap, we need to match the outer get()
+        // before cloning out of the block
+        let cached_groups = {
 
-        Ok(false)
+            let access_cache = access_cache.read().await;
+
+            let groups = match access_cache.get(&uuid) {
+                None => None,
+                Some(v) => Some(v.clone())
+            };
+
+            groups
+        };
+
+        // since we have to compare the sets of groups, we have to handle the cache miss
+        // before we check for an intersection
+        let groups = match cached_groups {
+            Some(v) => v,
+            None => {
+                let db_svc_sender = self.db_svc_sender.clone();
+
+                let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<HashSet<String>>>();
+
+                db_svc_sender.send(ESM::Db(DbMsg::GetImageGroups { resp: tx, uuid: uuid })).await?;
+
+                let groups = rx.await??;
+
+                {
+                    let mut access_cache = access_cache.write().await;
+
+                    access_cache.insert(uuid, groups.clone());
+                }
+
+                groups
+            }
+        };
+
+        Ok(self.is_group_member(uid, groups).await?)
     }
 }
 
@@ -134,7 +176,7 @@ impl ESInner for AuthCache {
 
         Ok(AuthCache {
             db_svc_sender: db_svc_sender.clone(),
-            group_cache: Arc::new(RwLock::new(HashMap::new())),
+            user_cache: Arc::new(RwLock::new(HashMap::new())),
             access_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -142,11 +184,11 @@ impl ESInner for AuthCache {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Auth(message) => match message {
-                AuthMsg::ClearGroupCache { resp } => {
-                    self.respond(resp, self.clear_group_cache()).await
+                AuthMsg::ClearUserCache { resp, uid } => {
+                    self.respond(resp, self.clear_user_cache(uid)).await
                 }
-                AuthMsg::ClearAccessCache { resp } => {
-                    self.respond(resp, self.clear_access_cache()).await
+                AuthMsg::ClearAccessCache { resp, uuid } => {
+                    self.respond(resp, self.clear_access_cache(uuid)).await
                 }
                 AuthMsg::IsValidUser {
                     resp,
@@ -160,8 +202,8 @@ impl ESInner for AuthCache {
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }
-                AuthMsg::CanAccessFile { resp, uid, file } => {
-                    self.respond(resp, self.can_access_file(uid, file)).await
+                AuthMsg::CanAccessMedia { resp, uid, uuid } => {
+                    self.respond(resp, self.can_access_media(uid, uuid)).await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),

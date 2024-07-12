@@ -1,13 +1,19 @@
+use std::collections::HashSet;
+
+use api::MediaUuid;
+
 use crate::auth::AuthType;
 use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum AuthMsg {
-    ClearGroupCache {
+    ClearUserCache {
         resp: ESMResp<()>,
+        uid: Option<String>,
     },
     ClearAccessCache {
         resp: ESMResp<()>,
+        uuid: Option<MediaUuid>,
     },
     IsValidUser {
         resp: ESMResp<bool>,
@@ -18,11 +24,11 @@ pub enum AuthMsg {
     IsGroupMember {
         resp: ESMResp<bool>,
         uid: String,
-        gid: String,
+        gid: HashSet<String>,
     },
-    CanAccessFile {
+    CanAccessMedia {
         resp: ESMResp<bool>,
         uid: String,
-        file: String,
+        uuid: MediaUuid,
     },
 }
