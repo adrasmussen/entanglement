@@ -64,8 +64,9 @@ pub trait ESInner: Sized + Send + Sync + 'static {
     //
     // note that the type_name is current best effort at providing a bit more information, but it
     // will likely go away with a real logging setup
-    async fn respond<T: Send + Sync, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> anyhow::Result<()>
+    async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> anyhow::Result<()>
     where
+        T: Send + Sync,
         Fut: Future<Output = anyhow::Result<T>> + Send,
     {
         resp.send(fut.await).map_err(|_| {

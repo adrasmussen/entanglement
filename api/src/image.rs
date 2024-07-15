@@ -13,13 +13,13 @@ pub type LibraryUuid = u64;
 // the core image data struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Image {
-    pub file: ImageFileData,
+    pub data: ImageData,
     pub metadata: ImageMetadata,
 }
 
 // the immutable part of the image metadata, set by its physical location on the disk
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ImageFileData {
+pub struct ImageData {
     pub owner: String,
     pub path: String,
     pub datetime_original: u64, // Unix time timestamp for original digital photos

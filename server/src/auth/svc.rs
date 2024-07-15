@@ -16,7 +16,7 @@ use crate::auth::{msg::AuthMsg, AuthType};
 
 use crate::db::msg::DbMsg;
 
-struct AuthCache {
+pub struct AuthCache {
     db_svc_sender: ESMSender,
     // uid: set(gid)
     user_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
@@ -129,12 +129,11 @@ impl ESAuthService for AuthCache {
         // in order to get the HashSet out of the HashMap, we need to match the outer get()
         // before cloning out of the block
         let cached_groups = {
-
             let access_cache = access_cache.read().await;
 
             let groups = match access_cache.get(&uuid) {
                 None => None,
-                Some(v) => Some(v.clone())
+                Some(v) => Some(v.clone()),
             };
 
             groups
@@ -142,6 +141,9 @@ impl ESAuthService for AuthCache {
 
         // since we have to compare the sets of groups, we have to handle the cache miss
         // before we check for an intersection
+        //
+        // this is outside the block with the read() mutex so we don't hold the lock any
+        // longer than is strictly necessary
         let groups = match cached_groups {
             Some(v) => v,
             None => {
@@ -149,7 +151,12 @@ impl ESAuthService for AuthCache {
 
                 let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<HashSet<String>>>();
 
-                db_svc_sender.send(ESM::Db(DbMsg::GetImageGroups { resp: tx, uuid: uuid })).await?;
+                db_svc_sender
+                    .send(ESM::Db(DbMsg::GetImageGroups {
+                        resp: tx,
+                        uuid: uuid,
+                    }))
+                    .await?;
 
                 let groups = rx.await??;
 
@@ -237,14 +244,13 @@ impl EntanglementService for AuthService {
     }
 
     async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
-        // falliable stuff can happen here
-        //
-        // need to get senders for any cacheable data, starting with database service
-        //
-        // possibly want to also spin up the timer threads here
-
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(AuthCache::new(senders)?);
+
+        // for the first pass, we don't need any further machinery for this service
+        //
+        // however, if we want things like timers, batching updates, or other optimizations,
+        // they would all go here with corresponding handles in the AuthService struct
 
         let serve = {
             async move {

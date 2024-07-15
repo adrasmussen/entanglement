@@ -15,10 +15,8 @@ use mysql_async::{
 use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbConn, ESDbService};
-use crate::service::{
-    ESConfig, ESInner, ESMReceiver, ESMResp, ESMSender, EntanglementService, ESM,
-};
-use api::image::*;
+use crate::service::*;
+use api::{auth::*, image::*};
 
 pub struct MySQLState {
     pool: Pool,
@@ -49,232 +47,265 @@ pub struct MySQLState {
 
 #[async_trait]
 impl ESDbService for MySQLState {
-    async fn add_image(&self, resp: ESMResp<ImageUuid>, image: Image) -> anyhow::Result<()> {
-        let inner = async {
-            let conn = self.pool.get_conn().await?;
+    async fn add_user(&self, user: User) -> anyhow::Result<()> {
+        todo!()
+    }
 
-            let query= r"
-                INSERT INTO images (uuid, owner, path, size, mtime, date, x_pixel, y_pixel, orientation, year, month, day, note)
+    async fn get_user(&self, uid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn delete_user(&self, uid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn add_group(&self, group: Group) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn get_group(&self, gid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn delete_group(&self, gid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    async fn add_image(&self, image: Image) -> anyhow::Result<ImageUuid> {
+        let conn = self.pool.get_conn().await?;
+
+        let query= r"
+                INSERT INTO images (uuid, owner, path, datetime_original, x_pixel, y_pixel, orientation, date, note)
                 OUTPUT INSERTED.uuid
-                VALUES (UUID_SHORT(), :owner, :path, :size, :mtime, :date, :x_pixel, :y_pixel, :orientation, :date, :note)"
+                VALUES (UUID_SHORT(), :owner, :path, :datetime_original, :x_pixel, :y_pixel, :orientation, :date, :note)"
                 .with(params! {
-                    "owner" => image.file.owner,
-                    "path" => image.file.path,
-                    "size" => image.file.size,
-                    "mtime" => image.file.mtime,
-                    "date" => image.file.date.unwrap_or_else(|| 0),
-                    "x_pixel" => image.file.x_pixel,
-                    "y_pixel" => image.file.y_pixel,
+                    "owner" => image.data.owner,
+                    "path" => image.data.path,
+                    "datetime_original" => image.data.datetime_original,
+                    "x_pixel" => image.data.x_pixel,
+                    "y_pixel" => image.data.y_pixel,
                     "orientation" => image.metadata.orientation.unwrap_or_else(|| 0),
-                    "year" => image.metadata.year.unwrap_or_else(|| String::from("")),
-                    "month" => image.metadata.month.unwrap_or_else(|| String::from("")),
-                    "day" => image.metadata.day.unwrap_or_else(|| String::from("")),
+                    "data" => image.metadata.date.unwrap_or_else(|| String::from("")),
                     "note" => image.metadata.note.unwrap_or_else(|| String::from("")),
                 });
 
-            let mut result = query.run(conn).await?;
+        let mut result = query.run(conn).await?;
 
-            let mut rows = result.collect::<Row>().await?;
+        let mut rows = result.collect::<Row>().await?;
 
-            let row = rows.pop().ok_or_else(|| {
-                anyhow::Error::msg(format!("failed to return uuid for inserted image"))
-            })?;
+        let row = rows.pop().ok_or_else(|| {
+            anyhow::Error::msg(format!("failed to return uuid for inserted image"))
+        })?;
 
-            let data: ImageUuid = from_row_opt(row)?;
+        let data: ImageUuid = from_row_opt(row)?;
 
-            Ok(data)
-        };
-
-        resp.send(inner.await)
-            .map_err(|_| anyhow::Error::msg("failed to respond to add_image"))
+        Ok(data)
     }
 
-    async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUuid) -> anyhow::Result<()> {
-        let inner = async {
-            let conn = self.pool.get_conn().await?;
+    async fn get_image(&self, uuid: ImageUuid) -> anyhow::Result<Image> {
+        let conn = self.pool.get_conn().await?;
 
-            let query = r"
-                SELECT (owner, path, size, mtime, x_pixel, y_pixel, visibilty, orientation, date, note) FROM images WHERE uuid = :uuid"
+        let query = r"
+                SELECT (owner, path, datetime_original, x_pixel, y_pixel, orientation, date, note) FROM images WHERE uuid = :uuid"
                 .with(params! {"uuid" => &uuid});
 
-            let mut result = query.run(conn).await?;
+        let mut result = query.run(conn).await?;
 
-            let mut rows = result.collect::<Row>().await?;
+        let mut rows = result.collect::<Row>().await?;
 
-            let row = rows
-                .pop()
-                .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))?;
+        let row = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))?;
 
-            let data: (
-                String,
-                String,
-                String,
-                String,
-                i32,
-                i32,
-                String,
-                i8,
-                u64,
-                String,
-            ) = from_row_opt(row)?;
+        let data: (String, String, u64, i32, i32, i8, String, String) = from_row_opt(row)?;
 
-            let output = Image {
-                file: ImageFileData {
-                    owner: data.0,
-                    path: data.1,
-                    size: data.2,
-                    mtime: data.3,
-                    x_pixel: data.4,
-                    y_pixel: data.5,
-                },
-                metadata: ImageMetadata {
-                    visibility: Some(Visibility::from(data.6)),
-                    orientation: Some(data.7),
-                    date: Some(data.8),
-                    note: Some(data.9),
-                },
-            };
-
-            Ok(output)
+        let output = Image {
+            data: ImageData {
+                owner: data.0,
+                path: data.1,
+                datetime_original: data.2,
+                x_pixel: data.3,
+                y_pixel: data.4,
+            },
+            metadata: ImageMetadata {
+                orientation: Some(data.5),
+                date: Some(data.6),
+                note: Some(data.7),
+            },
         };
 
-        resp.send(inner.await)
-            .map_err(|_| anyhow::Error::msg("failed to respond to get_image"))
+        Ok(output)
     }
 
     async fn update_image(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: ImageUuid,
         change: ImageMetadata,
     ) -> anyhow::Result<()> {
-        let inner = async {
-            let conn = self.pool.get_conn().await?;
+        let conn = self.pool.get_conn().await?;
 
-            /*match change.visibility {
-                None => {}
-                Some(v) => {self.cache_sender(ESM::Cache(CacheMsg::SetImageVisbiliity))}
-            }*/
+        /*match change.visibility {
+            None => {}
+            Some(v) => {self.cache_sender(ESM::Cache(CacheMsg::SetImageVisbiliity))}
+        }*/
 
-            let query = r"".with(params! {"" => ""});
+        let query = r"".with(params! {"" => ""});
 
-            let _result = query.run(conn).await?;
+        let _result = query.run(conn).await?;
 
-            Ok(())
-        };
-
-        resp.send(inner.await)
-            .map_err(|_| anyhow::Error::msg("failed to respond to update_image"))
+        Ok(())
     }
 
     async fn filter_images(
         &self,
-        resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
-        filter: ImageFilter,
-    ) -> anyhow::Result<()> {
-        Ok(())
+        filter: String,
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+        Err(anyhow::Error::msg(""))
     }
 
-    async fn add_album(&self, resp: ESMResp<()>, album: Album) -> anyhow::Result<()> {
-        Ok(())
+    async fn add_album(&self, album: Album) -> anyhow::Result<()> {
+        Err(anyhow::Error::msg(""))
     }
 
-    async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUuid) -> anyhow::Result<()> {
-        Ok(())
+    async fn get_album(&self, uuid: AlbumUuid) -> anyhow::Result<Album> {
+        Err(anyhow::Error::msg(""))
     }
 
     async fn update_album(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
-        let inner = async {
-            let conn = self.pool.get_conn().await?;
+        let conn = self.pool.get_conn().await?;
 
-            let query = r"".with(params! {"" => ""});
+        let query = r"".with(params! {"" => ""});
 
-            let _result = query.run(conn).await?;
+        let _result = query.run(conn).await?;
 
-            Ok(())
-        };
-
-        resp.send(inner.await)
-            .map_err(|_| anyhow::Error::msg("failed to respond to update_album"))
+        todo!()
     }
 
-    async fn filter_albums(
-        &self,
-        resp: ESMResp<()>,
-        user: String,
-        filter: String,
-    ) -> anyhow::Result<()> {
-        Ok(())
+    async fn filter_albums(&self, user: String, filter: String) -> anyhow::Result<()> {
+        todo!()
     }
 
-    async fn add_library(&self, resp: ESMResp<()>, library: Library) -> anyhow::Result<()> {
-        Ok(())
+    async fn add_library(&self, library: Library) -> anyhow::Result<()> {
+        todo!()
     }
 
-    async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUuid) -> anyhow::Result<()> {
-        Ok(())
+    async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library> {
+        todo!()
     }
 
     async fn update_library(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: LibraryUuid,
         change: LibraryMetadata,
     ) -> anyhow::Result<()> {
-        Ok(())
+        todo!()
     }
 }
 
 #[async_trait]
 impl ESInner for MySQLState {
-    fn new() -> Self {
-        MySQLState {
+    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+        Ok(MySQLState {
             pool: Pool::new(""),
-        }
+        })
     }
 
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Db(message) => match message {
-                DbMsg::AddImage { resp, image } => self.add_image(resp, image).await,
-                DbMsg::GetImage { resp, uuid } => self.get_image(resp, uuid).await,
+                DbMsg::AddUser => {
+                    todo!()
+                }
+                DbMsg::GetUser { resp, uid } => {
+                    todo!()
+                }
+                DbMsg::DeleteUser => {
+                    todo!()
+                }
+                DbMsg::AddGroup => {
+                    todo!()
+                }
+                DbMsg::GetGroup { resp, gid } => {
+                    todo!()
+                }
+                DbMsg::DeleteGroup => {
+                    todo!()
+                }
+                DbMsg::AddUserToGroup => {
+                    todo!()
+                }
+                DbMsg::RmUserFromGroup => {
+                    todo!()
+                }
+                DbMsg::AddImage { resp, image } => self.respond(resp, self.add_image(image)).await,
+                DbMsg::GetImage { resp, user, uuid } => {
+                    self.respond(resp, self.get_image(uuid)).await
+                }
                 DbMsg::UpdateImage {
                     resp,
                     user,
                     uuid,
                     change,
-                } => self.update_image(resp, user, uuid, change).await,
-                DbMsg::SearchImages { resp, user, filter } => {
-                    self.filter_images(resp, user, filter).await
+                } => {
+                    self.respond(resp, self.update_image(user, uuid, change))
+                        .await
                 }
-                DbMsg::AddAlbum { resp, uuid } => self.add_album(resp, uuid).await,
-                DbMsg::GetAlbum { resp, uuid } => self.get_album(resp, uuid).await,
+                DbMsg::SearchImages { resp, user, filter } => {
+                    self.respond(resp, self.filter_images(user, filter)).await
+                }
+                DbMsg::GetImageGroups { resp, uuid } => {
+                    todo!()
+                }
+                DbMsg::AddAlbum { resp, user, album } => {
+                    self.respond(resp, self.add_album(album)).await
+                }
+                DbMsg::GetAlbum { resp, user, uuid } => {
+                    self.respond(resp, self.get_album(uuid)).await
+                }
+                DbMsg::DeleteAlbum { resp, user, uuid } => {
+                    todo!()
+                }
                 DbMsg::UpdateAlbum {
                     resp,
                     user,
                     uuid,
                     change,
-                } => self.update_album(resp, user, uuid, change).await,
-                DbMsg::SearchAlbums { resp, user, filter } => {
-                    self.filter_albums(resp, user, filter).await
+                } => {
+                    self.respond(resp, self.update_album(user, uuid, change))
+                        .await
                 }
-                DbMsg::AddLibrary { resp, library } => self.add_library(resp, library).await,
-                DbMsg::GetLibary { resp, uuid } => self.get_library(resp, uuid).await,
+                DbMsg::SearchAlbums { resp, user, filter } => {
+                    self.respond(resp, self.filter_albums(user, filter)).await
+                }
+                DbMsg::AddLibrary { resp, library } => {
+                    self.respond(resp, self.add_library(library)).await
+                }
+                DbMsg::GetLibary { resp, uuid } => self.respond(resp, self.get_library(uuid)).await,
                 DbMsg::UpdateLibrary {
                     resp,
                     user,
                     uuid,
                     change,
-                } => self.update_library(resp, user, uuid, change).await,
+                } => {
+                    self.respond(resp, self.update_library(user, uuid, change))
+                        .await
+                }
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
@@ -306,11 +337,11 @@ impl EntanglementService for MySQLService {
         )
     }
 
-    async fn start(&self, senders: HashMap<ESM, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MySQLState::new());
+        let state = Arc::new(MySQLState::new(senders)?);
 
         let serve = {
             async move {

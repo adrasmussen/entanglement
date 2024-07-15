@@ -8,7 +8,7 @@ use async_trait::async_trait;
 
 use futures::TryStreamExt;
 
-use crate::service::{ESInner, ESMResp};
+use crate::service::ESInner;
 use api::{auth::*, image::*};
 
 pub mod msg;
@@ -22,30 +22,29 @@ pub mod svc;
 #[async_trait]
 trait ESDbService: ESInner {
     // authdb functions
-    async fn add_user(&self, resp: ESMResp<()>, user: User) -> anyhow::Result<()>;
+    async fn add_user(&self, user: User) -> anyhow::Result<()>;
 
-    async fn get_user(&self, resp: ESMResp<()>, uid: String) -> anyhow::Result<()>;
+    async fn get_user(&self, uid: String) -> anyhow::Result<()>;
 
-    async fn delete_user(&self, resp: ESMResp<()>, uid: String) -> anyhow::Result<()>;
+    async fn delete_user(&self, uid: String) -> anyhow::Result<()>;
 
-    async fn add_group(&self, resp: ESMResp<()>, group: Group) -> anyhow::Result<()>;
+    async fn add_group(&self, group: Group) -> anyhow::Result<()>;
 
-    async fn get_group(&self, resp: ESMResp<()>, gid: String) -> anyhow::Result<()>;
+    async fn get_group(&self, gid: String) -> anyhow::Result<()>;
 
-    async fn delete_group(&self, resp: ESMResp<()>, gid: String) -> anyhow::Result<()>;
+    async fn delete_group(&self, gid: String) -> anyhow::Result<()>;
 
-    async fn add_user_to_group(&self, resp: ESMResp<()>, uid: String, gid: String) -> anyhow::Result<()>;
+    async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
 
-    async fn rm_user_from_group(&self, resp: ESMResp<()>, uid: String, gid: String) -> anyhow::Result<()>;
+    async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
 
     // image functions
-    async fn add_image(&self, resp: ESMResp<ImageUuid>, image: Image) -> anyhow::Result<()>;
+    async fn add_image(&self, image: Image) -> anyhow::Result<ImageUuid>;
 
-    async fn get_image(&self, resp: ESMResp<Image>, uuid: ImageUuid) -> anyhow::Result<()>;
+    async fn get_image(&self, uuid: ImageUuid) -> anyhow::Result<Image>;
 
     async fn update_image(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: ImageUuid,
         change: ImageMetadata,
@@ -53,39 +52,31 @@ trait ESDbService: ESInner {
 
     async fn filter_images(
         &self,
-        resp: ESMResp<HashMap<ImageUuid, Image>>,
         user: String,
         filter: String,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
 
     // album functions
-    async fn add_album(&self, resp: ESMResp<()>, album: Album) -> anyhow::Result<()>;
+    async fn add_album(&self, album: Album) -> anyhow::Result<()>;
 
-    async fn get_album(&self, resp: ESMResp<Album>, uuid: AlbumUuid) -> anyhow::Result<()>;
+    async fn get_album(&self, uuid: AlbumUuid) -> anyhow::Result<Album>;
 
     async fn update_album(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn filter_albums(
-        &self,
-        resp: ESMResp<()>,
-        user: String,
-        filter: String,
-    ) -> anyhow::Result<()>;
+    async fn filter_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
 
     // library functions
-    async fn add_library(&self, resp: ESMResp<()>, library: Library) -> anyhow::Result<()>;
+    async fn add_library(&self, library: Library) -> anyhow::Result<()>;
 
-    async fn get_library(&self, resp: ESMResp<Library>, uuid: LibraryUuid) -> anyhow::Result<()>;
+    async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library>;
 
     async fn update_library(
         &self,
-        resp: ESMResp<()>,
         user: String,
         uuid: LibraryUuid,
         change: LibraryMetadata,

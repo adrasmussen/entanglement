@@ -15,7 +15,7 @@ pub enum DbMsg {
     DeleteUser,
     AddGroup,
     GetGroup {
-        resp: ESMResp<Group>, // this should fail if the group does not exist
+        resp: ESMResp<Group>,
         gid: String,
     },
     DeleteGroup,
@@ -48,10 +48,10 @@ pub enum DbMsg {
     AddAlbum {
         resp: ESMResp<()>,
         user: String,
-        uuid: AlbumUuid,
+        album: Album,
     },
     GetAlbum {
-        resp: ESMResp<AlbumUuid>,
+        resp: ESMResp<Album>,
         user: String,
         uuid: AlbumUuid,
     },
