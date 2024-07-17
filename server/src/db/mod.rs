@@ -24,13 +24,13 @@ trait ESDbService: ESInner {
     // authdb functions
     async fn add_user(&self, user: User) -> anyhow::Result<()>;
 
-    async fn get_user(&self, uid: String) -> anyhow::Result<()>;
+    async fn get_user(&self, uid: String) -> anyhow::Result<User>;
 
     async fn delete_user(&self, uid: String) -> anyhow::Result<()>;
 
     async fn add_group(&self, group: Group) -> anyhow::Result<()>;
 
-    async fn get_group(&self, gid: String) -> anyhow::Result<()>;
+    async fn get_group(&self, gid: String) -> anyhow::Result<Group>;
 
     async fn delete_group(&self, gid: String) -> anyhow::Result<()>;
 

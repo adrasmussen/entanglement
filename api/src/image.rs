@@ -17,12 +17,12 @@ pub struct Image {
     pub metadata: ImageMetadata,
 }
 
-// the immutable part of the image metadata, set by its physical location on the disk
+// the immutable part of the image metadata, set by the file itself
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageData {
     pub owner: String,
     pub path: String,
-    pub datetime_original: u64, // Unix time timestamp for original digital photos
+    pub datetime_original: u64, // Unix timestamp for original digital photos
     pub x_pixel: i32,
     pub y_pixel: i32,
 }
@@ -44,8 +44,6 @@ pub struct ImageMetadata {
 // update the image metadata, including visibility and other properties'
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageUpdateReq {
-    // if the old version is not version - 1, refresh the page?
-    pub version: i32,
     pub uuid: ImageUuid,
     pub metadata: ImageMetadata,
 }

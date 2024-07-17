@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
@@ -9,7 +9,8 @@ use futures::{future::BoxFuture, FutureExt};
 
 use mysql_async::binlog::events::RowsEvent;
 use mysql_async::{
-    from_row, from_row_opt, prelude::*, BinaryProtocol, Opts, Pool, ResultSetStream, Row,
+    from_row, from_row_opt, prelude::*, BinaryProtocol, FromRowError, Opts, Pool, ResultSetStream,
+    Row,
 };
 
 use tokio::sync::Mutex;
@@ -48,11 +49,66 @@ pub struct MySQLState {
 #[async_trait]
 impl ESDbService for MySQLState {
     async fn add_user(&self, user: User) -> anyhow::Result<()> {
-        todo!()
+        let conn = self.pool.get_conn().await?;
+
+        let query = r"
+        INSERT INTO users (uid, library, theme)
+        OUTPUT INSERTED.uid
+        VALUES (:uid, :library, :theme)"
+            .with(params! {
+                "uid" => user.uid.clone(),
+                "library" => user.library,
+                "theme" => user.settings.theme.unwrap_or_else(|| String::from("default")),
+            });
+
+        query.run(conn).await?;
+
+        for gid in user.groups.iter() {
+            self.add_user_to_group(user.uid.clone(), String::from(gid))
+                .await?;
+        }
+
+        Ok(())
     }
 
-    async fn get_user(&self, uid: String) -> anyhow::Result<()> {
-        todo!()
+    async fn get_user(&self, uid: String) -> anyhow::Result<User> {
+        let conn = self.pool.get_conn().await?;
+
+        let query = r"
+        SELECT (uid, library, theme) FROM users WHERE uid = :uid;
+
+        SELECT gid FROM group_members WHERE uid = :uid;"
+            .with(params! {
+                "uid" => uid.clone(),
+            });
+
+        let mut result = query.run(conn).await?;
+
+        // unpack the first resultset
+        let user_row = result
+            .collect::<Row>()
+            .await?
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg(format! {"failed to find user {uid}"}))?;
+
+        let user_data: (String, String, String) = from_row_opt(user_row)?;
+
+        // unpack the second resultset
+        let group_rows = result.collect::<Row>().await?;
+
+        let groups = group_rows
+            .into_iter()
+            .map(|row| from_row_opt::<String>(row))
+            .collect::<Result<HashSet<String>, FromRowError>>()?;
+
+        Ok(User {
+            uid: user_data.0,
+            groups: groups,
+            library: user_data.1,
+            settings: UserSettings {
+                theme: Some(user_data.2),
+            },
+        })
     }
 
     async fn delete_user(&self, uid: String) -> anyhow::Result<()> {
@@ -63,7 +119,7 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn get_group(&self, gid: String) -> anyhow::Result<()> {
+    async fn get_group(&self, gid: String) -> anyhow::Result<Group> {
         todo!()
     }
 
@@ -72,7 +128,7 @@ impl ESDbService for MySQLState {
     }
 
     async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
@@ -127,7 +183,7 @@ impl ESDbService for MySQLState {
 
         let data: (String, String, u64, i32, i32, i8, String, String) = from_row_opt(row)?;
 
-        let output = Image {
+        Ok(Image {
             data: ImageData {
                 owner: data.0,
                 path: data.1,
@@ -140,9 +196,7 @@ impl ESDbService for MySQLState {
                 date: Some(data.6),
                 note: Some(data.7),
             },
-        };
-
-        Ok(output)
+        })
     }
 
     async fn update_image(
@@ -229,29 +283,29 @@ impl ESInner for MySQLState {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Db(message) => match message {
-                DbMsg::AddUser => {
-                    todo!()
+                DbMsg::AddUser { resp, user } => {
+                    self.respond(resp, self.add_user(user)).await
                 }
                 DbMsg::GetUser { resp, uid } => {
-                    todo!()
+                    self.respond(resp, self.get_user(uid)).await
                 }
-                DbMsg::DeleteUser => {
-                    todo!()
+                DbMsg::DeleteUser { resp, uid } => {
+                    self.respond(resp, self.delete_user(uid)).await
                 }
-                DbMsg::AddGroup => {
-                    todo!()
+                DbMsg::AddGroup { resp, group } => {
+                    self.respond(resp, self.add_group(group)).await
                 }
                 DbMsg::GetGroup { resp, gid } => {
-                    todo!()
+                    self.respond(resp, self.get_group(gid)).await
                 }
-                DbMsg::DeleteGroup => {
-                    todo!()
+                DbMsg::DeleteGroup { resp, gid } => {
+                    self.respond(resp, self.delete_group(gid)).await
                 }
-                DbMsg::AddUserToGroup => {
-                    todo!()
+                DbMsg::AddUserToGroup { resp, uid, gid } => {
+                    self.respond(resp, self.add_user_to_group(uid, gid)).await
                 }
-                DbMsg::RmUserFromGroup => {
-                    todo!()
+                DbMsg::RmUserFromGroup { resp, uid, gid } => {
+                    self.respond(resp, self.rm_user_from_group(uid, gid)).await
                 }
                 DbMsg::AddImage { resp, image } => self.respond(resp, self.add_image(image)).await,
                 DbMsg::GetImage { resp, user, uuid } => {

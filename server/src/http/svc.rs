@@ -1,14 +1,20 @@
-use std::sync::Arc;
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow;
 
+use async_cell::sync::AsyncCell;
+
+use async_trait::async_trait;
+
 use axum::{
     body::Bytes,
-    extract::{Extension, Request},
+    extract::{rejection::JsonRejection, Extension, Json, Path, Request, State},
     http::{StatusCode, Uri},
     middleware,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -21,46 +27,110 @@ use hyper::body::{Frame, Incoming};
 
 use hyper_util;
 
-use tokio;
+use tokio::sync::Mutex;
 
 use tower::Service;
 
 use crate::http::auth::{proxy_auth, CurrentUser};
-use crate::service::{ESConfig, ESMReceiver, ESMSender, EntanglementService, ESM};
+use crate::service::*;
+use api::image::*;
+
+use super::HttpEndpoint;
+
+pub struct HttpHandler {
+    auth_svc_sender: ESMSender,
+    db_svc_sender: ESMSender,
+    fs_svc_sender: ESMSender,
+}
+
+#[async_trait]
+impl HttpEndpoint for HttpHandler {
+    async fn stream_media(
+        State(state): State<Arc<Self>>,
+        Extension(current_user): Extension<CurrentUser>,
+        Path(path): Path<(String)>,
+    ) -> Response {
+        todo!()
+    }
+
+    async fn search_images(
+        State(state): State<Arc<Self>>,
+        Extension(current_user): Extension<CurrentUser>,
+        json_body: Json<FilterImageReq>,
+    ) -> Response {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl ESInner for HttpHandler {
+    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+        Ok(HttpHandler {
+            auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
+            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
+            fs_svc_sender: senders.get(&ServiceType::Fs).unwrap().clone(),
+        })
+    }
+
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+        match esm {
+            _ => Err(anyhow::Error::msg("not implemented")),
+        }
+    }
+}
 
 pub struct HttpService {
     config: Arc<ESConfig>,
     sender: ESMSender,
-    receiver: ESMReceiver,
-    // state: ???
+    receiver: Arc<Mutex<ESMReceiver>>,
+    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
 
-// HttpService message handler
-async fn message_handler(esm: ESM) -> anyhow::Result<()> {
-    match esm {
-        ESM::Http(http_msg) => match http_msg {
-            _ => Err(anyhow::Error::msg("not implmented")),
-        },
-        _ => Err(anyhow::Error::msg("not implmented")),
+#[async_trait]
+impl EntanglementService for HttpService {
+    type Inner = HttpHandler;
+
+    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
+
+        (
+            tx.clone(),
+            HttpService {
+                config: config.clone(),
+                sender: tx,
+                receiver: Arc::new(Mutex::new(rx)),
+                handle: AsyncCell::new(),
+            },
+        )
+    }
+
+    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+        let receiver = Arc::clone(&self.receiver);
+        let state = Arc::new(HttpHandler::new(senders)?);
+
+        let serve = {
+            async move {
+                while let Some(msg) = receiver.lock().await.recv().await {
+                    let state = Arc::clone(&state);
+                    tokio::task::spawn(async move {
+                        match state.message_handler(msg).await {
+                            Ok(()) => (),
+                            Err(_) => println!("cache service failed to reply to message"),
+                        }
+                    });
+                }
+
+                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+            }
+        };
+
+        let handle = tokio::task::spawn(serve);
+
+        self.handle.set(handle);
+
+        Ok(())
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // can read files directly, mapping /api/image/<sha> to /path/to/library/.../img.jpg,
 // checking permissions along the way (i.e. user can see an album containing image)

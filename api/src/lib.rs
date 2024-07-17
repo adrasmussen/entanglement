@@ -1,5 +1,3 @@
-use std::string;
-
 pub mod image;
 pub mod auth;
 

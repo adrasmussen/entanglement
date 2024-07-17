@@ -177,12 +177,8 @@ impl ESAuthService for AuthCache {
 #[async_trait]
 impl ESInner for AuthCache {
     fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
-        let db_svc_sender = senders
-            .get(&ServiceType::Db)
-            .ok_or_else(|| anyhow::Error::msg("failed to find Db sender for AuthCache"))?;
-
         Ok(AuthCache {
-            db_svc_sender: db_svc_sender.clone(),
+            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
             access_cache: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -251,6 +247,8 @@ impl EntanglementService for AuthService {
         //
         // however, if we want things like timers, batching updates, or other optimizations,
         // they would all go here with corresponding handles in the AuthService struct
+        //
+        // example would use StreamExt's ready_chunks() method
 
         let serve = {
             async move {

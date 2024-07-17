@@ -1,26 +1,46 @@
 use std::collections::{HashMap, HashSet};
 
+use api::auth::{Group, User};
 use api::image::*;
-use api::auth::{User, Group};
 
 use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum DbMsg {
-    AddUser,
+    AddUser {
+        resp: ESMResp<()>,
+        user: User,
+    },
     GetUser {
         resp: ESMResp<User>,
         uid: String,
     },
-    DeleteUser,
-    AddGroup,
+    DeleteUser {
+        resp: ESMResp<()>,
+        uid: String,
+    },
+    AddGroup {
+        resp: ESMResp<()>,
+        group: Group,
+    },
     GetGroup {
         resp: ESMResp<Group>,
         gid: String,
     },
-    DeleteGroup,
-    AddUserToGroup,
-    RmUserFromGroup,
+    DeleteGroup {
+        resp: ESMResp<()>,
+        gid: String,
+    },
+    AddUserToGroup {
+        resp: ESMResp<()>,
+        uid: String,
+        gid: String,
+    },
+    RmUserFromGroup {
+        resp: ESMResp<()>,
+        uid: String,
+        gid: String,
+    },
     AddImage {
         resp: ESMResp<ImageUuid>,
         image: Image,

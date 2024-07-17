@@ -13,6 +13,15 @@ use tokio;
 // config
 pub struct ESConfig {}
 
+// these are the services that make up the entanglment server backend
+#[derive(Debug, Eq, Hash, PartialEq)]
+pub enum ServiceType {
+    Auth,
+    Db,
+    Fs,
+    Http,
+}
+
 // Entanglement Service Messages
 //
 // without higher-kinded types, we use the normal enum-of-enums
@@ -31,14 +40,6 @@ pub enum ESM {
     Fs(crate::fs::msg::FsMsg),
     Http(crate::http::msg::HttpMsg),
     Svc(crate::service::msg::Svc),
-}
-
-#[derive(Debug, Eq, Hash, PartialEq)]
-pub enum ServiceType {
-    Auth,
-    Db,
-    Fs,
-    Http,
 }
 
 #[async_trait]
@@ -67,7 +68,7 @@ pub trait ESInner: Sized + Send + Sync + 'static {
     async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> anyhow::Result<()>
     where
         T: Send + Sync,
-        Fut: Future<Output = anyhow::Result<T>> + Send,
+        Fut: Future<Output = anyhow::Result<T>> + Send, // this will eventually be a ESResult<T>
     {
         resp.send(fut.await).map_err(|_| {
             anyhow::Error::msg(format!(
@@ -76,4 +77,15 @@ pub trait ESInner: Sized + Send + Sync + 'static {
             ))
         })
     }
+}
+
+// error handling
+//
+// each of these should have their own per-service From so that things which consume ESError (like
+// the http handlers) can use '?' correctly
+pub type ESResult<T> = Result<T, ESError>;
+
+#[derive(Debug)]
+pub enum ESError {
+    Http(crate::http::HttpError)
 }

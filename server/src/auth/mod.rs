@@ -10,7 +10,7 @@ pub mod msg;
 pub mod svc;
 
 #[derive(Debug)]
-enum AuthType {
+pub enum AuthType {
     ProxyHeader,
     LDAP
 }
