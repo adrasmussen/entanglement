@@ -274,7 +274,7 @@ impl ESDbService for MySQLState {
 
 #[async_trait]
 impl ESInner for MySQLState {
-    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+    fn new(_config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
         Ok(MySQLState {
             pool: Pool::new(""),
         })
@@ -395,7 +395,7 @@ impl EntanglementService for MySQLService {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MySQLState::new(senders)?);
+        let state = Arc::new(MySQLState::new(self.config.clone(), senders)?);
 
         let serve = {
             async move {

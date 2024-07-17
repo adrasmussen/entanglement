@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use axum::{
     body::Bytes,
     extract::{rejection::JsonRejection, Extension, Json, Path, Request, State},
-    http::{StatusCode, Uri},
+    http::{HeaderMap, StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -31,44 +31,30 @@ use tokio::sync::Mutex;
 
 use tower::Service;
 
+use crate::auth::msg::AuthMsg;
 use crate::http::auth::{proxy_auth, CurrentUser};
 use crate::service::*;
 use api::image::*;
 
-use super::HttpEndpoint;
-
-pub struct HttpHandler {
+#[derive(Clone, Debug)]
+pub struct HttpEndpoint {
     auth_svc_sender: ESMSender,
     db_svc_sender: ESMSender,
     fs_svc_sender: ESMSender,
+    media_linkdir: PathBuf,
 }
 
 #[async_trait]
-impl HttpEndpoint for HttpHandler {
-    async fn stream_media(
-        State(state): State<Arc<Self>>,
-        Extension(current_user): Extension<CurrentUser>,
-        Path(path): Path<(String)>,
-    ) -> Response {
-        todo!()
-    }
-
-    async fn search_images(
-        State(state): State<Arc<Self>>,
-        Extension(current_user): Extension<CurrentUser>,
-        json_body: Json<FilterImageReq>,
-    ) -> Response {
-        todo!()
-    }
-}
-
-#[async_trait]
-impl ESInner for HttpHandler {
-    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
-        Ok(HttpHandler {
+impl ESInner for HttpEndpoint {
+    fn new(
+        config: Arc<ESConfig>,
+        senders: HashMap<ServiceType, ESMSender>,
+    ) -> anyhow::Result<Self> {
+        Ok(HttpEndpoint {
             auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             fs_svc_sender: senders.get(&ServiceType::Fs).unwrap().clone(),
+            media_linkdir: config.media_linkdir.clone(),
         })
     }
 
@@ -84,12 +70,12 @@ pub struct HttpService {
     sender: ESMSender,
     receiver: Arc<Mutex<ESMReceiver>>,
     msg_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-    hyper_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>
+    hyper_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
 
 #[async_trait]
 impl EntanglementService for HttpService {
-    type Inner = HttpHandler;
+    type Inner = HttpEndpoint;
 
     fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
@@ -108,7 +94,7 @@ impl EntanglementService for HttpService {
 
     async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(HttpHandler::new(senders)?);
+        let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders)?);
 
         // this will eventually come from the config
         let socket = SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081));
@@ -141,17 +127,18 @@ impl EntanglementService for HttpService {
     }
 }
 
-// can read files directly, mapping /api/image/<sha> to /path/to/library/.../img.jpg,
-// checking permissions along the way (i.e. user can see an album containing image)
-
-async fn serve_http(socket: SocketAddr, state: Arc<HttpHandler>) -> Result<(), anyhow::Error> {
+async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), anyhow::Error> {
     let state = Arc::clone(&state);
 
     let router: Router<()> = Router::new()
-        .route("/api/search", post(HttpEndpoint::search_images))
-        .route("/media/*file", get(HttpEndpoint::stream_media))
+        .route("/media/*uuid", get(stream_media))
+        .route("/api/search", post(search_images))
+        .route("/api/users", post(edit_users))
+        .route("/api/groups", post(edit_groups))
+        .route("/api/albums", post(edit_albums))
         .fallback(fallback)
-        .route_layer(middleware::from_fn(proxy_auth)).with_state(state);
+        .route_layer(middleware::from_fn(proxy_auth))
+        .with_state(state);
 
     let service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
@@ -179,9 +166,124 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpHandler>) -> Result<(), a
     Ok(())
 }
 
+// helper function
+macro_rules! esm_send {
+    ($sender:expr, $esm:expr) => {
+        match $sender.clone().send($esm.into()).await {
+            Ok(()) => {}
+            Err(_) => return Err(ESError::ChannelSendError),
+        }
+    };
+}
+
+macro_rules! esm_recv {
+    ($rx:expr) => {
+        match $rx.await {
+            Err(_) => return Err(ESError::ChannelRecvError),
+            Ok(msg) => match msg {
+                Err(err) => return Err(ESError::from(err)),
+                Ok(val) => val,
+            },
+        }
+    };
+}
+
+// http handlers
 async fn fallback(uri: Uri) -> StatusCode {
     StatusCode::NOT_FOUND
 }
+
+async fn stream_media(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path(uuid): Path<u64>,
+) -> Result<Response, ESError> {
+    let state = state.clone();
+
+    // first determine if the user can access the file
+    let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<bool>>();
+
+    esm_send!(
+        state.auth_svc_sender,
+        AuthMsg::CanAccessMedia {
+            resp: tx,
+            uid: current_user.user.clone(),
+            uuid: uuid.clone(),
+        }
+    );
+
+    let allowed = esm_recv!(rx);
+
+    if !allowed {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let filename = state.media_linkdir.join(uuid.to_string());
+
+    Ok(StatusCode::IM_A_TEAPOT.into_response())
+}
+
+async fn search_images(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    json_body: Json<FilterImageReq>,
+) -> Result<Response, ESError> {
+    Ok(StatusCode::IM_A_TEAPOT.into_response())
+}
+
+async fn edit_users(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path(path): Path<(String)>,
+    json_body: Json<FilterImageReq>,
+) -> Response {
+    StatusCode::IM_A_TEAPOT.into_response()
+}
+
+async fn edit_groups(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path(path): Path<(String)>,
+    json_body: Json<FilterImageReq>,
+) -> Response {
+    StatusCode::IM_A_TEAPOT.into_response()
+}
+
+async fn edit_albums(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Path(path): Path<(String)>,
+    json_body: Json<FilterImageReq>,
+) -> Response {
+    StatusCode::IM_A_TEAPOT.into_response()
+}
+// for simplicity, either use an enum and match or read in part of the path
+
+// edit users
+//
+// add_user
+// get_user
+// delete_user
+
+// edit groups
+//
+// add_group
+// get_group
+// delete_group
+// add_user_to_group
+// rm_user_from_group
+
+// albums
+//
+// add_album
+// get_album
+// delete_album
+// add_image_to_album
+// rm_image_from_album
+
+// library
+//
+// rescan_library
 
 // async fn download_file(axum::extract::Path(file): axum::extract::Path<String>) -> hyper::Response<BoxBody<tokio_util::bytes::Bytes, std::io::Error>> {
 //     // where the files live

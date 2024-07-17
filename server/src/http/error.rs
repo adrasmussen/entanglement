@@ -1,13 +1,12 @@
 use axum::{
-    extract::{Extension, Json, Path, State, rejection::JsonRejection},
+    extract::{rejection::JsonRejection, Extension, Json, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 
 use serde::Serialize;
 
-use crate::http::HttpError;
-use crate::service::ESError;
+use crate::service::*;
 
 // https://github.com/tokio-rs/axum/blob/main/examples/error-handling/src/main.rs
 
@@ -19,11 +18,19 @@ impl IntoResponse for ESError {
         }
 
         let (status, message) = match self {
-            ESError::Http(err) => match err {
-                HttpError::JsonRejection(rejection) => {
-                    (rejection.status(), rejection.body_text())
-                }
-            }
+            ESError::AnyhowError(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                err.to_string(),
+            ),
+            ESError::ChannelSendError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal communications error".to_string(),
+            ),
+            ESError::ChannelRecvError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal communications error".to_string(),
+            ),
+            ESError::JsonRejection(rejection) => (rejection.status(), rejection.body_text()),
         };
 
         (status, Json(ErrorResponse { message })).into_response()

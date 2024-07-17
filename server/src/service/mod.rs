@@ -1,17 +1,23 @@
-pub mod msg;
-
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow;
 
 use async_trait::async_trait;
 
+use axum::extract::rejection::JsonRejection;
+
 use tokio;
 
+pub mod msg;
+
 // config
-pub struct ESConfig {}
+pub struct ESConfig {
+    pub media_srcdir: PathBuf,
+    pub media_linkdir: PathBuf,
+}
 
 // these are the services that make up the entanglment server backend
 #[derive(Debug, Eq, Hash, PartialEq)]
@@ -53,7 +59,8 @@ pub trait EntanglementService: Send + Sync + 'static {
 
 #[async_trait]
 pub trait ESInner: Sized + Send + Sync + 'static {
-    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self>;
+    fn new(config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>)
+        -> anyhow::Result<Self>;
 
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()>;
 
@@ -87,5 +94,20 @@ pub type ESResult<T> = Result<T, ESError>;
 
 #[derive(Debug)]
 pub enum ESError {
-    Http(crate::http::HttpError)
+    AnyhowError(String),
+    ChannelSendError,
+    ChannelRecvError,
+    JsonRejection(JsonRejection)
+}
+
+impl From<JsonRejection> for ESError {
+    fn from(err: JsonRejection) -> Self {
+        Self::JsonRejection(err)
+    }
+}
+
+impl From<anyhow::Error> for ESError {
+    fn from(err: anyhow::Error) -> Self {
+        ESError::AnyhowError(err.to_string())
+    }
 }

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use api::MediaUuid;
 
 use crate::auth::AuthType;
-use crate::service::ESMResp;
+use crate::service::*;
 
 #[derive(Debug)]
 pub enum AuthMsg {
@@ -31,4 +31,10 @@ pub enum AuthMsg {
         uid: String,
         uuid: MediaUuid,
     },
+}
+
+impl From<AuthMsg> for ESM {
+    fn from(msg: AuthMsg) -> Self {
+        ESM::Auth(msg)
+    }
 }

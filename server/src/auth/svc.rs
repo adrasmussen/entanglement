@@ -176,7 +176,7 @@ impl ESAuthService for AuthCache {
 
 #[async_trait]
 impl ESInner for AuthCache {
-    fn new(senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+    fn new(_config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
         Ok(AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -241,7 +241,7 @@ impl EntanglementService for AuthService {
 
     async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(AuthCache::new(senders)?);
+        let state = Arc::new(AuthCache::new(self.config.clone(), senders)?);
 
         // for the first pass, we don't need any further machinery for this service
         //
