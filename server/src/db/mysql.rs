@@ -219,7 +219,7 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
-    async fn filter_images(
+    async fn search_images(
         &self,
         user: String,
         filter: String,
@@ -250,7 +250,7 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn filter_albums(&self, user: String, filter: String) -> anyhow::Result<()> {
+    async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<()> {
         todo!()
     }
 
@@ -321,7 +321,7 @@ impl ESInner for MySQLState {
                         .await
                 }
                 DbMsg::SearchImages { resp, user, filter } => {
-                    self.respond(resp, self.filter_images(user, filter)).await
+                    self.respond(resp, self.search_images(user, filter)).await
                 }
                 DbMsg::GetImageGroups { resp, uuid } => {
                     todo!()
@@ -345,7 +345,7 @@ impl ESInner for MySQLState {
                         .await
                 }
                 DbMsg::SearchAlbums { resp, user, filter } => {
-                    self.respond(resp, self.filter_albums(user, filter)).await
+                    self.respond(resp, self.search_albums(user, filter)).await
                 }
                 DbMsg::AddLibrary { resp, library } => {
                     self.respond(resp, self.add_library(library)).await

@@ -50,7 +50,7 @@ trait ESDbService: ESInner {
         change: ImageMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn filter_images(
+    async fn search_images(
         &self,
         user: String,
         filter: String,
@@ -68,7 +68,7 @@ trait ESDbService: ESInner {
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn filter_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
+    async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
 
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<()>;

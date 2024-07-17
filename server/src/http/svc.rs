@@ -3,38 +3,35 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow;
+use anyhow::{self, Context};
 
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
 
 use axum::{
-    body::Bytes,
-    extract::{rejection::JsonRejection, Extension, Json, Path, Request, State},
-    http::{HeaderMap, StatusCode, Uri},
+    extract::{Extension, Json, Path, Request, State},
+    http::{StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
 
-use futures_util::TryStreamExt;
-
-use http_body_util::{combinators::BoxBody, BodyExt, StreamBody};
-
-use hyper::body::{Frame, Incoming};
-
-use hyper_util;
-
 use tokio::sync::Mutex;
+
+use tokio_util::io::ReaderStream;
 
 use tower::Service;
 
 use crate::auth::msg::AuthMsg;
-use crate::http::auth::{proxy_auth, CurrentUser};
+use crate::db::msg::DbMsg;
+use crate::http::{
+    auth::{proxy_auth, CurrentUser},
+    AppError,
+};
 use crate::service::*;
-use api::image::*;
+use api::{image::*, MediaUuid};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -131,17 +128,18 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
     let state = Arc::clone(&state);
 
     let router: Router<()> = Router::new()
-        .route("/media/*uuid", get(stream_media))
-        .route("/api/search", post(search_images))
-        .route("/api/users", post(edit_users))
-        .route("/api/groups", post(edit_groups))
-        .route("/api/albums", post(edit_albums))
+        .route("/media/:uuid", get(stream_media))
+        .route("/api/search/image", post(search_images))
+        .route("/api/users/:op", post(edit_users))
+        .route("/api/groups/:op", post(edit_groups))
+        .route("/api/albums/:op", post(edit_albums))
         .fallback(fallback)
         .route_layer(middleware::from_fn(proxy_auth))
         .with_state(state);
 
-    let service =
-        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+    let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
+        router.clone().call(request)
+    });
 
     // for the moment, we just fail if the socket is in use
     let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
@@ -166,29 +164,6 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
     Ok(())
 }
 
-// helper function
-macro_rules! esm_send {
-    ($sender:expr, $esm:expr) => {
-        match $sender.clone().send($esm.into()).await {
-            Ok(()) => {}
-            Err(_) => return Err(ESError::ChannelSendError),
-        }
-    };
-}
-
-macro_rules! esm_recv {
-    ($rx:expr) => {
-        match $rx.await {
-            Err(_) => return Err(ESError::ChannelRecvError),
-            Ok(msg) => match msg {
-                Err(err) => return Err(ESError::from(err)),
-                Ok(val) => val,
-            },
-        }
-    };
-}
-
-// http handlers
 async fn fallback(uri: Uri) -> StatusCode {
     StatusCode::NOT_FOUND
 }
@@ -197,45 +172,85 @@ async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(uuid): Path<u64>,
-) -> Result<Response, ESError> {
+) -> Result<Response, AppError> {
     let state = state.clone();
 
     // first determine if the user can access the file
-    let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<bool>>();
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    esm_send!(
-        state.auth_svc_sender,
-        AuthMsg::CanAccessMedia {
-            resp: tx,
-            uid: current_user.user.clone(),
-            uuid: uuid.clone(),
-        }
-    );
+    state
+        .auth_svc_sender
+        .clone()
+        .send(
+            AuthMsg::CanAccessMedia {
+                resp: tx,
+                uid: current_user.user.clone(),
+                uuid: uuid.clone(),
+            }
+            .into(),
+        )
+        .await
+        .context("Failed to send CanAccessMedia message.")?;
 
-    let allowed = esm_recv!(rx);
+    let allowed = rx
+        .await
+        .context("Failed to receive CanAccessMedia response")??;
 
     if !allowed {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
+    // once we've passed the auth check, we get the file handle and build
+    // a streaming body from it
     let filename = state.media_linkdir.join(uuid.to_string());
 
-    Ok(StatusCode::IM_A_TEAPOT.into_response())
+    let file_handle = match tokio::fs::File::open(filename).await {
+        Ok(f) => f,
+        Err(err) => return Ok((StatusCode::NOT_FOUND, err.to_string()).into_response()),
+    };
+
+    let reader_stream = ReaderStream::new(file_handle);
+
+    Ok(axum::body::Body::from_stream(reader_stream).into_response())
 }
 
 async fn search_images(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    json_body: Json<FilterImageReq>,
-) -> Result<Response, ESError> {
-    Ok(StatusCode::IM_A_TEAPOT.into_response())
+    Json(json_body): Json<ImageSearchReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+
+    let user = current_user.user.clone();
+
+    let filter = json_body.filter;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .db_svc_sender
+        .clone()
+        .send(
+            DbMsg::SearchImages {
+                resp: tx,
+                user: user,
+                filter: filter,
+            }
+            .into(),
+        )
+        .await
+        .context("Failed to send SearchImage message")?;
+
+    let result = rx.await.context("Failed to receive SearchImage response")??;
+
+    Ok(Json(ImageSearchResp {images: result}).into_response())
 }
 
 async fn edit_users(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(path): Path<(String)>,
-    json_body: Json<FilterImageReq>,
+    Path(op): Path<(String)>,
+    json_body: Json<ImageSearchReq>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
 }
@@ -243,8 +258,8 @@ async fn edit_users(
 async fn edit_groups(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(path): Path<(String)>,
-    json_body: Json<FilterImageReq>,
+    Path(op): Path<(String)>,
+    json_body: Json<ImageSearchReq>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
 }
@@ -252,67 +267,8 @@ async fn edit_groups(
 async fn edit_albums(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(path): Path<(String)>,
-    json_body: Json<FilterImageReq>,
+    Path(op): Path<(String)>,
+    json_body: Json<ImageSearchReq>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
 }
-// for simplicity, either use an enum and match or read in part of the path
-
-// edit users
-//
-// add_user
-// get_user
-// delete_user
-
-// edit groups
-//
-// add_group
-// get_group
-// delete_group
-// add_user_to_group
-// rm_user_from_group
-
-// albums
-//
-// add_album
-// get_album
-// delete_album
-// add_image_to_album
-// rm_image_from_album
-
-// library
-//
-// rescan_library
-
-// async fn download_file(axum::extract::Path(file): axum::extract::Path<String>) -> hyper::Response<BoxBody<tokio_util::bytes::Bytes, std::io::Error>> {
-//     // where the files live
-//     let webroot = PathBuf::from("/srv/home/alex/webroot");
-
-//     // translate the URI to a real file
-//     let filename = webroot.join(PathBuf::from(file));
-
-//     let file_handle = match tokio::fs::File::open(filename).await {
-//         Ok(f) => f,
-//         Err(err) => {
-//             return hyper::Response::builder()
-//                 .status(StatusCode::NOT_FOUND)
-//                 .body(string_to_boxedbody(err.to_string()))
-//                 .unwrap()
-//         }
-//     };
-
-//     // following hyper's send_file example
-//     let reader_stream = tokio_util::io::ReaderStream::new(file_handle);
-
-//     // convert to the boxed streaming body
-//     let stream_body = StreamBody::new(reader_stream.map_ok(Frame::data));
-//     let boxed_body = stream_body.boxed();
-
-//     hyper::Response::builder()
-//         .status(StatusCode::OK)
-//         .header("Access-Control-Allow-Origin", "*")
-//         .body(boxed_body)
-//         .unwrap()
-
-// }

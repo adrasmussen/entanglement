@@ -7,8 +7,6 @@ use anyhow;
 
 use async_trait::async_trait;
 
-use axum::extract::rejection::JsonRejection;
-
 use tokio;
 
 pub mod msg;
@@ -83,31 +81,5 @@ pub trait ESInner: Sized + Send + Sync + 'static {
                 std::any::type_name::<T>()
             ))
         })
-    }
-}
-
-// error handling
-//
-// each of these should have their own per-service From so that things which consume ESError (like
-// the http handlers) can use '?' correctly
-pub type ESResult<T> = Result<T, ESError>;
-
-#[derive(Debug)]
-pub enum ESError {
-    AnyhowError(String),
-    ChannelSendError,
-    ChannelRecvError,
-    JsonRejection(JsonRejection)
-}
-
-impl From<JsonRejection> for ESError {
-    fn from(err: JsonRejection) -> Self {
-        Self::JsonRejection(err)
-    }
-}
-
-impl From<anyhow::Error> for ESError {
-    fn from(err: anyhow::Error) -> Self {
-        ESError::AnyhowError(err.to_string())
     }
 }

@@ -56,20 +56,18 @@ pub async fn update_image() -> anyhow::Result<ImageUpdateResp> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FilterImageReq {
+pub struct ImageSearchReq {
     pub filter: String, // we concatenate the fields on the search so it's a single string
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FilterImageResp {
+pub struct ImageSearchResp {
     pub images: HashMap<ImageUuid, Image>,
 }
 
-pub async fn filter_images(_filter: &FilterImageReq) -> anyhow::Result<FilterImageResp> {
-    // when the search system is working, we can post() the filter_data and parse the response
-    let match_data: FilterImageResp = Request::get(URL_MATCH_IMAGES).send().await?.json().await?;
-
-    Ok(match_data)
+pub async fn search_images(req: &ImageSearchReq) -> anyhow::Result<ImageSearchResp> {
+    let resp: ImageSearchResp = Request::post("/api/search/image").json(req)?.send().await?.json().await?;
+    Ok(resp)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

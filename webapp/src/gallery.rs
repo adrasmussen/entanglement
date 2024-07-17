@@ -2,7 +2,7 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::image::{filter_images, FilterImageReq, FilterImageResp};
+use api::image::{search_images, ImageSearchReq, ImageSearchResp};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ImageProps {
@@ -29,13 +29,13 @@ pub fn Image(props: ImageProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter: Signal<FilterImageReq> = use_signal(|| FilterImageReq {
+    let search_filter: Signal<ImageSearchReq> = use_signal(|| ImageSearchReq {
         filter: String::from(".*"),
     });
 
     // call to the api server
-    let matching_images: Resource<anyhow::Result<FilterImageResp>> =
-        use_resource(move || async move { filter_images(&search_filter()).await });
+    let matching_images: Resource<anyhow::Result<ImageSearchResp>> =
+        use_resource(move || async move { search_images(&search_filter()).await });
 
     // rebind to get around the issues with &*
     let matching_images = &*matching_images.read();
@@ -70,7 +70,7 @@ pub fn Gallery() -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryNavBarProps {
-    search_filter_signal: Signal<FilterImageReq>
+    search_filter_signal: Signal<ImageSearchReq>
 }
 
 #[component]
@@ -119,7 +119,7 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                     r#type: "text",
                     value: "{search_filter}",
                     oninput: move |event| {
-                        signal.set(FilterImageReq{filter: event.value()})
+                        signal.set(ImageSearchReq{filter: event.value()})
                     }
                 },
                 span { "Search History" },

@@ -1,9 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use api::auth::{Group, User};
-use api::image::*;
+use api::{image::*, MediaUuid};
 
-use crate::service::ESMResp;
+use crate::service::*;
 
 #[derive(Debug)]
 pub enum DbMsg {
@@ -105,4 +105,10 @@ pub enum DbMsg {
         uuid: LibraryUuid,
         change: LibraryMetadata,
     },
+}
+
+impl From<DbMsg> for ESM {
+    fn from(value: DbMsg) -> Self {
+        ESM::Db(value)
+    }
 }
