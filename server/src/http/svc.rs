@@ -83,7 +83,8 @@ pub struct HttpService {
     config: Arc<ESConfig>,
     sender: ESMSender,
     receiver: Arc<Mutex<ESMReceiver>>,
-    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    msg_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    hyper_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>
 }
 
 #[async_trait]
@@ -99,7 +100,8 @@ impl EntanglementService for HttpService {
                 config: config.clone(),
                 sender: tx,
                 receiver: Arc::new(Mutex::new(rx)),
-                handle: AsyncCell::new(),
+                msg_handle: AsyncCell::new(),
+                hyper_handle: AsyncCell::new(),
             },
         )
     }
@@ -108,14 +110,21 @@ impl EntanglementService for HttpService {
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(HttpHandler::new(senders)?);
 
-        let serve = {
+        // this will eventually come from the config
+        let socket = SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081));
+
+        let hyper_handle = tokio::task::spawn(serve_http(socket, Arc::clone(&state)));
+
+        self.hyper_handle.set(hyper_handle);
+
+        let msg_serve = {
             async move {
                 while let Some(msg) = receiver.lock().await.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(_) => println!("cache service failed to reply to message"),
+                            Err(_) => println!("http service failed to reply to message"),
                         }
                     });
                 }
@@ -124,9 +133,9 @@ impl EntanglementService for HttpService {
             }
         };
 
-        let handle = tokio::task::spawn(serve);
+        let msg_handle = tokio::task::spawn(msg_serve);
 
-        self.handle.set(handle);
+        self.msg_handle.set(msg_handle);
 
         Ok(())
     }
@@ -135,23 +144,20 @@ impl EntanglementService for HttpService {
 // can read files directly, mapping /api/image/<sha> to /path/to/library/.../img.jpg,
 // checking permissions along the way (i.e. user can see an album containing image)
 
-async fn serve_http() -> Result<(), anyhow::Error> {
-    let addr = SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081));
+async fn serve_http(socket: SocketAddr, state: Arc<HttpHandler>) -> Result<(), anyhow::Error> {
+    let state = Arc::clone(&state);
 
     let router: Router<()> = Router::new()
-        .route("/api/match", post(generate_filter))
-        .route("/api/album", post(edit_album))
-        .route("/api/status", get(status))
-        .route("/api/images/*file", get(download_file))
-        .route("/api/thumbs/*file", get(download_file))
+        .route("/api/search", post(HttpEndpoint::search_images))
+        .route("/media/*file", get(HttpEndpoint::stream_media))
         .fallback(fallback)
-        .route_layer(middleware::from_fn(proxy_auth));
+        .route_layer(middleware::from_fn(proxy_auth)).with_state(state);
 
     let service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
     // for the moment, we just fail if the socket is in use
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
 
     // the main http server loop
     while let Ok((stream, _)) = listener.accept().await {
@@ -175,18 +181,6 @@ async fn serve_http() -> Result<(), anyhow::Error> {
 
 async fn fallback(uri: Uri) -> StatusCode {
     StatusCode::NOT_FOUND
-}
-
-async fn generate_filter() {}
-
-async fn edit_album() {}
-
-async fn status() {}
-
-async fn download_file(
-    Extension(current_user): Extension<CurrentUser>,
-    axum::extract::Path(file): axum::extract::Path<String>,
-) {
 }
 
 // async fn download_file(axum::extract::Path(file): axum::extract::Path<String>) -> hyper::Response<BoxBody<tokio_util::bytes::Bytes, std::io::Error>> {

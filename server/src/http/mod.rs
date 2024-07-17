@@ -30,6 +30,35 @@ pub trait HttpEndpoint: ESInner {
         Extension(current_user): Extension<CurrentUser>,
         json_body: Json<FilterImageReq>,
     ) -> Response;
+
+    // for simplicity, either use an enum and match or read in part of the path
+
+    // edit users
+    //
+    // add_user
+    // get_user
+    // delete_user
+
+    // edit groups
+    //
+    // add_group
+    // get_group
+    // delete_group
+    // add_user_to_group
+    // rm_user_from_group
+
+    // albums
+    //
+    // add_album
+    // get_album
+    // delete_album
+    // add_image_to_album
+    // rm_image_from_album
+
+    // library
+    //
+    // rescan_library
+
 }
 
 #[derive(Debug)]
