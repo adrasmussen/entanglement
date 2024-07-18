@@ -70,6 +70,13 @@ trait ESDbService: ESInner {
 
     async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
 
+    async fn search_images_in_album(
+        &self,
+        user: String,
+        uuid: AlbumUuid,
+        filter: String,
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
+
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<()>;
 
@@ -81,6 +88,14 @@ trait ESDbService: ESInner {
         uuid: LibraryUuid,
         change: LibraryMetadata,
     ) -> anyhow::Result<()>;
+
+    async fn search_images_in_library(
+        &self,
+        user: String,
+        uuid: LibraryUuid,
+        filter: String,
+        hidden: bool,
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
 }
 
 // marker trait to allow specific implementations of the ESDbQuery

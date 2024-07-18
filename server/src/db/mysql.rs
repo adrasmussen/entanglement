@@ -5,17 +5,11 @@ use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
 
-use futures::{future::BoxFuture, FutureExt};
-
-use mysql_async::binlog::events::RowsEvent;
-use mysql_async::{
-    from_row, from_row_opt, prelude::*, BinaryProtocol, FromRowError, Opts, Pool, ResultSetStream,
-    Row,
-};
+use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
 
 use tokio::sync::Mutex;
 
-use crate::db::{msg::DbMsg, ESDbConn, ESDbService};
+use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
 use api::{auth::*, image::*};
 
@@ -48,6 +42,10 @@ pub struct MySQLState {
 
 #[async_trait]
 impl ESDbService for MySQLState {
+    // add a user to the various tables
+    //
+    // note that this does not sanity check the library location,
+    // and so we should probably standardize that somewhere
     async fn add_user(&self, user: User) -> anyhow::Result<()> {
         let conn = self.pool.get_conn().await?;
 
@@ -71,6 +69,8 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
+    // get the details for a particular user, none of which are
+    // currently secret or otherwise restricted to just admins
     async fn get_user(&self, uid: String) -> anyhow::Result<User> {
         let conn = self.pool.get_conn().await?;
 
@@ -135,6 +135,11 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
+    // add an image to the database, providing defaults for the metadata
+    // if they are not provided
+    //
+    // this is intended to be called only by the filesystem service during
+    // a library search, so there is no ambiguity on the argument details
     async fn add_image(&self, image: Image) -> anyhow::Result<ImageUuid> {
         let conn = self.pool.get_conn().await?;
 
@@ -166,6 +171,9 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
+    // get the data and metadata for a particular image
+    //
+    // TODO: properly check privs here, which allows for private notes too
     async fn get_image(&self, uuid: ImageUuid) -> anyhow::Result<Image> {
         let conn = self.pool.get_conn().await?;
 
@@ -219,6 +227,10 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
+    // search the database for particular images
+    //
+    // this is currently used for the gallery view (i.e. single search string) and not,
+    // for example, finding all images in a particular album or library
     async fn search_images(
         &self,
         user: String,
@@ -254,6 +266,19 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
+    // search images in a particular album
+    //
+    // this is split from the gallery search_images since it will have different behavior
+    // w.r.t. joins on the main select
+    async fn search_images_in_album(
+        &self,
+        user: String,
+        uuid: AlbumUuid,
+        filter: String,
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+        todo!()
+    }
+
     async fn add_library(&self, library: Library) -> anyhow::Result<()> {
         todo!()
     }
@@ -270,11 +295,24 @@ impl ESDbService for MySQLState {
     ) -> anyhow::Result<()> {
         todo!()
     }
+
+    async fn search_images_in_library(
+        &self,
+        user: String,
+        uuid: LibraryUuid,
+        filter: String,
+        hidden: bool,
+    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+        todo!()
+    }
 }
 
 #[async_trait]
 impl ESInner for MySQLState {
-    fn new(_config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+    fn new(
+        _config: Arc<ESConfig>,
+        _senders: HashMap<ServiceType, ESMSender>,
+    ) -> anyhow::Result<Self> {
         Ok(MySQLState {
             pool: Pool::new(""),
         })
@@ -283,21 +321,11 @@ impl ESInner for MySQLState {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Db(message) => match message {
-                DbMsg::AddUser { resp, user } => {
-                    self.respond(resp, self.add_user(user)).await
-                }
-                DbMsg::GetUser { resp, uid } => {
-                    self.respond(resp, self.get_user(uid)).await
-                }
-                DbMsg::DeleteUser { resp, uid } => {
-                    self.respond(resp, self.delete_user(uid)).await
-                }
-                DbMsg::AddGroup { resp, group } => {
-                    self.respond(resp, self.add_group(group)).await
-                }
-                DbMsg::GetGroup { resp, gid } => {
-                    self.respond(resp, self.get_group(gid)).await
-                }
+                DbMsg::AddUser { resp, user } => self.respond(resp, self.add_user(user)).await,
+                DbMsg::GetUser { resp, uid } => self.respond(resp, self.get_user(uid)).await,
+                DbMsg::DeleteUser { resp, uid } => self.respond(resp, self.delete_user(uid)).await,
+                DbMsg::AddGroup { resp, group } => self.respond(resp, self.add_group(group)).await,
+                DbMsg::GetGroup { resp, gid } => self.respond(resp, self.get_group(gid)).await,
                 DbMsg::DeleteGroup { resp, gid } => {
                     self.respond(resp, self.delete_group(gid)).await
                 }
@@ -347,6 +375,9 @@ impl ESInner for MySQLState {
                 DbMsg::SearchAlbums { resp, user, filter } => {
                     self.respond(resp, self.search_albums(user, filter)).await
                 }
+                DbMsg::SearchImagesInAlbum { resp, user, uuid, filter } => {
+                    self.respond(resp, self.search_images_in_album(user, uuid, filter)).await
+                }
                 DbMsg::AddLibrary { resp, library } => {
                     self.respond(resp, self.add_library(library)).await
                 }
@@ -359,6 +390,9 @@ impl ESInner for MySQLState {
                 } => {
                     self.respond(resp, self.update_library(user, uuid, change))
                         .await
+                }
+                DbMsg::SearchImagesInLibrary { resp, user, uuid, filter, hidden } => {
+                    self.respond(resp, self.search_images_in_library(user, uuid, filter, hidden)).await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),

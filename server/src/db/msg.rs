@@ -91,6 +91,12 @@ pub enum DbMsg {
         user: String,
         filter: String,
     },
+    SearchImagesInAlbum {
+        resp: ESMResp<HashMap<ImageUuid, Image>>,
+        user: String,
+        uuid: AlbumUuid,
+        filter: String,
+    },
     AddLibrary {
         resp: ESMResp<()>,
         library: Library,
@@ -105,6 +111,13 @@ pub enum DbMsg {
         uuid: LibraryUuid,
         change: LibraryMetadata,
     },
+    SearchImagesInLibrary {
+        resp: ESMResp<HashMap<ImageUuid, Image>>,
+        user: String,
+        uuid: LibraryUuid,
+        filter: String,
+        hidden: bool,
+    }
 }
 
 impl From<DbMsg> for ESM {
