@@ -189,7 +189,7 @@ impl ESDbService for MySQLState {
             .pop()
             .ok_or_else(|| anyhow::Error::msg(format!("failed to find image {uuid}")))?;
 
-        let data: (String, String, u64, i32, i32, i8, String, String) = from_row_opt(row)?;
+        let data: (String, String, i64, u32, u32, u32, String, String) = from_row_opt(row)?;
 
         Ok(Image {
             data: ImageData {

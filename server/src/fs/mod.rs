@@ -11,29 +11,22 @@ pub mod svc;
 
 #[async_trait]
 pub trait ESFileService: ESInner {
-    async fn scan_library(&self, resp: ESMResp<()>, library: String) -> anyhow::Result<()>;
+    async fn scan_library(&self, user: String) -> anyhow::Result<()>;
 
-    async fn rescan_file(&self, resp: ESMResp<()>, file: PathBuf) -> anyhow::Result<()>;
+    async fn rescan_file(&self, file: PathBuf) -> anyhow::Result<()>;
+
+    async fn fix_symlinks(&self) -> anyhow::Result<()>;
 }
 
-// should be called when
-fn get_user_directory(user: String, root: PathBuf) -> anyhow::Result<PathBuf> {
-    let mut root = root.clone();
+fn user_to_library(user: String, media_srcdir: PathBuf) -> anyhow::Result<PathBuf> {
+    let mut root = media_srcdir.clone();
 
     if !root.is_absolute() {
-        return Err(anyhow::Error::msg("root path must be absolute"));
+        return Err(anyhow::Error::msg("media_srcdir path must be absolute"));
     }
 
-    root.push("user_libraries");
+    root.push("libraries");
     root.push(user);
 
     Ok(root)
-}
-
-fn scan_directory(dir: PathBuf) -> anyhow::Result<()> {
-    Ok(())
-}
-
-fn record_file(db_sender: ESMSender, file: PathBuf) -> anyhow::Result<()> {
-    Ok(())
 }

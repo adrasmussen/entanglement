@@ -4,18 +4,18 @@ use crate::service::ESMResp;
 
 #[derive(Debug)]
 pub enum FsMsg {
-    _Status {
+    Status {
         resp: ESMResp<()>
     },
-    _ScanLibrary {
+    ScanLibrary {
         resp: ESMResp<()>,
         library: String,
     },
-    _RescanFile {
+    RescanFile {
         resp: ESMResp<()>,
         file: PathBuf,
     },
-    _FixSymlinks {
+    FixSymlinks {
         resp: ESMResp<()>,
     }
 }

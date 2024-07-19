@@ -22,9 +22,9 @@ pub struct Image {
 pub struct ImageData {
     pub owner: String,
     pub path: String,
-    pub datetime_original: u64, // Unix timestamp for original digital photos
-    pub x_pixel: i32,
-    pub y_pixel: i32,
+    pub datetime_original: i64, // Unix timestamp for original digital photos
+    pub x_pixel: u32,
+    pub y_pixel: u32,
 }
 
 // the mutable part of the image metadata
@@ -36,7 +36,7 @@ pub struct ImageData {
 // database columns should be NOT NULL and thus any read or initial write should be Some()
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageMetadata {
-    pub orientation: Option<i8>,
+    pub orientation: Option<u32>,
     pub date: Option<String>, // eventually convert to PartialDate
     pub note: Option<String>,
 }

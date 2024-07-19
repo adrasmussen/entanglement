@@ -48,6 +48,8 @@ impl ESInner for HttpEndpoint {
         senders: HashMap<ServiceType, ESMSender>,
     ) -> anyhow::Result<Self> {
         Ok(HttpEndpoint {
+            // panic if we can't find all of the necessary senders, since this is a
+            // compile-time problem and not a runtime problem
             auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             fs_svc_sender: senders.get(&ServiceType::Fs).unwrap().clone(),
