@@ -28,16 +28,13 @@ pub struct FileScanner {
 #[async_trait]
 impl ESFileService for FileScanner {
     async fn scan_library(&self, user: String) -> anyhow::Result<()> {
-        let libdir = user_to_library(user.clone(), self.media_srcdir.clone())?;
+        // this needs to be modified to call scan_manager() instead, and
+        // we probably want some internal state to keep track of how
+        // many scans are running
+        //
+        // it should also take a Library object as the argument
 
-        let scan_info = ScanInfo {
-            db_svc_sender: self.db_svc_sender.clone(),
-            user: user.clone(),
-            library: user.clone(),
-            media_linkdir: self.media_linkdir.clone(),
-        };
-
-        scan_directory(&scan_info, libdir).await
+        todo!()
     }
 
     async fn rescan_file(&self, file: PathBuf) -> anyhow::Result<()> {
@@ -100,11 +97,19 @@ struct ScanInfo {
 }
 
 struct ScanResult {
-    library: String,
-    count: u64,
+    count: i64,
     failures: HashMap<String, String>,
 }
 
+async fn scan_manager() -> anyhow::Result<ScanResult> {
+    // could get total number of files here + LastScanDate with atime in library and use count to estimate time remaining
+    todo!()
+}
+
+// this function does not currently have a good way of communicating errors back to the caller,
+// since we don't want the whole scan to abort if we run into an issue
+//
+// the easiest way would be to just have an outer function and send a channel in via scan_info
 #[async_recursion]
 async fn scan_directory(scan_info: &ScanInfo, path: PathBuf) -> anyhow::Result<()> {
     for entry in read_dir(path)? {
@@ -112,15 +117,20 @@ async fn scan_directory(scan_info: &ScanInfo, path: PathBuf) -> anyhow::Result<(
         let meta = entry.metadata()?;
 
         if meta.is_dir() {
-            scan_directory(scan_info, entry.path()).await?;
+            match scan_directory(scan_info, entry.path()).await {
+                Ok(()) => {}
+                Err(err) => println!(
+                    "failed to enter directory {}: {}",
+                    entry
+                        .file_name()
+                        .to_str()
+                        .unwrap_or_else(|| "invalid directory name"),
+                    err
+                ),
+            }
         }
 
         if meta.is_file() {
-            // we'll likely need a better way to communicate the failures here, probably by
-            // defining a ScanResult struct with a "failed" line and sending that all the way
-            // back to the client
-            //
-            // in fact, this should likely apply to both files and folders
             match register_media(scan_info, entry.path()).await {
                 Ok(()) => {}
                 Err(err) => println!(
@@ -169,6 +179,8 @@ async fn register_media(scan_info: &ScanInfo, path: PathBuf) -> anyhow::Result<(
 // BufRead instead of AsyncBufRead
 //
 // we may have to fix this
+//
+// TODO -- create the thumbnail here -> move symlink too?
 async fn register_image(scan_info: &ScanInfo, path: &PathBuf) -> anyhow::Result<MediaUuid> {
     use exif::{In, Reader, Tag};
 

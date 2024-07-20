@@ -1,5 +1,6 @@
 pub mod image;
 pub mod auth;
+pub mod ticket;
 
 pub type MediaUuid = u64;
 

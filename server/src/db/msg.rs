@@ -117,7 +117,7 @@ pub enum DbMsg {
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
-    }
+    },
 }
 
 impl From<DbMsg> for ESM {

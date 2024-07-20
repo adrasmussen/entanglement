@@ -66,7 +66,12 @@ pub struct ImageSearchResp {
 }
 
 pub async fn search_images(req: &ImageSearchReq) -> anyhow::Result<ImageSearchResp> {
-    let resp: ImageSearchResp = Request::post("/api/search/image").json(req)?.send().await?.json().await?;
+    let resp: ImageSearchResp = Request::post("/api/search/image")
+        .json(req)?
+        .send()
+        .await?
+        .json()
+        .await?;
     Ok(resp)
 }
 
@@ -97,9 +102,12 @@ pub async fn update_album() -> anyhow::Result<AlbumUpdateResp> {
     todo!()
 }
 
+// library logic should be moved to its own file
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub owner: String,
+    pub last_scan_date: String,
+    pub file_count: i64,
     pub metadata: LibraryMetadata,
 }
 
