@@ -7,8 +7,7 @@ use serde::{self, Deserialize, Serialize};
 pub const URL_MATCH_IMAGES: &str = "http://localhost:8081/api/img.json";
 
 pub type ImageUuid = u64;
-pub type AlbumUuid = u64;
-pub type LibraryUuid = u64;
+
 
 // the core image data struct
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -73,56 +72,4 @@ pub async fn search_images(req: &ImageSearchReq) -> anyhow::Result<ImageSearchRe
         .json()
         .await?;
     Ok(resp)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Album {
-    pub owner: String,
-    pub group: String,
-    pub metadata: AlbumMetadata,
-    pub images: Vec<ImageUuid>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumMetadata {
-    pub name: Option<String>,
-    pub note: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumUpdateReq {
-    pub uuid: AlbumUuid,
-    pub metadata: AlbumMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumUpdateResp {}
-
-pub async fn update_album() -> anyhow::Result<AlbumUpdateResp> {
-    todo!()
-}
-
-// library logic should be moved to its own file
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Library {
-    pub owner: String,
-    pub last_scan_date: String,
-    pub file_count: i64,
-    pub metadata: LibraryMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryMetadata {}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryUpdateReq {
-    pub uuid: LibraryUuid,
-    pub metadata: LibraryMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryUpdateResp {}
-
-pub async fn update_library() -> anyhow::Result<LibraryUpdateResp> {
-    todo!()
 }

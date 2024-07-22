@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::TryStreamExt;
 
 use crate::service::ESInner;
-use api::{auth::*, image::*};
+use api::{auth::*, image::*, library::*, *, ticket::*};
 
 pub mod msg;
 pub mod mysql;
@@ -96,6 +96,15 @@ trait ESDbService: ESInner {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
+
+    // ticket functions
+    async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
+
+    async fn add_comment(&self, ticket_uuid: TicketUuid, comment: TicketComment) -> anyhow::Result<CommentUuid>;
+
+    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket>;
+
+    async fn search_tickets(&self, filter: String, resolved: bool) -> anyhow::Result<Vec<TicketUuid>>;
 }
 
 // marker trait to allow specific implementations of the ESDbQuery
