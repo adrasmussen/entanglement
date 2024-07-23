@@ -131,10 +131,10 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
 
     let router: Router<()> = Router::new()
         .route("/media/:uuid", get(stream_media))
-        .route("/api/search/image", post(search_images))
-        .route("/api/users/:op", post(edit_users))
-        .route("/api/groups/:op", post(edit_groups))
-        .route("/api/albums/:op", post(edit_albums))
+        .route("/api/search", post(search_media))
+        .route("/api/user", post(query_user))
+        .route("/api/group", post(query_group))
+        .route("/api/album", post(query_album))
         .fallback(fallback)
         .route_layer(middleware::from_fn(proxy_auth))
         .with_state(state);
@@ -216,7 +216,7 @@ async fn stream_media(
     Ok(axum::body::Body::from_stream(reader_stream).into_response())
 }
 
-async fn search_images(
+async fn search_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Json(json_body): Json<ImageSearchReq>,
@@ -248,7 +248,9 @@ async fn search_images(
     Ok(Json(ImageSearchResp {images: result}).into_response())
 }
 
-async fn edit_users(
+// need to set up a query here to handle each use case
+
+async fn query_user(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(op): Path<(String)>,
@@ -257,7 +259,7 @@ async fn edit_users(
     StatusCode::IM_A_TEAPOT.into_response()
 }
 
-async fn edit_groups(
+async fn query_group(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(op): Path<(String)>,
@@ -266,7 +268,7 @@ async fn edit_groups(
     StatusCode::IM_A_TEAPOT.into_response()
 }
 
-async fn edit_albums(
+async fn query_album(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(op): Path<(String)>,

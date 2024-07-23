@@ -4,10 +4,11 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub mod album;
-pub mod auth;
+pub mod user;
 pub mod image;
 pub mod library;
 pub mod ticket;
+pub mod group;
 
 use album::AlbumUuid;
 use library::LibraryUuid;

@@ -17,12 +17,6 @@ pub struct UserSettings {
     pub theme: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Group {
-    pub gid: String,
-    pub members: HashSet<String>
-}
-
 // messages
 
 // add a new user
@@ -37,13 +31,3 @@ pub struct AddUserResp {
 }
 
 // get user
-
-// add group
-
-// delete group
-
-// get group
-
-// add user to group
-
-// remove user from group
