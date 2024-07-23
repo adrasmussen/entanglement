@@ -26,7 +26,6 @@ pub struct Group {
 // messages
 
 // add a new user
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddUserReq {
     user: User,
@@ -36,3 +35,15 @@ pub struct AddUserReq {
 pub struct AddUserResp {
     resp: String,
 }
+
+// get user
+
+// add group
+
+// delete group
+
+// get group
+
+// add user to group
+
+// remove user from group

@@ -12,13 +12,24 @@ pub mod ticket;
 use album::AlbumUuid;
 use library::LibraryUuid;
 
+// pub async fn search_images(req: &ImageSearchReq) -> anyhow::Result<ImageSearchResp> {
+//     let resp: ImageSearchResp = Request::post("/api/search/image")
+//         .json(req)?
+//         .send()
+//         .await?
+//         .json()
+//         .await?;
+//     Ok(resp)
+// }
+
+
 // structs and types
 
 pub type MediaUuid = i64;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum MediaType {
-    Image,
+    Image(crate::image::Image),
     Video,
 }
 
