@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use tokio::sync::{Mutex, RwLock};
 
-use api::{auth::User, MediaUuid};
+use api::{user::User, MediaUuid};
 
 use crate::service::*;
 

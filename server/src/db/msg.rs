@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use api::{auth::*, image::*, library::*, *};
+use api::{album::*, group::*, library::*, ticket::*, user::*, *};
 
 use crate::service::*;
 
@@ -40,29 +40,29 @@ pub enum DbMsg {
         uid: String,
         gid: String,
     },
-    AddImage {
-        resp: ESMResp<ImageUuid>,
-        image: Image,
+    AddMedia {
+        resp: ESMResp<MediaUuid>,
+        media: Media,
     },
-    GetImage {
-        resp: ESMResp<Image>,
+    GetMedia {
+        resp: ESMResp<Media>,
         user: String,
-        uuid: ImageUuid,
+        uuid: MediaUuid,
     },
-    UpdateImage {
+    UpdateMedia {
         resp: ESMResp<()>,
         user: String,
-        uuid: ImageUuid,
-        change: ImageMetadata,
+        uuid: MediaUuid,
+        change: MediaMetadata,
     },
-    SearchImages {
-        resp: ESMResp<HashMap<ImageUuid, Image>>,
+    SearchMedia {
+        resp: ESMResp<HashMap<MediaUuid, Media>>,
         user: String,
         filter: String,
     },
     GetImageGroups {
         resp: ESMResp<HashSet<String>>,
-        uuid: ImageUuid,
+        uuid: MediaUuid,
     },
     AddAlbum {
         resp: ESMResp<()>,
@@ -90,8 +90,8 @@ pub enum DbMsg {
         user: String,
         filter: String,
     },
-    SearchImagesInAlbum {
-        resp: ESMResp<HashMap<ImageUuid, Image>>,
+    SearchMediaInAlbum {
+        resp: ESMResp<HashMap<MediaUuid, Media>>,
         user: String,
         uuid: AlbumUuid,
         filter: String,
@@ -104,18 +104,30 @@ pub enum DbMsg {
         resp: ESMResp<Library>,
         uuid: LibraryUuid,
     },
-    UpdateLibrary {
-        resp: ESMResp<()>,
-        user: String,
-        uuid: LibraryUuid,
-        change: LibraryMetadata,
-    },
-    SearchImagesInLibrary {
-        resp: ESMResp<HashMap<ImageUuid, Image>>,
+    SearchMediaInLibrary {
+        resp: ESMResp<HashMap<MediaUuid, Media>>,
         user: String,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
+    },
+    CreateTicket {
+        resp: ESMResp<TicketUuid>,
+        ticket: Ticket,
+    },
+    CreateComment {
+        resp: ESMResp<CommentUuid>,
+        ticket_uuid: TicketUuid,
+        comment: TicketComment,
+    },
+    GetTicket {
+        resp: ESMResp<Ticket>,
+        ticket_uuid: TicketUuid,
+    },
+    TicketSearch {
+        resp: ESMResp<Vec<TicketUuid>>,
+        filter: String,
+        resolved: bool,
     },
 }
 

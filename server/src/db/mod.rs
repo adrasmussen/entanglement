@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::TryStreamExt;
 
 use crate::service::ESInner;
-use api::{auth::*, image::*, library::*, *, ticket::*};
+use api::{album::*, group::*, image::*, library::*, ticket::*, user::*, *};
 
 pub mod msg;
 pub mod mysql;
@@ -38,23 +38,23 @@ trait ESDbService: ESInner {
 
     async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
 
-    // image functions
-    async fn add_image(&self, image: Image) -> anyhow::Result<ImageUuid>;
+    // media functions
+    async fn add_image(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_image(&self, uuid: ImageUuid) -> anyhow::Result<Image>;
+    async fn get_image(&self, uuid: MediaUuid) -> anyhow::Result<Media>;
 
-    async fn update_image(
+    async fn update_media(
         &self,
         user: String,
-        uuid: ImageUuid,
-        change: ImageMetadata,
+        uuid: MediaUuid,
+        change: MediaMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn search_images(
+    async fn search_media(
         &self,
         user: String,
         filter: String,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
+    ) -> anyhow::Result<HashMap<MediaUuid, Image>>;
 
     // album functions
     async fn add_album(&self, album: Album) -> anyhow::Result<()>;
@@ -70,41 +70,42 @@ trait ESDbService: ESInner {
 
     async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
 
-    async fn search_images_in_album(
+    async fn search_media_in_album(
         &self,
         user: String,
         uuid: AlbumUuid,
         filter: String,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
+    ) -> anyhow::Result<HashMap<MediaUuid, Image>>;
 
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<()>;
 
     async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library>;
 
-    async fn update_library(
-        &self,
-        user: String,
-        uuid: LibraryUuid,
-        change: LibraryMetadata,
-    ) -> anyhow::Result<()>;
-
-    async fn search_images_in_library(
+    async fn search_media_in_library(
         &self,
         user: String,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>>;
+    ) -> anyhow::Result<HashMap<MediaUuid, Media>>;
 
     // ticket functions
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
 
-    async fn add_comment(&self, ticket_uuid: TicketUuid, comment: TicketComment) -> anyhow::Result<CommentUuid>;
+    async fn add_comment(
+        &self,
+        ticket_uuid: TicketUuid,
+        comment: TicketComment,
+    ) -> anyhow::Result<CommentUuid>;
 
     async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket>;
 
-    async fn search_tickets(&self, filter: String, resolved: bool) -> anyhow::Result<Vec<TicketUuid>>;
+    async fn search_tickets(
+        &self,
+        filter: String,
+        resolved: bool,
+    ) -> anyhow::Result<Vec<TicketUuid>>;
 }
 
 // marker trait to allow specific implementations of the ESDbQuery

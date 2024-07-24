@@ -95,13 +95,13 @@ pub struct AlbumSearchResp {
 
 // search media inside a particular album
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchInAlbumReq {
+pub struct SearchMediaInAlbumReq {
     pub album_uuid: AlbumUuid,
     pub filter: String,
     pub media_type: HashSet<MediaType>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchInAlbumResp {
+pub struct SearchMediaInAlbumResp {
     pub media: Vec<MediaUuid>,
 }

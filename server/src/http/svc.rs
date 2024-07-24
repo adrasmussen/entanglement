@@ -10,13 +10,17 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 
 use axum::{
-    extract::{Extension, Json, Path, Request, State},
+    extract::{Extension, Json, Path, Query, Request, State},
     http::{StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
+
+use chrono::offset::Local;
+
+use serde::{Deserialize, Serialize};
 
 use tokio::sync::Mutex;
 
@@ -31,7 +35,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{image::*, MediaUuid};
+use api::{image::*, ticket::*, *};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -39,6 +43,56 @@ pub struct HttpEndpoint {
     db_svc_sender: ESMSender,
     fs_svc_sender: ESMSender,
     media_linkdir: PathBuf,
+}
+
+impl HttpEndpoint {
+    async fn can_access_media(
+        &self,
+        user: &String,
+        media_uuid: &MediaUuid,
+    ) -> anyhow::Result<bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.auth_svc_sender
+            .clone()
+            .send(
+                AuthMsg::CanAccessMedia {
+                    resp: tx,
+                    uid: user.clone(),
+                    uuid: media_uuid.clone(),
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send CanAccessMedia message from HttpEndpoint")?;
+
+        rx.await
+            .context("Failed to receive CanAccessMedia response at HttpEndpoint")?
+    }
+
+    async fn can_access_ticket(
+        &self,
+        user: &String,
+        ticket_uuid: &TicketUuid,
+    ) -> anyhow::Result<bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::GetTicket {
+                    resp: tx,
+                    ticket_uuid: ticket_uuid.clone(),
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send GetTicket from HttpEndpoint")?;
+
+        let ticket = rx.await.context("Failed to receive GetTicket response at HttpEndpoint")??;
+
+        self.can_access_media(&user, &ticket.media_uuid).await
+    }
 }
 
 #[async_trait]
@@ -135,6 +189,7 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
         .route("/api/user", post(query_user))
         .route("/api/group", post(query_group))
         .route("/api/album", post(query_album))
+        .route("/api/ticket", post(query_ticket))
         .fallback(fallback)
         .route_layer(middleware::from_fn(proxy_auth))
         .with_state(state);
@@ -219,7 +274,7 @@ async fn stream_media(
 async fn search_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(json_body): Json<ImageSearchReq>,
+    Json(json_body): Json<MediaSearchReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
 
@@ -233,7 +288,7 @@ async fn search_media(
         .db_svc_sender
         .clone()
         .send(
-            DbMsg::SearchImages {
+            DbMsg::SearchMedia {
                 resp: tx,
                 user: user,
                 filter: filter,
@@ -243,9 +298,11 @@ async fn search_media(
         .await
         .context("Failed to send SearchImage message")?;
 
-    let result = rx.await.context("Failed to receive SearchImage response")??;
+    let result = rx
+        .await
+        .context("Failed to receive SearchImage response")??;
 
-    Ok(Json(ImageSearchResp {images: result}).into_response())
+    Ok(Json(ImageSearchResp { images: result }).into_response())
 }
 
 // need to set up a query here to handle each use case
@@ -253,8 +310,8 @@ async fn search_media(
 async fn query_user(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(op): Path<(String)>,
-    json_body: Json<ImageSearchReq>,
+    Query(query): Query<(String)>,
+    json_body: Json<()>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
 }
@@ -263,7 +320,7 @@ async fn query_group(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(op): Path<(String)>,
-    json_body: Json<ImageSearchReq>,
+    json_body: Json<()>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
 }
@@ -272,7 +329,123 @@ async fn query_album(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Path(op): Path<(String)>,
-    json_body: Json<ImageSearchReq>,
+    json_body: Json<()>,
 ) -> Response {
     StatusCode::IM_A_TEAPOT.into_response()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TicketMessage {
+    CreateTicket(CreateTicketReq),
+    CreateComment(CreateCommentReq),
+    GetTicket(GetTicketReq),
+    TicketSearch(TicketSearchReq),
+}
+
+async fn query_ticket(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<TicketMessage>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+
+    let user = current_user.user.clone();
+
+    match message {
+        TicketMessage::CreateTicket(msg) => {
+            if !state.can_access_media(&user, &msg.media_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .clone()
+                .send(
+                    DbMsg::CreateTicket {
+                        resp: tx,
+                        ticket: Ticket {
+                            timestamp: Local::now().timestamp(),
+                            resolved: false,
+                            user: user,
+                            media_uuid: msg.media_uuid,
+                            title: msg.title,
+                            comments: HashMap::new(),
+                        },
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send CreateTicket message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive CreateTicket response")??;
+
+            Ok(Json(CreateTicketResp {
+                ticket_uuid: result,
+            })
+            .into_response())
+        }
+        TicketMessage::CreateComment(msg) => {
+            if !state.can_access_ticket(&user, &msg.ticket_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .clone()
+                .send(
+                    DbMsg::CreateComment {
+                        resp: tx,
+                        ticket_uuid: msg.ticket_uuid,
+                        comment: TicketComment {
+                            timestamp: Local::now().timestamp(),
+                            user: user,
+                            text: msg.comment_text,
+                        },
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send CreateComment message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive CreateComment response")??;
+
+            Ok(Json(CreateCommentResp {
+                comment_uuid: result,
+            })
+            .into_response())
+        }
+        TicketMessage::GetTicket(msg) => {
+            if !state.can_access_ticket(&user, &msg.ticket_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .clone()
+                .send(
+                    DbMsg::GetTicket {
+                        resp: tx,
+                        ticket_uuid: msg.ticket_uuid,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send GetTicket message")?;
+
+            let result = rx.await.context("Failed to receive GetTicket response")??;
+
+            Ok(Json(GetTicketResp { ticket: result }).into_response())
+        }
+        TicketMessage::TicketSearch(msg) => Ok(StatusCode::IM_A_TEAPOT.into_response()),
+    }
 }

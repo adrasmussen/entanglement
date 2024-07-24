@@ -31,13 +31,13 @@ pub struct GetLibaryResp {
 
 // search media inside a particular library
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchInLibraryReq {
+pub struct SearchMediaInLibraryReq {
     pub library_uuid: LibraryUuid,
     pub filter: String,
     pub media_type: HashSet<MediaType>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchInLibraryResp {
+pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
 }

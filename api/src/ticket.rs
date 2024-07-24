@@ -1,4 +1,6 @@
-use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 use crate::MediaUuid;
 
@@ -14,6 +16,7 @@ pub struct Ticket {
     pub user: String,
     pub media_uuid: MediaUuid,
     pub title: String,
+    pub comments: HashMap<CommentUuid, TicketComment>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -28,7 +31,8 @@ pub struct TicketComment {
 // creates a ticket
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTicketReq {
-    pub ticket: Ticket,
+    pub media_uuid: MediaUuid,
+    pub title: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,7 +45,7 @@ pub struct CreateTicketResp {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateCommentReq {
     pub ticket_uuid: TicketUuid,
-    pub comment: TicketComment,
+    pub comment_text: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,32 +61,7 @@ pub struct GetTicketReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetTicketResp {
-    pub ticket: Ticket
-}
-
-// fetch a specific comment
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetCommentReq {
-    pub comment_uuid: CommentUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetCommentResp {
-    pub comment: TicketComment,
-}
-
-// fetch the comments for a particular ticket
-//
-// everywhere else this a search operation but
-// we will always want all of the comments
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetCommentsInTicketReq {
-    pub ticket_uuid: TicketUuid
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetCommentsInTicketResp {
-    pub comments: Vec<CommentUuid>
+    pub ticket: Ticket,
 }
 
 // search tickets on their titles (and possibly comments)

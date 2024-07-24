@@ -207,7 +207,7 @@ impl ESDbService for MySQLState {
         })
     }
 
-    async fn update_image(
+    async fn update_media(
         &self,
         user: String,
         uuid: ImageUuid,
@@ -231,7 +231,7 @@ impl ESDbService for MySQLState {
     //
     // this is currently used for the gallery view (i.e. single search string) and not,
     // for example, finding all images in a particular album or library
-    async fn search_images(
+    async fn search_media(
         &self,
         user: String,
         filter: String,
@@ -270,7 +270,7 @@ impl ESDbService for MySQLState {
     //
     // this is split from the gallery search_images since it will have different behavior
     // w.r.t. joins on the main select
-    async fn search_images_in_album(
+    async fn search_media_in_album(
         &self,
         user: String,
         uuid: AlbumUuid,
@@ -345,11 +345,11 @@ impl ESInner for MySQLState {
                     uuid,
                     change,
                 } => {
-                    self.respond(resp, self.update_image(user, uuid, change))
+                    self.respond(resp, self.update_media(user, uuid, change))
                         .await
                 }
                 DbMsg::SearchImages { resp, user, filter } => {
-                    self.respond(resp, self.search_images(user, filter)).await
+                    self.respond(resp, self.search_media(user, filter)).await
                 }
                 DbMsg::GetImageGroups { resp, uuid } => {
                     todo!()
@@ -376,7 +376,7 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.search_albums(user, filter)).await
                 }
                 DbMsg::SearchImagesInAlbum { resp, user, uuid, filter } => {
-                    self.respond(resp, self.search_images_in_album(user, uuid, filter)).await
+                    self.respond(resp, self.search_media_in_album(user, uuid, filter)).await
                 }
                 DbMsg::AddLibrary { resp, library } => {
                     self.respond(resp, self.add_library(library)).await
