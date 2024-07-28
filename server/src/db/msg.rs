@@ -119,7 +119,7 @@ pub enum DbMsg {
     },
     CreateComment {
         resp: ESMResp<CommentUuid>,
-        ticket_uuid: TicketUuid,
+        ticket_uuid: TicketUuid, // TODO -- move this into the comment struct (like tickets)
         comment: TicketComment,
     },
     GetTicket {
