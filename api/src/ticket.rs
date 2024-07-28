@@ -21,6 +21,7 @@ pub struct Ticket {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TicketComment {
+    pub ticket_uuid: TicketUuid,
     pub owner: String,
     pub text: String,
     pub timestamp: i64,

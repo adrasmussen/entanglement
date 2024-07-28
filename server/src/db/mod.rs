@@ -78,7 +78,7 @@ trait ESDbService: ESInner {
     ) -> anyhow::Result<HashMap<MediaUuid, Image>>;
 
     // library functions
-    async fn add_library(&self, library: Library) -> anyhow::Result<()>;
+    async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid>;
 
     async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library>;
 
@@ -88,14 +88,13 @@ trait ESDbService: ESInner {
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
-    ) -> anyhow::Result<HashMap<MediaUuid, Media>>;
+    ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // ticket functions
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
 
     async fn create_comment(
         &self,
-        ticket_uuid: TicketUuid,
         comment: TicketComment,
     ) -> anyhow::Result<CommentUuid>;
 

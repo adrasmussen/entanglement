@@ -97,7 +97,7 @@ pub enum DbMsg {
 
     // library messages
     AddLibrary {
-        resp: ESMResp<()>,
+        resp: ESMResp<LibraryUuid>,
         library: Library,
     },
     GetLibary {
@@ -119,7 +119,6 @@ pub enum DbMsg {
     },
     CreateComment {
         resp: ESMResp<CommentUuid>,
-        ticket_uuid: TicketUuid, // TODO -- move this into the comment struct (like tickets)
         comment: TicketComment,
     },
     GetTicket {

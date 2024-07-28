@@ -407,8 +407,8 @@ async fn query_ticket(
                 .send(
                     DbMsg::CreateComment {
                         resp: tx,
-                        ticket_uuid: msg.ticket_uuid,
                         comment: TicketComment {
+                            ticket_uuid: msg.ticket_uuid,
                             owner: user,
                             text: msg.comment_text,
                             timestamp: Local::now().timestamp(),

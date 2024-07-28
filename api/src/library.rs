@@ -10,11 +10,11 @@ pub type LibraryUuid = i64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
-    pub path: PathBuf,
+    pub path: String,
     pub owner: String,
     pub group: String,
-    pub last_scan: String,
     pub file_count: i64,
+    pub last_scan: i64,
 }
 
 // messages

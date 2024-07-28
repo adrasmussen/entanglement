@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{image::*, ticket::*, user::*, *};
+use api::{image::*, library::*, ticket::*, user::*, *};
 
 pub struct MySQLState {
     pool: Pool,
@@ -281,30 +281,98 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn add_library(&self, library: Library) -> anyhow::Result<()> {
-        todo!()
+    // library queries
+    async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for add_library")?;
+
+        let query = r"
+            INSERT INTO libraries (uuid, path, owner, group, file_count, last_scan)
+            OUTPUT INSERTED.uuid
+            VALUES (UUID_SHORT(), :path, :owner, :group, :file_count, :last_scan)"
+            .with(params! {
+                "path" => library.path,
+                "owner" => library.owner,
+                "group" => library.group,
+                "file_count" => library.file_count,
+                "last_scan" => library.last_scan
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run add_library query")?;
+
+        let mut rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect add_library results")?;
+
+        let row = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_library"))?;
+
+        let data: LibraryUuid =
+            from_row_opt(row).context("Failed to convert row for add_library")?;
+
+        Ok(data)
     }
 
     async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library> {
-        todo!()
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for get_library")?;
+
+        let query = r"
+            SELECT (path, owner, group, file_count, last_scan) FROM libraries WHERE uuid = :uuid"
+            .with(params! {
+                "uuid" => uuid,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run get_library query")?;
+
+        let mut rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect get_library results")?;
+
+        let row = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_library"))?;
+
+        let data: (String, String, String, i64, i64) =
+            from_row_opt(row).context("Failed to convert row for get_library")?;
+
+        Ok(Library {
+            path: data.0,
+            owner: data.1,
+            group: data.2,
+            file_count: data.3,
+            last_scan: data.4,
+        })
     }
 
-    async fn update_library(
-        &self,
-        user: String,
-        uuid: LibraryUuid,
-        change: LibraryMetadata,
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    async fn search_images_in_library(
+    async fn search_media_in_library(
         &self,
         user: String,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+    ) -> anyhow::Result<Vec<MediaUuid>> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for search_media_in_library")?;
+
         todo!()
     }
 
@@ -348,11 +416,7 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn create_comment(
-        &self,
-        ticket_uuid: TicketUuid,
-        comment: TicketComment,
-    ) -> anyhow::Result<CommentUuid> {
+    async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid> {
         let conn = self
             .pool
             .get_conn()
@@ -364,7 +428,7 @@ impl ESDbService for MySQLState {
             OUTPUT INSERTED.uuid
             VALUES (UUID_SHORT(), :ticket_uuid, :owner, :text, :timestamp)"
             .with(params! {
-                "ticket_uuid" => ticket_uuid,
+                "ticket_uuid" => comment.ticket_uuid,
                 "owner" => comment.owner,
                 "text" => comment.text,
                 "timestamp" => comment.timestamp,
@@ -436,16 +500,22 @@ impl ESDbService for MySQLState {
         let mut comment_data = HashMap::new();
 
         for row in comment_rows.into_iter() {
-            comment_data
-                .insert(
-                    row.0,
-                    TicketComment {
-                        owner: row.1,
-                        text: row.2,
-                        timestamp: row.3,
-                    },
-                )
-                .ok_or_else(|| anyhow::Error::msg("Failed to reassemble comment in get_ticket"))?;
+            match comment_data.insert(
+                row.0,
+                TicketComment {
+                    ticket_uuid: ticket_uuid,
+                    owner: row.1,
+                    text: row.2,
+                    timestamp: row.3,
+                },
+            ) {
+                None => {}
+                Some(_) => {
+                    return Err(anyhow::Error::msg(
+                        "Failed to assemble ticket comments due to duplicate comment uuid",
+                    ))
+                }
+            }
         }
 
         Ok(Ticket {
@@ -545,20 +615,13 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.search_media_in_album(user, uuid, filter))
                         .await
                 }
+
+                // library messages
                 DbMsg::AddLibrary { resp, library } => {
                     self.respond(resp, self.add_library(library)).await
                 }
                 DbMsg::GetLibary { resp, uuid } => self.respond(resp, self.get_library(uuid)).await,
-                DbMsg::UpdateLibrary {
-                    resp,
-                    user,
-                    uuid,
-                    change,
-                } => {
-                    self.respond(resp, self.update_library(user, uuid, change))
-                        .await
-                }
-                DbMsg::SearchImagesInLibrary {
+                DbMsg::SearchMediaInLibrary {
                     resp,
                     user,
                     uuid,
@@ -567,7 +630,7 @@ impl ESInner for MySQLState {
                 } => {
                     self.respond(
                         resp,
-                        self.search_images_in_library(user, uuid, filter, hidden),
+                        self.search_media_in_library(user, uuid, filter, hidden),
                     )
                     .await
                 }
@@ -576,13 +639,8 @@ impl ESInner for MySQLState {
                 DbMsg::CreateTicket { resp, ticket } => {
                     self.respond(resp, self.create_ticket(ticket)).await
                 }
-                DbMsg::CreateComment {
-                    resp,
-                    ticket_uuid,
-                    comment,
-                } => {
-                    self.respond(resp, self.create_comment(ticket_uuid, comment))
-                        .await
+                DbMsg::CreateComment { resp, comment } => {
+                    self.respond(resp, self.create_comment(comment)).await
                 }
                 DbMsg::GetTicket { resp, ticket_uuid } => {
                     self.respond(resp, self.get_ticket(ticket_uuid)).await
