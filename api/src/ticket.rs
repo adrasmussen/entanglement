@@ -11,19 +11,19 @@ pub type CommentUuid = i64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ticket {
+    pub media_uuid: MediaUuid,
+    pub owner: String,
+    pub title: String,
     pub timestamp: i64,
     pub resolved: bool,
-    pub user: String,
-    pub media_uuid: MediaUuid,
-    pub title: String,
     pub comments: HashMap<CommentUuid, TicketComment>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TicketComment {
-    pub timestamp: i64,
-    pub user: String,
+    pub owner: String,
     pub text: String,
+    pub timestamp: i64,
 }
 
 // messages
@@ -66,12 +66,12 @@ pub struct GetTicketResp {
 
 // search tickets on their titles (and possibly comments)
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TicketSearchReq {
+pub struct SearchTicketsReq {
     pub filter: String,
     pub resolved: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TicketSearchResp {
+pub struct SearchTicketsResp {
     pub tickets: Vec<TicketUuid>,
 }

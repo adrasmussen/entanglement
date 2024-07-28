@@ -93,7 +93,7 @@ trait ESDbService: ESInner {
     // ticket functions
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
 
-    async fn add_comment(
+    async fn create_comment(
         &self,
         ticket_uuid: TicketUuid,
         comment: TicketComment,
@@ -103,6 +103,7 @@ trait ESDbService: ESInner {
 
     async fn search_tickets(
         &self,
+        user: String,
         filter: String,
         resolved: bool,
     ) -> anyhow::Result<Vec<TicketUuid>>;

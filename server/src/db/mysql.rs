@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use anyhow::Context;
+
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -11,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{auth::*, image::*};
+use api::{image::*, ticket::*, user::*, *};
 
 pub struct MySQLState {
     pool: Pool,
@@ -305,6 +307,165 @@ impl ESDbService for MySQLState {
     ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
         todo!()
     }
+
+    // ticket queries
+    async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for create_ticket")?;
+
+        let query = r"
+            INSERT INTO tickets (uuid, media_uuid, owner, title, timestamp, resolved)
+            OUTPUT INSERTED.uuid
+            VALUES (UUID_SHORT(), :media_uuid, :owner, :title, :timestamp, :resolved)"
+            .with(params! {
+                "media_uuid" => ticket.media_uuid,
+                "owner" => ticket.owner,
+                "title" => ticket.title,
+                "timestamp" => ticket.timestamp,
+                "resolved" => ticket.resolved,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run create_ticket query")?;
+
+        let mut rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect create_ticket results")?;
+
+        let row = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_ticket"))?;
+
+        let data: TicketUuid =
+            from_row_opt(row).context("Failed to convert row for create_ticket")?;
+
+        Ok(data)
+    }
+
+    async fn create_comment(
+        &self,
+        ticket_uuid: TicketUuid,
+        comment: TicketComment,
+    ) -> anyhow::Result<CommentUuid> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for create_comment")?;
+
+        let query = r"
+            INSERT INTO comments (uuid, ticket_uuid, owner, text, timestamp)
+            OUTPUT INSERTED.uuid
+            VALUES (UUID_SHORT(), :ticket_uuid, :owner, :text, :timestamp)"
+            .with(params! {
+                "ticket_uuid" => ticket_uuid,
+                "owner" => comment.owner,
+                "text" => comment.text,
+                "timestamp" => comment.timestamp,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run create_comment query")?;
+
+        let mut rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect create_comment results")?;
+
+        let row = rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_comment"))?;
+
+        let data: CommentUuid =
+            from_row_opt(row).context("Failed to convert row for create_comment")?;
+
+        Ok(data)
+    }
+
+    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for create_comment")?;
+
+        let query = r"
+            SELECT (media_uuid, owner, title, timestamp, resolved) FROM tickets WHERE uuid = :uuid;
+
+            SELECT (comment_uuid, owner, text, timestamp) FROM comments WHERE ticket_uuid = :uuid"
+            .with(params! {"uuid" => ticket_uuid});
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run get_ticket query")?;
+
+        // first set of results
+        let mut ticket_rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect get_ticket ticket results")?;
+
+        let ticket_row = ticket_rows
+            .pop()
+            .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_ticket"))?;
+
+        let ticket_data: (MediaUuid, String, String, i64, bool) =
+            from_row_opt(ticket_row).context("Failed to convert ticket row for get_ticket")?;
+
+        // second set of results
+        let mut comment_rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect get_ticket comment results")?;
+
+        let comment_rows = comment_rows
+            .into_iter()
+            .map(|row| from_row_opt::<(CommentUuid, String, String, i64)>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()
+            .context("Failed to convert comment row for get_ticket")?;
+
+        let mut comment_data = HashMap::new();
+
+        for row in comment_rows.into_iter() {
+            comment_data
+                .insert(
+                    row.0,
+                    TicketComment {
+                        owner: row.1,
+                        text: row.2,
+                        timestamp: row.3,
+                    },
+                )
+                .ok_or_else(|| anyhow::Error::msg("Failed to reassemble comment in get_ticket"))?;
+        }
+
+        Ok(Ticket {
+            media_uuid: ticket_data.0,
+            owner: ticket_data.1,
+            title: ticket_data.2,
+            timestamp: ticket_data.3,
+            resolved: ticket_data.4,
+            comments: comment_data,
+        })
+    }
+
+    async fn search_tickets(
+        &self,
+        user: String,
+        filter: String,
+        resolved: bool,
+    ) -> anyhow::Result<Vec<TicketUuid>> {
+        Err(anyhow::Error::msg("oh no"))
+    }
 }
 
 #[async_trait]
@@ -375,8 +536,14 @@ impl ESInner for MySQLState {
                 DbMsg::SearchAlbums { resp, user, filter } => {
                     self.respond(resp, self.search_albums(user, filter)).await
                 }
-                DbMsg::SearchImagesInAlbum { resp, user, uuid, filter } => {
-                    self.respond(resp, self.search_media_in_album(user, uuid, filter)).await
+                DbMsg::SearchImagesInAlbum {
+                    resp,
+                    user,
+                    uuid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_media_in_album(user, uuid, filter))
+                        .await
                 }
                 DbMsg::AddLibrary { resp, library } => {
                     self.respond(resp, self.add_library(library)).await
@@ -391,8 +558,43 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.update_library(user, uuid, change))
                         .await
                 }
-                DbMsg::SearchImagesInLibrary { resp, user, uuid, filter, hidden } => {
-                    self.respond(resp, self.search_images_in_library(user, uuid, filter, hidden)).await
+                DbMsg::SearchImagesInLibrary {
+                    resp,
+                    user,
+                    uuid,
+                    filter,
+                    hidden,
+                } => {
+                    self.respond(
+                        resp,
+                        self.search_images_in_library(user, uuid, filter, hidden),
+                    )
+                    .await
+                }
+
+                // ticket messages
+                DbMsg::CreateTicket { resp, ticket } => {
+                    self.respond(resp, self.create_ticket(ticket)).await
+                }
+                DbMsg::CreateComment {
+                    resp,
+                    ticket_uuid,
+                    comment,
+                } => {
+                    self.respond(resp, self.create_comment(ticket_uuid, comment))
+                        .await
+                }
+                DbMsg::GetTicket { resp, ticket_uuid } => {
+                    self.respond(resp, self.get_ticket(ticket_uuid)).await
+                }
+                DbMsg::SearchTickets {
+                    resp,
+                    user,
+                    filter,
+                    resolved,
+                } => {
+                    self.respond(resp, self.search_tickets(user, filter, resolved))
+                        .await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),

@@ -6,6 +6,7 @@ use crate::service::*;
 
 #[derive(Debug)]
 pub enum DbMsg {
+    // user messages
     AddUser {
         resp: ESMResp<()>,
         user: User,
@@ -14,10 +15,8 @@ pub enum DbMsg {
         resp: ESMResp<User>,
         uid: String,
     },
-    DeleteUser {
-        resp: ESMResp<()>,
-        uid: String,
-    },
+
+    // group messages
     AddGroup {
         resp: ESMResp<()>,
         group: Group,
@@ -40,48 +39,47 @@ pub enum DbMsg {
         uid: String,
         gid: String,
     },
+
+    // media messages
     AddMedia {
         resp: ESMResp<MediaUuid>,
         media: Media,
     },
     GetMedia {
         resp: ESMResp<Media>,
-        user: String,
         uuid: MediaUuid,
     },
     UpdateMedia {
         resp: ESMResp<()>,
-        user: String,
         uuid: MediaUuid,
         change: MediaMetadata,
     },
     SearchMedia {
-        resp: ESMResp<HashMap<MediaUuid, Media>>,
+        resp: ESMResp<Vec<MediaUuid>>,
         user: String,
         filter: String,
     },
-    GetImageGroups {
-        resp: ESMResp<HashSet<String>>,
-        uuid: MediaUuid,
+    CanAccessMedia {
+        resp: ESMResp<bool>,
+        user: String,
+        media_uuid: MediaUuid,
     },
+
+    // album messages
     AddAlbum {
         resp: ESMResp<()>,
-        user: String,
         album: Album,
     },
     GetAlbum {
         resp: ESMResp<Album>,
-        user: String,
         uuid: AlbumUuid,
     },
     DeleteAlbum {
         resp: ESMResp<()>,
-        user: String,
         uuid: AlbumUuid,
     },
     UpdateAlbum {
         resp: ESMResp<()>,
-        user: String,
         uuid: AlbumUuid,
         change: AlbumMetadata,
     },
@@ -91,11 +89,13 @@ pub enum DbMsg {
         filter: String,
     },
     SearchMediaInAlbum {
-        resp: ESMResp<HashMap<MediaUuid, Media>>,
+        resp: ESMResp<Vec<MediaUuid>>,
         user: String,
         uuid: AlbumUuid,
         filter: String,
     },
+
+    // library messages
     AddLibrary {
         resp: ESMResp<()>,
         library: Library,
@@ -105,12 +105,14 @@ pub enum DbMsg {
         uuid: LibraryUuid,
     },
     SearchMediaInLibrary {
-        resp: ESMResp<HashMap<MediaUuid, Media>>,
+        resp: ESMResp<Vec<MediaUuid>>,
         user: String,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,
     },
+
+    // ticket messages
     CreateTicket {
         resp: ESMResp<TicketUuid>,
         ticket: Ticket,
@@ -124,8 +126,9 @@ pub enum DbMsg {
         resp: ESMResp<Ticket>,
         ticket_uuid: TicketUuid,
     },
-    TicketSearch {
+    SearchTickets {
         resp: ESMResp<Vec<TicketUuid>>,
+        user: String,
         filter: String,
         resolved: bool,
     },

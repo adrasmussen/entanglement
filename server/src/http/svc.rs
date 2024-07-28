@@ -89,7 +89,9 @@ impl HttpEndpoint {
             .await
             .context("Failed to send GetTicket from HttpEndpoint")?;
 
-        let ticket = rx.await.context("Failed to receive GetTicket response at HttpEndpoint")??;
+        let ticket = rx
+            .await
+            .context("Failed to receive GetTicket response at HttpEndpoint")??;
 
         self.can_access_media(&user, &ticket.media_uuid).await
     }
@@ -339,7 +341,7 @@ pub enum TicketMessage {
     CreateTicket(CreateTicketReq),
     CreateComment(CreateCommentReq),
     GetTicket(GetTicketReq),
-    TicketSearch(TicketSearchReq),
+    TicketSearch(SearchTicketsReq),
 }
 
 async fn query_ticket(
@@ -353,6 +355,9 @@ async fn query_ticket(
 
     match message {
         TicketMessage::CreateTicket(msg) => {
+            // auth
+            //
+            // anyone who can see media can create a new ticket, even if they don't own it
             if !state.can_access_media(&user, &msg.media_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -366,11 +371,11 @@ async fn query_ticket(
                     DbMsg::CreateTicket {
                         resp: tx,
                         ticket: Ticket {
+                            media_uuid: msg.media_uuid,
+                            owner: user,
+                            title: msg.title,
                             timestamp: Local::now().timestamp(),
                             resolved: false,
-                            user: user,
-                            media_uuid: msg.media_uuid,
-                            title: msg.title,
                             comments: HashMap::new(),
                         },
                     }
@@ -389,6 +394,7 @@ async fn query_ticket(
             .into_response())
         }
         TicketMessage::CreateComment(msg) => {
+            // auth
             if !state.can_access_ticket(&user, &msg.ticket_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -403,9 +409,9 @@ async fn query_ticket(
                         resp: tx,
                         ticket_uuid: msg.ticket_uuid,
                         comment: TicketComment {
-                            timestamp: Local::now().timestamp(),
-                            user: user,
+                            owner: user,
                             text: msg.comment_text,
+                            timestamp: Local::now().timestamp(),
                         },
                     }
                     .into(),
@@ -423,6 +429,10 @@ async fn query_ticket(
             .into_response())
         }
         TicketMessage::GetTicket(msg) => {
+            // auth
+            //
+            // it's awkward that we effectively call get_ticket twice, but this ensures
+            // a consistent auth pattern between various calls
             if !state.can_access_ticket(&user, &msg.ticket_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -446,6 +456,33 @@ async fn query_ticket(
 
             Ok(Json(GetTicketResp { ticket: result }).into_response())
         }
-        TicketMessage::TicketSearch(msg) => Ok(StatusCode::IM_A_TEAPOT.into_response()),
+        TicketMessage::TicketSearch(msg) => {
+            // auth
+            //
+            // like all search methods, auth is handled as part of the db query
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .clone()
+                .send(
+                    DbMsg::SearchTickets {
+                        resp: tx,
+                        user: user,
+                        filter: msg.filter,
+                        resolved: msg.resolved,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send SearchTickets message");
+
+            let result = rx
+                .await
+                .context("Failed to receive SearchTickets respsonse")??;
+
+            Ok(Json(SearchTicketsResp { tickets: result }).into_response())
+        }
     }
 }
