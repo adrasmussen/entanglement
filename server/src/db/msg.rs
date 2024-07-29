@@ -84,7 +84,7 @@ pub enum DbMsg {
         change: AlbumMetadata,
     },
     SearchAlbums {
-        resp: ESMResp<()>,
+        resp: ESMResp<Vec<AlbumUuid>>,
         user: String,
         filter: String,
     },

@@ -63,19 +63,18 @@ trait ESDbService: ESInner {
 
     async fn update_album(
         &self,
-        user: String,
         uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<()>;
+    async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>>;
 
     async fn search_media_in_album(
         &self,
         user: String,
         uuid: AlbumUuid,
         filter: String,
-    ) -> anyhow::Result<HashMap<MediaUuid, Image>>;
+    ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid>;
@@ -93,10 +92,7 @@ trait ESDbService: ESInner {
     // ticket functions
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
 
-    async fn create_comment(
-        &self,
-        comment: TicketComment,
-    ) -> anyhow::Result<CommentUuid>;
+    async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid>;
 
     async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket>;
 

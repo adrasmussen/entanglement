@@ -373,7 +373,39 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_media_in_library")?;
 
-        todo!()
+        let query = r"
+            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
+            (SELECT uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.uuid = album_contents.album_uuid) as user_media
+
+            SELECT uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.uuid)
+                WHERE (library = :library_uuid)
+                    AND (hidden = :hidden)
+                    AND (filter LIKE CONCAT_WS(' ', media.date, media.note)"
+            .with(params! {
+                "user" => user,
+                "library_uuid" => uuid,
+                "hidden" => hidden,
+                "filter" => filter,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run search_media_in_library query")?;
+
+        let rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect search_media_in_library results")?;
+
+        let data = rows
+            .into_iter()
+            .map(|row| from_row_opt::<MediaUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()
+            .context("Failed to convert uuid row for search_media_in_libary")?;
+
+        Ok(data)
     }
 
     // ticket queries
@@ -486,7 +518,7 @@ impl ESDbService for MySQLState {
             from_row_opt(ticket_row).context("Failed to convert ticket row for get_ticket")?;
 
         // second set of results
-        let mut comment_rows = result
+        let comment_rows = result
             .collect::<Row>()
             .await
             .context("Failed to collect get_ticket comment results")?;
@@ -585,28 +617,29 @@ impl ESInner for MySQLState {
                 DbMsg::GetImageGroups { resp, uuid } => {
                     todo!()
                 }
-                DbMsg::AddAlbum { resp, user, album } => {
+
+                // album messages
+                DbMsg::AddAlbum { resp, album } => {
                     self.respond(resp, self.add_album(album)).await
                 }
-                DbMsg::GetAlbum { resp, user, uuid } => {
+                DbMsg::GetAlbum { resp, uuid } => {
                     self.respond(resp, self.get_album(uuid)).await
                 }
-                DbMsg::DeleteAlbum { resp, user, uuid } => {
+                DbMsg::DeleteAlbum { resp, uuid } => {
                     todo!()
                 }
                 DbMsg::UpdateAlbum {
                     resp,
-                    user,
                     uuid,
                     change,
                 } => {
-                    self.respond(resp, self.update_album(user, uuid, change))
+                    self.respond(resp, self.update_album(uuid, change))
                         .await
                 }
                 DbMsg::SearchAlbums { resp, user, filter } => {
                     self.respond(resp, self.search_albums(user, filter)).await
                 }
-                DbMsg::SearchImagesInAlbum {
+                DbMsg::SearchMediaInAlbum {
                     resp,
                     user,
                     uuid,
