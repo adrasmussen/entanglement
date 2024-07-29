@@ -16,12 +16,11 @@ pub mod mysql;
 pub mod svc;
 
 // these are the database RPC calls that any backend server must be able to process
-//
-// note that the response to the caller is in the ESMResp, and that the actual return
-// of the RPC functions are for successfully sending the reponse
 #[async_trait]
 trait ESDbService: ESInner {
     // authdb functions
+    async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
+
     async fn add_user(&self, user: User) -> anyhow::Result<()>;
 
     async fn get_user(&self, uid: String) -> anyhow::Result<User>;
@@ -39,14 +38,13 @@ trait ESDbService: ESInner {
     async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
 
     // media functions
-    async fn add_image(&self, media: Media) -> anyhow::Result<MediaUuid>;
+    async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_image(&self, uuid: MediaUuid) -> anyhow::Result<Media>;
+    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Media>;
 
     async fn update_media(
         &self,
-        user: String,
-        uuid: MediaUuid,
+        media_uuid: MediaUuid,
         change: MediaMetadata,
     ) -> anyhow::Result<()>;
 
@@ -54,16 +52,18 @@ trait ESDbService: ESInner {
         &self,
         user: String,
         filter: String,
-    ) -> anyhow::Result<HashMap<MediaUuid, Image>>;
+    ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
     async fn add_album(&self, album: Album) -> anyhow::Result<()>;
 
-    async fn get_album(&self, uuid: AlbumUuid) -> anyhow::Result<Album>;
+    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album>;
+
+    async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()>;
 
     async fn update_album(
         &self,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
@@ -72,14 +72,14 @@ trait ESDbService: ESInner {
     async fn search_media_in_album(
         &self,
         user: String,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid>;
 
-    async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library>;
+    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Library>;
 
     async fn search_media_in_library(
         &self,

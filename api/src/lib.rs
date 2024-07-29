@@ -36,7 +36,6 @@ pub enum MediaType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Media {
-    pub uuid: MediaUuid,
     pub media_type: MediaType,
     pub library: LibraryUuid,
     pub path: PathBuf,

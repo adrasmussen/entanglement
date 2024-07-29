@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{image::*, library::*, ticket::*, user::*, *};
+use api::{album::*, image::*, library::*, ticket::*, user::*, *};
 
 pub struct MySQLState {
     pool: Pool,
@@ -142,7 +142,7 @@ impl ESDbService for MySQLState {
     //
     // this is intended to be called only by the filesystem service during
     // a library search, so there is no ambiguity on the argument details
-    async fn add_image(&self, image: Image) -> anyhow::Result<ImageUuid> {
+    async fn add_media(&self, image: Image) -> anyhow::Result<ImageUuid> {
         let conn = self.pool.get_conn().await?;
 
         let query= r"
@@ -176,7 +176,7 @@ impl ESDbService for MySQLState {
     // get the data and metadata for a particular image
     //
     // TODO: properly check privs here, which allows for private notes too
-    async fn get_image(&self, uuid: ImageUuid) -> anyhow::Result<Image> {
+    async fn get_media(&self, uuid: ImageUuid) -> anyhow::Result<Image> {
         let conn = self.pool.get_conn().await?;
 
         let query = r"
@@ -237,7 +237,7 @@ impl ESDbService for MySQLState {
         &self,
         user: String,
         filter: String,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+    ) -> anyhow::Result<Vec<MediaUuid>> {
         Err(anyhow::Error::msg(""))
     }
 
@@ -245,14 +245,17 @@ impl ESDbService for MySQLState {
         Err(anyhow::Error::msg(""))
     }
 
-    async fn get_album(&self, uuid: AlbumUuid) -> anyhow::Result<Album> {
+    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album> {
+        Err(anyhow::Error::msg(""))
+    }
+
+    async fn delete_album(&self, album_uid: AlbumUuid) -> anyhow::Result<Album> {
         Err(anyhow::Error::msg(""))
     }
 
     async fn update_album(
         &self,
-        user: String,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
         let conn = self.pool.get_conn().await?;
@@ -277,7 +280,7 @@ impl ESDbService for MySQLState {
         user: String,
         uuid: AlbumUuid,
         filter: String,
-    ) -> anyhow::Result<HashMap<ImageUuid, Image>> {
+    ) -> anyhow::Result<Vec<MediaUuid>> {
         todo!()
     }
 
@@ -290,8 +293,8 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for add_library")?;
 
         let query = r"
-            INSERT INTO libraries (uuid, path, owner, group, file_count, last_scan)
-            OUTPUT INSERTED.uuid
+            INSERT INTO libraries (library_uuid, path, owner, group, file_count, last_scan)
+            OUTPUT INSERTED.library_uuid
             VALUES (UUID_SHORT(), :path, :owner, :group, :file_count, :last_scan)"
             .with(params! {
                 "path" => library.path,
@@ -321,7 +324,7 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_library(&self, uuid: LibraryUuid) -> anyhow::Result<Library> {
+    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Library> {
         let conn = self
             .pool
             .get_conn()
@@ -329,9 +332,9 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for get_library")?;
 
         let query = r"
-            SELECT (path, owner, group, file_count, last_scan) FROM libraries WHERE uuid = :uuid"
+            SELECT (path, owner, group, file_count, last_scan) FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
-                "uuid" => uuid,
+                "library_uuid" => library_uuid,
             });
 
         let mut result = query
@@ -363,7 +366,7 @@ impl ESDbService for MySQLState {
     async fn search_media_in_library(
         &self,
         user: String,
-        uuid: LibraryUuid,
+        library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
@@ -375,16 +378,16 @@ impl ESDbService for MySQLState {
 
         let query = r"
             (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
-            (SELECT uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.uuid = album_contents.album_uuid) as user_media
+            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
 
-            SELECT uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.uuid)
+            SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
                 WHERE (library = :library_uuid)
                     AND (hidden = :hidden)
-                    AND (filter LIKE CONCAT_WS(' ', media.date, media.note)"
+                    AND (filter LIKE CONCAT_WS(' ', date, note)"
             .with(params! {
                 "user" => user,
-                "library_uuid" => uuid,
+                "library_uuid" => library_uuid,
                 "hidden" => hidden,
                 "filter" => filter,
             });
@@ -417,8 +420,8 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for create_ticket")?;
 
         let query = r"
-            INSERT INTO tickets (uuid, media_uuid, owner, title, timestamp, resolved)
-            OUTPUT INSERTED.uuid
+            INSERT INTO tickets (ticket_uuid, media_uuid, owner, title, timestamp, resolved)
+            OUTPUT INSERTED.ticket_uuid
             VALUES (UUID_SHORT(), :media_uuid, :owner, :title, :timestamp, :resolved)"
             .with(params! {
                 "media_uuid" => ticket.media_uuid,
@@ -456,8 +459,8 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for create_comment")?;
 
         let query = r"
-            INSERT INTO comments (uuid, ticket_uuid, owner, text, timestamp)
-            OUTPUT INSERTED.uuid
+            INSERT INTO comments (comment_uuid, ticket_uuid, owner, text, timestamp)
+            OUTPUT INSERTED.comment_uuid
             VALUES (UUID_SHORT(), :ticket_uuid, :owner, :text, :timestamp)"
             .with(params! {
                 "ticket_uuid" => comment.ticket_uuid,
@@ -494,10 +497,10 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for create_comment")?;
 
         let query = r"
-            SELECT (media_uuid, owner, title, timestamp, resolved) FROM tickets WHERE uuid = :uuid;
+            SELECT (media_uuid, owner, title, timestamp, resolved) FROM tickets WHERE ticket_uuid = :ticket_uuid;
 
-            SELECT (comment_uuid, owner, text, timestamp) FROM comments WHERE ticket_uuid = :uuid"
-            .with(params! {"uuid" => ticket_uuid});
+            SELECT (comment_uuid, owner, text, timestamp) FROM comments WHERE ticket_uuid = :ticket_uuid"
+            .with(params! {"ticket_uuid" => ticket_uuid});
 
         let mut result = query
             .run(conn)
@@ -566,7 +569,43 @@ impl ESDbService for MySQLState {
         filter: String,
         resolved: bool,
     ) -> anyhow::Result<Vec<TicketUuid>> {
-        Err(anyhow::Error::msg("oh no"))
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for search_tickets")?;
+
+        let query = r"
+            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
+            (SELECT uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.uuid = album_contents.album_uuid) as user_media
+
+            SELECT ticket_uuid FROM (user_media INNER JOIN tickets ON user_media.media_uuid = tickets.media_uuid)
+                WHERE (resolved = :resolved)
+                    AND (filter LIKE text)"
+            .with(params! {
+                "user" => user,
+                "resolved" => resolved,
+                "filter" => filter,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run search_tickets query")?;
+
+        let rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect search_tickets results")?;
+
+        let data = rows
+            .into_iter()
+            .map(|row| from_row_opt::<TicketUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()
+            .context("Failed to convert uuid row for search_tickets")?;
+
+        Ok(data)
     }
 }
 
@@ -584,9 +623,17 @@ impl ESInner for MySQLState {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Db(message) => match message {
+                // auth messages
+                DbMsg::CanAccessMedia {
+                    resp,
+                    uid,
+                    media_uuid,
+                } => {
+                    self.respond(resp, self.can_access_media(uid, media_uuid))
+                        .await
+                }
                 DbMsg::AddUser { resp, user } => self.respond(resp, self.add_user(user)).await,
                 DbMsg::GetUser { resp, uid } => self.respond(resp, self.get_user(uid)).await,
-                DbMsg::DeleteUser { resp, uid } => self.respond(resp, self.delete_user(uid)).await,
                 DbMsg::AddGroup { resp, group } => self.respond(resp, self.add_group(group)).await,
                 DbMsg::GetGroup { resp, gid } => self.respond(resp, self.get_group(gid)).await,
                 DbMsg::DeleteGroup { resp, gid } => {
@@ -598,43 +645,25 @@ impl ESInner for MySQLState {
                 DbMsg::RmUserFromGroup { resp, uid, gid } => {
                     self.respond(resp, self.rm_user_from_group(uid, gid)).await
                 }
-                DbMsg::AddImage { resp, image } => self.respond(resp, self.add_image(image)).await,
-                DbMsg::GetImage { resp, user, uuid } => {
-                    self.respond(resp, self.get_image(uuid)).await
+                DbMsg::AddMedia { resp, media } => self.respond(resp, self.add_media(media)).await,
+                DbMsg::GetMedia { resp, media_uuid } => {
+                    self.respond(resp, self.get_media(media_uuid)).await
                 }
-                DbMsg::UpdateImage {
-                    resp,
-                    user,
-                    uuid,
-                    change,
-                } => {
-                    self.respond(resp, self.update_media(user, uuid, change))
-                        .await
+                DbMsg::UpdateMedia { resp, media_uuid, change } => {
+                    self.respond(resp, self.update_media(media_uuid, change)).await
                 }
-                DbMsg::SearchImages { resp, user, filter } => {
+                DbMsg::SearchMedia { resp, user, filter } => {
                     self.respond(resp, self.search_media(user, filter)).await
-                }
-                DbMsg::GetImageGroups { resp, uuid } => {
-                    todo!()
                 }
 
                 // album messages
-                DbMsg::AddAlbum { resp, album } => {
-                    self.respond(resp, self.add_album(album)).await
+                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
+                DbMsg::GetAlbum { resp, album_uuid } => self.respond(resp, self.get_album(album_uuid)).await,
+                DbMsg::DeleteAlbum { resp, album_uuid } => {
+                    self.respond(resp, self.delete_album(album_uuid)).await
                 }
-                DbMsg::GetAlbum { resp, uuid } => {
-                    self.respond(resp, self.get_album(uuid)).await
-                }
-                DbMsg::DeleteAlbum { resp, uuid } => {
-                    todo!()
-                }
-                DbMsg::UpdateAlbum {
-                    resp,
-                    uuid,
-                    change,
-                } => {
-                    self.respond(resp, self.update_album(uuid, change))
-                        .await
+                DbMsg::UpdateAlbum { resp, album_uuid, change } => {
+                    self.respond(resp, self.update_album(album_uuid, change)).await
                 }
                 DbMsg::SearchAlbums { resp, user, filter } => {
                     self.respond(resp, self.search_albums(user, filter)).await
@@ -642,10 +671,10 @@ impl ESInner for MySQLState {
                 DbMsg::SearchMediaInAlbum {
                     resp,
                     user,
-                    uuid,
+                    album_uuid,
                     filter,
                 } => {
-                    self.respond(resp, self.search_media_in_album(user, uuid, filter))
+                    self.respond(resp, self.search_media_in_album(user, album_uuid, filter))
                         .await
                 }
 

@@ -6,6 +6,13 @@ use crate::service::*;
 
 #[derive(Debug)]
 pub enum DbMsg {
+    // auth messages
+    CanAccessMedia {
+        resp: ESMResp<bool>,
+        uid: String,
+        media_uuid: MediaUuid,
+    },
+
     // user messages
     AddUser {
         resp: ESMResp<()>,
@@ -47,22 +54,17 @@ pub enum DbMsg {
     },
     GetMedia {
         resp: ESMResp<Media>,
-        uuid: MediaUuid,
+        media_uuid: MediaUuid,
     },
     UpdateMedia {
         resp: ESMResp<()>,
-        uuid: MediaUuid,
+        media_uuid: MediaUuid,
         change: MediaMetadata,
     },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
         user: String,
         filter: String,
-    },
-    CanAccessMedia {
-        resp: ESMResp<bool>,
-        user: String,
-        media_uuid: MediaUuid,
     },
 
     // album messages
@@ -72,15 +74,15 @@ pub enum DbMsg {
     },
     GetAlbum {
         resp: ESMResp<Album>,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
     },
     DeleteAlbum {
         resp: ESMResp<()>,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
     },
     UpdateAlbum {
         resp: ESMResp<()>,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
         change: AlbumMetadata,
     },
     SearchAlbums {
@@ -91,7 +93,7 @@ pub enum DbMsg {
     SearchMediaInAlbum {
         resp: ESMResp<Vec<MediaUuid>>,
         user: String,
-        uuid: AlbumUuid,
+        album_uuid: AlbumUuid,
         filter: String,
     },
 
