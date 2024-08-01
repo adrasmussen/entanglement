@@ -85,6 +85,16 @@ pub enum DbMsg {
         album_uuid: AlbumUuid,
         change: AlbumMetadata,
     },
+    AddMediaToAlbum {
+        resp: ESMResp<()>,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    },
+    RmMediaFromAlbum {
+        resp: ESMResp<()>,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    },
     SearchAlbums {
         resp: ESMResp<Vec<AlbumUuid>>,
         user: String,

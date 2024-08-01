@@ -67,6 +67,10 @@ trait ESDbService: ESInner {
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
+    async fn add_media_to_album(&self, media_uuid: MediaUuid, album_uuid: AlbumUuid) -> anyhow::Result<()>;
+
+    async fn rm_media_from_album(&self, media_uuid: MediaUuid, album_uuid: AlbumUuid) -> anyhow::Result<()>;
+
     async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>>;
 
     async fn search_media_in_album(

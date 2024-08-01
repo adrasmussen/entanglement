@@ -20,28 +20,6 @@ pub struct MySQLState {
 }
 
 // database RPC handler functions
-//
-// these functions take a somewhat strange form to ensure that we can correctly capture all errors,
-// either to pass them back to the client or to log them in the server logs
-//
-// it's entirely possible that some of these *should* be unwraps, since being unable to respond to
-// inter-service messages is a good reason to halt the server process.  however, this method gives
-// us more flexibilty, since a failure can instead cause the server to gracefully stop other tasks
-//
-// thus, we have the inner async {} -> Result and resp.send(inner.await)
-//
-// the other somewhat unfortunate pattern is having to manipulate the query result iterator so we
-// can use from_row_opt() instead of prepackaged Query::first(conn), fetch(conn), and other tools
-//
-// every query needs the run(conn).await? portion, which actually executes the query and returns
-// the result iterator, which is more complicated because there are result "sets"
-//
-// several of the internal mechanisms call .next().await?, which moves through result sets and
-// fails if they have been otherwise consumed by something else from that connection
-//
-// if we do so manually (like wanting just the first result), we have to unpack the Option<> first
-// and then the Result<_, FromRowError> on the inside
-
 #[async_trait]
 impl ESDbService for MySQLState {
     // auth queries
@@ -99,11 +77,65 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         change: MediaMetadata,
     ) -> anyhow::Result<()> {
-        todo!()
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for update_media")?;
+
+        let query = r"
+            UPDATE media SET hidden = :hidden, date = :date, note = :note WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "hidden" => change.hidden,
+                "date" => change.date,
+                "note" => change.note,
+                "media_uuid" => media_uuid,
+            });
+
+        query
+            .run(conn)
+            .await
+            .context("Failed to run update_media query")?;
+
+        Ok(())
     }
 
     async fn search_media(&self, user: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
-        todo!()
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for search_media")?;
+
+        let query = r"
+            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
+            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
+
+            SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
+                WHERE (filter LIKE CONCAT_WS(' ', date, note))"
+            .with(params! {
+                "user" => user,
+                "filter" => filter,
+            });
+
+        let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run search_media query")?;
+
+        let rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect search_media results")?;
+
+        let data = rows
+            .into_iter()
+            .map(|row| from_row_opt::<MediaUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()
+            .context("Failed to convert uuid row for search_media")?;
+
+        Ok(data)
     }
 
     // album queries
@@ -121,8 +153,8 @@ impl ESDbService for MySQLState {
             .with(params! {
                 "owner" => album.owner,
                 "group" => album.group,
-                "name" => album.metadata.name.ok_or_else(|| anyhow::Error::msg("missing name field for album"))?,
-                "note" => album.metadata.note.ok_or_else(|| anyhow::Error::msg("missing note field for album"))?,
+                "name" => album.metadata.name,
+                "note" => album.metadata.note,
             });
 
         let mut result = query
@@ -139,8 +171,7 @@ impl ESDbService for MySQLState {
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_album"))?;
 
-        let data: AlbumUuid =
-            from_row_opt(row).context("Failed to convert row for add_album")?;
+        let data: AlbumUuid = from_row_opt(row).context("Failed to convert row for add_album")?;
 
         Ok(data)
     }
@@ -179,8 +210,8 @@ impl ESDbService for MySQLState {
             owner: data.0,
             group: data.1,
             metadata: AlbumMetadata {
-                name: Some(data.2),
-                note: Some(data.3),
+                name: data.2,
+                note: data.3,
             },
         })
     }
@@ -211,7 +242,79 @@ impl ESDbService for MySQLState {
         album_uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
-        todo!()
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for update_album")?;
+
+        let query = r"
+            UPDATE albums SET name = :name, note = :note WHERE album_uuid = :album_uuid"
+            .with(params! {
+                "name" => change.name,
+                "note" => change.note,
+                "album_uuid" => album_uuid,
+            });
+
+        query
+            .run(conn)
+            .await
+            .context("Failed to run update_album query")?;
+
+        Ok(())
+    }
+
+    async fn add_media_to_album(
+        &self,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    ) -> anyhow::Result<()> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for add_media_to_album")?;
+
+        let query = r"
+            INSERT INTO album_contents (media_uuid, album_uuid)
+            VALUES (:media_uuid, :album_uuid)"
+            .with(params! {
+                "media_uuid" => media_uuid,
+                "album_uuid" => album_uuid,
+            });
+
+        query
+            .run(conn)
+            .await
+            .context("Failed to run add_media_to_album query")?;
+
+        Ok(())
+    }
+
+    async fn rm_media_from_album(
+        &self,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    ) -> anyhow::Result<()> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for rm_media_from_album")?;
+
+        let query = r"
+            DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
+            .with(params!{
+                "media_uuid" => media_uuid,
+                "album_uuid" => album_uuid,
+            });
+
+        query
+            .run(conn)
+            .await
+            .context("Failed to run rm_media_from_album query")?;
+
+        Ok(())
     }
 
     async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
@@ -267,7 +370,7 @@ impl ESDbService for MySQLState {
             (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
 
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
-                WHERE (filter LIKE CONCAT_WS(' ', date, note)"
+                WHERE (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
                 "user" => user,
                 "album_uuid" => album_uuid,
@@ -393,7 +496,7 @@ impl ESDbService for MySQLState {
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
                 WHERE (library = :library_uuid)
                     AND (hidden = :hidden)
-                    AND (filter LIKE CONCAT_WS(' ', date, note)"
+                    AND (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
                 "user" => user,
                 "library_uuid" => library_uuid,
@@ -684,6 +787,22 @@ impl ESInner for MySQLState {
                     change,
                 } => {
                     self.respond(resp, self.update_album(album_uuid, change))
+                        .await
+                }
+                DbMsg::AddMediaToAlbum {
+                    resp,
+                    media_uuid,
+                    album_uuid,
+                } => {
+                    self.respond(resp, self.add_media_to_album(media_uuid, album_uuid))
+                        .await
+                }
+                DbMsg::RmMediaFromAlbum {
+                    resp,
+                    media_uuid,
+                    album_uuid,
+                } => {
+                    self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
                         .await
                 }
                 DbMsg::SearchAlbums { resp, user, filter } => {

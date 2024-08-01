@@ -44,9 +44,9 @@ pub struct Media {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MediaMetadata {
-    pub hidden: Option<bool>,
-    pub date: Option<String>,
-    pub note: Option<String>,
+    pub hidden: bool,
+    pub date: String,
+    pub note: String,
 }
 
 // messages

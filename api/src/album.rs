@@ -15,8 +15,8 @@ pub struct Album {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AlbumMetadata {
-    pub name: Option<String>,
-    pub note: Option<String>,
+    pub name: String,
+    pub note: String,
 }
 
 // messages
