@@ -39,12 +39,12 @@ pub struct Media {
     pub media_type: MediaType,
     pub library: LibraryUuid,
     pub path: PathBuf,
+    pub hidden: bool,
     pub metadata: MediaMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MediaMetadata {
-    pub hidden: bool,
     pub date: String,
     pub note: String,
 }
@@ -61,6 +61,27 @@ pub struct GetMediaReq {
 pub struct GetMediaResp {
     pub media: Media,
 }
+
+// update the metadata
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateMediaReq {
+    pub media_uuid: MediaUuid,
+    pub change: MediaMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateMediaResp {}
+
+// fetch the media information for a particular file
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetMediaHiddenReq {
+    pub media_uuid: MediaUuid,
+    pub hidden: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetMediaHiddenResp {}
+
 
 // search media, optionally with a filter on type
 #[derive(Clone, Debug, Serialize, Deserialize)]

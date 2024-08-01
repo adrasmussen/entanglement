@@ -1,6 +1,5 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::error::Error;
-use std::sync::Arc;
 
 use anyhow;
 
@@ -9,7 +8,7 @@ use async_trait::async_trait;
 use futures::TryStreamExt;
 
 use crate::service::ESInner;
-use api::{album::*, group::*, image::*, library::*, ticket::*, user::*, *};
+use api::{album::*, group::*, library::*, ticket::*, user::*, *};
 
 pub mod msg;
 pub mod mysql;
@@ -19,7 +18,12 @@ pub mod svc;
 #[async_trait]
 trait ESDbService: ESInner {
     // authdb functions
-    async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
+
+    // get this from checking all albums that contain the media + owning group of the library
+    //
+    // leads to a non-obvious fact that users can access the stuff in their own library by virtue
+    // of being in the owning group, not because they are the owner
+    async fn media_access_groups(&self, gid: String, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
 
     async fn add_user(&self, user: User) -> anyhow::Result<()>;
 
@@ -48,6 +52,12 @@ trait ESDbService: ESInner {
         change: MediaMetadata,
     ) -> anyhow::Result<()>;
 
+    async fn set_media_hidden(
+        &self,
+        media_uuid: MediaUuid,
+        hidden: bool,
+    ) -> anyhow::Result<()>;
+
     async fn search_media(
         &self,
         user: String,
@@ -55,7 +65,7 @@ trait ESDbService: ESInner {
     ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
-    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
+    async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album>;
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use api::{album::*, group::*, library::*, ticket::*, user::*, *};
 
@@ -7,8 +7,8 @@ use crate::service::*;
 #[derive(Debug)]
 pub enum DbMsg {
     // auth messages
-    CanAccessMedia {
-        resp: ESMResp<bool>,
+    MediaAccessGroups {
+        resp: ESMResp<HashSet<String>>,
         uid: String,
         media_uuid: MediaUuid,
     },
@@ -68,7 +68,7 @@ pub enum DbMsg {
     },
 
     // album messages
-    AddAlbum {
+    CreateAlbum {
         resp: ESMResp<AlbumUuid>,
         album: Album,
     },

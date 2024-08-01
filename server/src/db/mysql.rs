@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{album::*, group::*, image::*, library::*, ticket::*, user::*, *};
+use api::{album::*, group::*, library::*, ticket::*, user::*, *};
 
 pub struct MySQLState {
     pool: Pool,
@@ -23,7 +23,11 @@ pub struct MySQLState {
 #[async_trait]
 impl ESDbService for MySQLState {
     // auth queries
-    async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
+    async fn media_access_groups(
+        &self,
+        gid: String,
+        media_uuid: MediaUuid,
+    ) -> anyhow::Result<HashSet<String>> {
         todo!()
     }
     // add a user to the various tables
@@ -84,9 +88,8 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for update_media")?;
 
         let query = r"
-            UPDATE media SET hidden = :hidden, date = :date, note = :note WHERE media_uuid = :media_uuid"
+            UPDATE media SET date = :date, note = :note WHERE media_uuid = :media_uuid"
             .with(params! {
-                "hidden" => change.hidden,
                 "date" => change.date,
                 "note" => change.note,
                 "media_uuid" => media_uuid,
@@ -98,6 +101,10 @@ impl ESDbService for MySQLState {
             .context("Failed to run update_media query")?;
 
         Ok(())
+    }
+
+    async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()> {
+        todo!()
     }
 
     async fn search_media(&self, user: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
@@ -113,7 +120,8 @@ impl ESDbService for MySQLState {
             (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
 
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
-                WHERE (filter LIKE CONCAT_WS(' ', date, note))"
+                WHERE (hidden = false)
+                AND (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
                 "user" => user,
                 "filter" => filter,
@@ -139,7 +147,7 @@ impl ESDbService for MySQLState {
     }
 
     // album queries
-    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
+    async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
         let conn = self
             .pool
             .get_conn()
@@ -736,12 +744,12 @@ impl ESInner for MySQLState {
         match esm {
             ESM::Db(message) => match message {
                 // auth messages
-                DbMsg::CanAccessMedia {
+                DbMsg::MediaAccessGroups {
                     resp,
                     uid,
                     media_uuid,
                 } => {
-                    self.respond(resp, self.can_access_media(uid, media_uuid))
+                    self.respond(resp, self.media_access_groups(uid, media_uuid))
                         .await
                 }
                 DbMsg::AddUser { resp, user } => self.respond(resp, self.add_user(user)).await,
@@ -774,7 +782,9 @@ impl ESInner for MySQLState {
                 }
 
                 // album messages
-                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
+                DbMsg::CreateAlbum { resp, album } => {
+                    self.respond(resp, self.create_album(album)).await
+                }
                 DbMsg::GetAlbum { resp, album_uuid } => {
                     self.respond(resp, self.get_album(album_uuid)).await
                 }

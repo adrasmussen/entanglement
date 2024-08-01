@@ -32,6 +32,17 @@ pub struct CreateAlbumResp {
     pub album_uuid: AlbumUuid,
 }
 
+// retrieve the album properties
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetAlbumReq {
+    pub album_uuid: AlbumUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetAlbumResp {
+    pub album: Album,
+}
+
 // delete an album
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteAlbumReq {
@@ -40,6 +51,16 @@ pub struct DeleteAlbumReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteAlbumResp {}
+
+// change album properties
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateAlbumReq {
+    pub uuid: AlbumUuid,
+    pub metadata: AlbumMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateAlbumResp {}
 
 // add media to an album
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -61,35 +82,14 @@ pub struct RmMediaFromAlbumReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RmMediaFromAlbumResp {}
 
-// retrieve the album properties
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetAlbumReq {
-    pub album_uuid: AlbumUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetAlbumResp {
-    pub album: Album,
-}
-
-// change album properties
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumUpdateReq {
-    pub uuid: AlbumUuid,
-    pub metadata: AlbumMetadata,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumUpdateResp {}
-
 // search albums
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumSearchReq {
+pub struct SearchAlbumsReq {
     pub filter: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AlbumSearchResp {
+pub struct SearchAlbumsResp {
     pub albums: Vec<AlbumUuid>,
 }
 

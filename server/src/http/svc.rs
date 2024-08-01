@@ -35,7 +35,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{image::*, ticket::*, *};
+use api::{album::*, image::*, ticket::*, *};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -46,11 +46,7 @@ pub struct HttpEndpoint {
 }
 
 impl HttpEndpoint {
-    async fn can_access_media(
-        &self,
-        user: &String,
-        media_uuid: &MediaUuid,
-    ) -> anyhow::Result<bool> {
+    async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.auth_svc_sender
@@ -58,8 +54,8 @@ impl HttpEndpoint {
             .send(
                 AuthMsg::CanAccessMedia {
                     resp: tx,
-                    uid: user.clone(),
-                    uuid: media_uuid.clone(),
+                    uid: uid.clone(),
+                    media_uuid: media_uuid.clone(),
                 }
                 .into(),
             )
@@ -70,6 +66,49 @@ impl HttpEndpoint {
             .context("Failed to receive CanAccessMedia response at HttpEndpoint")?
     }
 
+    // TODO -- move this to auth service, which can cache the second two results trivially
+    // and probably have a combined owner/view cache for the first
+    async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
+        let (media_tx, media_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender.clone().send(
+            DbMsg::GetMedia {
+                resp: media_tx,
+                media_uuid: media_uuid.clone(),
+            }.into()
+        ).await.context("Failed to send GetMedia mesaage in owns_media")?;
+
+        let media = media_rx.await.context("Failed to receive GetMedia response in owns_media")??;
+
+        let (library_tx, library_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender.clone().send(
+            DbMsg::GetLibary { resp: library_tx, uuid: media.library }.into()
+        ).await.context("Failed to send GetLibrary mesaage in owns_media")?;
+
+        let library = library_rx.await.context("Failed to receive GetLibrary response in owns_media")??;
+
+        let (group_tx, group_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender.clone().send(
+            DbMsg::GetGroup { resp: group_tx, gid: library.group }.into()
+        ).await.context("Failed to send GetGroup mesaage in owns_media")?;
+
+        let group = group_rx.await.context("Failed to receive GetGroup response in owns_media")??;
+
+        Ok(group.members.contains(uid))
+    }
+
+    // same for these two
+    async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
+        todo!()
+    }
+
+    async fn owns_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
+        todo!()
+    }
+
+    // this can likely be cached somehow
     async fn can_access_ticket(
         &self,
         user: &String,
@@ -327,13 +366,55 @@ async fn query_group(
     StatusCode::IM_A_TEAPOT.into_response()
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AlbumMessage {
+    CreateAlbum(CreateAlbumReq),
+    GetAlbum(GetAlbumReq),
+    DeleteAlbum(DeleteAlbumReq),
+    UpdateAlbum(UpdateAlbumReq),
+    AddMediaToAlbum(AddMediaToAlbumReq),
+    RmMediaFromAlbum(RmMediaFromAlbumReq),
+    SearchAlbums(SearchAlbumsReq),
+    SearchMediaInAlbum(SearchMediaInAlbumReq),
+}
+
 async fn query_album(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(op): Path<(String)>,
-    json_body: Json<()>,
-) -> Response {
-    StatusCode::IM_A_TEAPOT.into_response()
+    Json(message): Json<AlbumMessage>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+
+    let user = current_user.user.clone();
+
+    match message {
+        AlbumMessage::CreateAlbum(msg) => {
+            // auth
+            //
+            // anyone may create an album
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .clone()
+                .send(
+                    DbMsg::CreateAlbum {
+                        resp: tx,
+                        album: msg.album,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send CreateAlbum message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive CreateAlbum response")??;
+
+            Ok(Json(CreateAlbumResp { album_uuid: result }).into_response())
+        }
+        _ => Ok(StatusCode::IM_A_TEAPOT.into_response()),
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

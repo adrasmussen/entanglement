@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::MediaUuid;
+use api::{album::*, *};
 
 use crate::auth::AuthType;
 use crate::service::*;
@@ -29,7 +29,22 @@ pub enum AuthMsg {
     CanAccessMedia {
         resp: ESMResp<bool>,
         uid: String,
-        uuid: MediaUuid,
+        media_uuid: MediaUuid,
+    },
+    OwnsMedia {
+        resp: ESMResp<bool>,
+        uid: String,
+        media_uuid: MediaUuid,
+    },
+    CanAccessAlbum {
+        resp: ESMResp<bool>,
+        uid: String,
+        album_uuid: AlbumUuid,
+    },
+    OwnsAlbum {
+        resp: ESMResp<bool>,
+        uid: String,
+        album_uuid: AlbumUuid,
     },
 }
 
