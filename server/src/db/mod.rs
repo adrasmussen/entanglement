@@ -55,7 +55,7 @@ trait ESDbService: ESInner {
     ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
-    async fn add_album(&self, album: Album) -> anyhow::Result<()>;
+    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album>;
 

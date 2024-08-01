@@ -69,7 +69,7 @@ pub enum DbMsg {
 
     // album messages
     AddAlbum {
-        resp: ESMResp<()>,
+        resp: ESMResp<AlbumUuid>,
         album: Album,
     },
     GetAlbum {
