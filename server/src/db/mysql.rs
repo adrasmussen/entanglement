@@ -746,10 +746,9 @@ impl ESInner for MySQLState {
                 // auth messages
                 DbMsg::MediaAccessGroups {
                     resp,
-                    uid,
                     media_uuid,
                 } => {
-                    self.respond(resp, self.media_access_groups(uid, media_uuid))
+                    self.respond(resp, self.media_access_groups(media_uuid))
                         .await
                 }
                 DbMsg::AddUser { resp, user } => self.respond(resp, self.add_user(user)).await,

@@ -11,7 +11,7 @@ pub type LibraryUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub path: String,
-    pub owner: String,
+    pub owner: String, // TODO -- remove this, it's not necessary
     pub group: String,
     pub file_count: i64,
     pub last_scan: i64,

@@ -20,10 +20,7 @@ trait ESDbService: ESInner {
     // authdb functions
 
     // get this from checking all albums that contain the media + owning group of the library
-    //
-    // leads to a non-obvious fact that users can access the stuff in their own library by virtue
-    // of being in the owning group, not because they are the owner
-    async fn media_access_groups(&self, gid: String, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
+    async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
 
     async fn add_user(&self, user: User) -> anyhow::Result<()>;
 

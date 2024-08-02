@@ -9,7 +9,6 @@ pub enum DbMsg {
     // auth messages
     MediaAccessGroups {
         resp: ESMResp<HashSet<String>>,
-        uid: String,
         media_uuid: MediaUuid,
     },
 

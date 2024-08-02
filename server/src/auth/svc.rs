@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use anyhow::Context;
+
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -95,22 +97,24 @@ impl ESAuthService for AuthCache {
             let user_cache = user_cache.read().await;
 
             match user_cache.get(&uid) {
-                Some(members) => return Ok(members.intersection(&gid).count() > 0),
+                Some(groups) => return Ok(groups.intersection(&gid).count() > 0),
                 None => {}
             }
         }
 
-        let db_svc_sender = self.db_svc_sender.clone();
-
         let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<User>>();
 
-        db_svc_sender
-            .send(ESM::Db(DbMsg::GetUser { resp: tx, uid: uid }))
-            .await?;
+        self.db_svc_sender
+            .clone()
+            .send(DbMsg::GetUser { resp: tx, uid: uid }.into())
+            .await
+            .context("Failed to send GetUser from is_group_member")?;
 
         // this should fail if the user doesn't exist, so we are safe to add the user
         // to the cache after it returns
-        let user = rx.await??;
+        let user = rx
+            .await
+            .context("Fail to receive GetUser response at is_group_member")??;
 
         let groups = user.groups;
 
@@ -123,7 +127,7 @@ impl ESAuthService for AuthCache {
         Ok(groups.intersection(&gid).count() > 0)
     }
 
-    async fn can_access_media(&self, uid: String, uuid: MediaUuid) -> anyhow::Result<bool> {
+    async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
         // in order to get the HashSet out of the HashMap, we need to match the outer get()
@@ -131,12 +135,12 @@ impl ESAuthService for AuthCache {
         let cached_groups = {
             let access_cache = access_cache.read().await;
 
-            let groups = match access_cache.get(&uuid) {
+            let cached_groups = match access_cache.get(&media_uuid) {
                 None => None,
                 Some(v) => Some(v.clone()),
             };
 
-            groups
+            cached_groups
         };
 
         // since we have to compare the sets of groups, we have to handle the cache miss
@@ -147,23 +151,29 @@ impl ESAuthService for AuthCache {
         let groups = match cached_groups {
             Some(v) => v,
             None => {
-                let db_svc_sender = self.db_svc_sender.clone();
+                let (tx, rx) = tokio::sync::oneshot::channel();
 
-                let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<HashSet<String>>>();
+                self.db_svc_sender
+                    .clone()
+                    .send(
+                        DbMsg::MediaAccessGroups {
+                            resp: tx,
+                            media_uuid: media_uuid,
+                        }
+                        .into(),
+                    )
+                    .await
+                    .context("Failed to send MediaAccessGroups from can_access_media")?;
 
-                db_svc_sender
-                    .send(ESM::Db(DbMsg::GetImageGroups {
-                        resp: tx,
-                        uuid: uuid,
-                    }))
-                    .await?;
+                let groups = rx.await.context(
+                    "Failed to receive MediaAccessGroups response at can_access_media",
+                )??;
 
-                let groups = rx.await??;
-
+                // lock and unlock the write mutex with as little work as possible
                 {
                     let mut access_cache = access_cache.write().await;
 
-                    access_cache.insert(uuid, groups.clone());
+                    access_cache.insert(media_uuid, groups.clone());
                 }
 
                 groups
@@ -172,11 +182,74 @@ impl ESAuthService for AuthCache {
 
         Ok(self.is_group_member(uid, groups).await?)
     }
+
+    // this should be a relatively uncommon operation, so having three independent database messages
+    // is worth being able to use the existing messages to get the information
+    async fn owns_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
+        let (media_tx, media_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::GetMedia {
+                    resp: media_tx,
+                    media_uuid: media_uuid.clone(),
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send GetMedia mesaage in owns_media")?;
+
+        let media = media_rx
+            .await
+            .context("Failed to receive GetMedia response in owns_media")??;
+
+        let (library_tx, library_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::GetLibary {
+                    resp: library_tx,
+                    uuid: media.library,
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send GetLibrary mesaage in owns_media")?;
+
+        let library = library_rx
+            .await
+            .context("Failed to receive GetLibrary response in owns_media")??;
+
+        let (group_tx, group_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::GetGroup {
+                    resp: group_tx,
+                    gid: library.group,
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send GetGroup mesaage in owns_media")?;
+
+        let group = group_rx
+            .await
+            .context("Failed to receive GetGroup response in owns_media")??;
+
+        Ok(group.members.contains(&uid))
+    }
 }
 
 #[async_trait]
 impl ESInner for AuthCache {
-    fn new(_config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<Self> {
+    fn new(
+        _config: Arc<ESConfig>,
+        senders: HashMap<ServiceType, ESMSender>,
+    ) -> anyhow::Result<Self> {
         Ok(AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -205,8 +278,11 @@ impl ESInner for AuthCache {
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }
-                AuthMsg::CanAccessMedia { resp, uid, uuid } => {
-                    self.respond(resp, self.can_access_media(uid, uuid)).await
+                AuthMsg::CanAccessMedia { resp, uid, media_uuid } => {
+                    self.respond(resp, self.can_access_media(uid, media_uuid)).await
+                }
+                AuthMsg::OwnsMedia { resp, uid, media_uuid } => {
+                    self.respond(resp, self.owns_media(uid, media_uuid)).await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),

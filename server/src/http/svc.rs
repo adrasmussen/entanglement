@@ -60,43 +60,30 @@ impl HttpEndpoint {
                 .into(),
             )
             .await
-            .context("Failed to send CanAccessMedia message from HttpEndpoint")?;
+            .context("Failed to send CanAccessMedia message in can_access_media")?;
 
         rx.await
-            .context("Failed to receive CanAccessMedia response at HttpEndpoint")?
+            .context("Failed to receive CanAccessMedia response at can_access_media")?
     }
 
-    // TODO -- move this to auth service, which can cache the second two results trivially
-    // and probably have a combined owner/view cache for the first
     async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
-        let (media_tx, media_rx) = tokio::sync::oneshot::channel();
+        let (tx, rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender.clone().send(
-            DbMsg::GetMedia {
-                resp: media_tx,
-                media_uuid: media_uuid.clone(),
-            }.into()
-        ).await.context("Failed to send GetMedia mesaage in owns_media")?;
+        self.auth_svc_sender
+            .clone()
+            .send(
+                AuthMsg::OwnsMedia {
+                    resp: tx,
+                    uid: uid.clone(),
+                    media_uuid: media_uuid.clone(),
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send CanAccessMedia message from owns_media")?;
 
-        let media = media_rx.await.context("Failed to receive GetMedia response in owns_media")??;
-
-        let (library_tx, library_rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender.clone().send(
-            DbMsg::GetLibary { resp: library_tx, uuid: media.library }.into()
-        ).await.context("Failed to send GetLibrary mesaage in owns_media")?;
-
-        let library = library_rx.await.context("Failed to receive GetLibrary response in owns_media")??;
-
-        let (group_tx, group_rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender.clone().send(
-            DbMsg::GetGroup { resp: group_tx, gid: library.group }.into()
-        ).await.context("Failed to send GetGroup mesaage in owns_media")?;
-
-        let group = group_rx.await.context("Failed to receive GetGroup response in owns_media")??;
-
-        Ok(group.members.contains(uid))
+        rx.await
+            .context("Failed to receive CanAccessMedia response at owns_media")?
     }
 
     // same for these two
@@ -108,7 +95,7 @@ impl HttpEndpoint {
         todo!()
     }
 
-    // this can likely be cached somehow
+    // this can likely be cached somehow -- move to Auth service since we can cache the group info
     async fn can_access_ticket(
         &self,
         user: &String,
@@ -269,7 +256,7 @@ async fn fallback(uri: Uri) -> StatusCode {
 async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(uuid): Path<u64>,
+    Path(uuid): Path<i64>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
 
@@ -283,7 +270,7 @@ async fn stream_media(
             AuthMsg::CanAccessMedia {
                 resp: tx,
                 uid: current_user.user.clone(),
-                uuid: uuid.clone(),
+                media_uuid: uuid.clone(),
             }
             .into(),
         )
@@ -343,7 +330,7 @@ async fn search_media(
         .await
         .context("Failed to receive SearchImage response")??;
 
-    Ok(Json(ImageSearchResp { images: result }).into_response())
+    Ok(Json(MediaSearchResp { media: result }).into_response())
 }
 
 // need to set up a query here to handle each use case
