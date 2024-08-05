@@ -2,16 +2,26 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::image::{search_images, ImageSearchReq, ImageSearchResp};
+use api::*;
+
+pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
+    let resp: SearchMediaResp = gloo_net::http::Request::post("/api/search/image")
+        .json(req)?
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(resp)
+}
 
 #[derive(Clone, PartialEq, Props)]
-pub struct ImageProps {
+pub struct MediaProps {
     uuid: String,
     url: String,
 }
 
 #[component]
-pub fn Image(props: ImageProps) -> Element {
+pub fn Media(props: MediaProps) -> Element {
     rsx! {
         div {
             height: "400px",
@@ -29,18 +39,18 @@ pub fn Image(props: ImageProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter: Signal<ImageSearchReq> = use_signal(|| ImageSearchReq {
+    let search_filter: Signal<SearchMediaReq> = use_signal(|| SearchMediaReq {
         filter: String::from(".*"),
     });
 
     // call to the api server
-    let matching_images: Resource<anyhow::Result<ImageSearchResp>> =
-        use_resource(move || async move { search_images(&search_filter()).await });
+    let matching_media: Resource<anyhow::Result<SearchMediaResp>> =
+        use_resource(move || async move { search_media(&search_filter()).await });
 
     // rebind to get around the issues with &*
-    let matching_images = &*matching_images.read();
+    let matching_media = &*matching_media.read();
 
-    let (images, status) = match matching_images {
+    let (media, status) = match matching_media {
         Some(Ok(matches)) => (Some(matches), "".to_owned()),
         Some(Err(err)) => (None, err.to_string()),
         None => (None, "still searching...".to_string()),
@@ -49,15 +59,15 @@ pub fn Gallery() -> Element {
     rsx! {
         GalleryNavBar { search_filter_signal: search_filter }
         div {
-            match images {
-                Some(images) => rsx! {
+            match media {
+                Some(media) => rsx! {
                     div {
                         display: "grid",
                         gap: "5px",
                         grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
 
-                        for (k, _) in images.images.iter() {
-                            Image { uuid: "{k}", url: "http://localhost:8081/api/thumbnails/{k}.jpg" }
+                        for m in media.media.iter() {
+                            Media { uuid: "{m}", url: "http://localhost:8081/api/thumbnails/{m}.jpg" }
                         }
                     }
 
@@ -70,7 +80,7 @@ pub fn Gallery() -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryNavBarProps {
-    search_filter_signal: Signal<ImageSearchReq>
+    search_filter_signal: Signal<SearchMediaReq>,
 }
 
 #[component]
@@ -119,7 +129,7 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                     r#type: "text",
                     value: "{search_filter}",
                     oninput: move |event| {
-                        signal.set(ImageSearchReq{filter: event.value()})
+                        signal.set(SearchMediaReq{filter: event.value()})
                     }
                 },
                 span { "Search History" },

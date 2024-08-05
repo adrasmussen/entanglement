@@ -59,13 +59,13 @@ impl ESAuthService for AuthCache {
         Ok(())
     }
 
-    async fn clear_access_cache(&self, media: Option<MediaUuid>) -> anyhow::Result<()> {
+    async fn clear_access_cache(&self, media_uuid: Option<MediaUuid>) -> anyhow::Result<()> {
         let access_cache = self.access_cache.clone();
 
         {
             let mut access_cache = access_cache.write().await;
 
-            match media {
+            match media_uuid {
                 Some(media) => {
                     access_cache.remove(&media);
                 }
@@ -102,7 +102,7 @@ impl ESAuthService for AuthCache {
             }
         }
 
-        let (tx, rx) = tokio::sync::oneshot::channel::<anyhow::Result<User>>();
+        let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.db_svc_sender
             .clone()
@@ -211,7 +211,7 @@ impl ESAuthService for AuthCache {
             .send(
                 DbMsg::GetLibary {
                     resp: library_tx,
-                    uuid: media.library,
+                    uuid: media.library_uuid,
                 }
                 .into(),
             )
@@ -222,25 +222,9 @@ impl ESAuthService for AuthCache {
             .await
             .context("Failed to receive GetLibrary response in owns_media")??;
 
-        let (group_tx, group_rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .clone()
-            .send(
-                DbMsg::GetGroup {
-                    resp: group_tx,
-                    gid: library.group,
-                }
-                .into(),
-            )
-            .await
-            .context("Failed to send GetGroup mesaage in owns_media")?;
-
-        let group = group_rx
-            .await
-            .context("Failed to receive GetGroup response in owns_media")??;
-
-        Ok(group.members.contains(&uid))
+        Ok(self
+            .is_group_member(uid, HashSet::from([library.group]))
+            .await?)
     }
 }
 
@@ -278,12 +262,19 @@ impl ESInner for AuthCache {
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }
-                AuthMsg::CanAccessMedia { resp, uid, media_uuid } => {
-                    self.respond(resp, self.can_access_media(uid, media_uuid)).await
+                AuthMsg::CanAccessMedia {
+                    resp,
+                    uid,
+                    media_uuid,
+                } => {
+                    self.respond(resp, self.can_access_media(uid, media_uuid))
+                        .await
                 }
-                AuthMsg::OwnsMedia { resp, uid, media_uuid } => {
-                    self.respond(resp, self.owns_media(uid, media_uuid)).await
-                }
+                AuthMsg::OwnsMedia {
+                    resp,
+                    uid,
+                    media_uuid,
+                } => self.respond(resp, self.owns_media(uid, media_uuid)).await,
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }

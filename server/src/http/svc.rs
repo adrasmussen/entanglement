@@ -35,7 +35,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{album::*, image::*, ticket::*, *};
+use api::{album::*, ticket::*, *};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -50,7 +50,6 @@ impl HttpEndpoint {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.auth_svc_sender
-            .clone()
             .send(
                 AuthMsg::CanAccessMedia {
                     resp: tx,
@@ -70,7 +69,6 @@ impl HttpEndpoint {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.auth_svc_sender
-            .clone()
             .send(
                 AuthMsg::OwnsMedia {
                     resp: tx,
@@ -104,7 +102,6 @@ impl HttpEndpoint {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         self.db_svc_sender
-            .clone()
             .send(
                 DbMsg::GetTicket {
                     resp: tx,
@@ -265,7 +262,6 @@ async fn stream_media(
 
     state
         .auth_svc_sender
-        .clone()
         .send(
             AuthMsg::CanAccessMedia {
                 resp: tx,
@@ -302,7 +298,7 @@ async fn stream_media(
 async fn search_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(json_body): Json<MediaSearchReq>,
+    Json(json_body): Json<SearchMediaReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
 
@@ -314,7 +310,6 @@ async fn search_media(
 
     state
         .db_svc_sender
-        .clone()
         .send(
             DbMsg::SearchMedia {
                 resp: tx,
@@ -330,7 +325,7 @@ async fn search_media(
         .await
         .context("Failed to receive SearchImage response")??;
 
-    Ok(Json(MediaSearchResp { media: result }).into_response())
+    Ok(Json(SearchMediaResp { media: result }).into_response())
 }
 
 // need to set up a query here to handle each use case
@@ -383,7 +378,6 @@ async fn query_album(
 
             state
                 .db_svc_sender
-                .clone()
                 .send(
                     DbMsg::CreateAlbum {
                         resp: tx,
@@ -434,7 +428,6 @@ async fn query_ticket(
 
             state
                 .db_svc_sender
-                .clone()
                 .send(
                     DbMsg::CreateTicket {
                         resp: tx,
@@ -471,7 +464,6 @@ async fn query_ticket(
 
             state
                 .db_svc_sender
-                .clone()
                 .send(
                     DbMsg::CreateComment {
                         resp: tx,
@@ -509,7 +501,6 @@ async fn query_ticket(
 
             state
                 .db_svc_sender
-                .clone()
                 .send(
                     DbMsg::GetTicket {
                         resp: tx,
@@ -533,7 +524,6 @@ async fn query_ticket(
 
             state
                 .db_svc_sender
-                .clone()
                 .send(
                     DbMsg::SearchTickets {
                         resp: tx,

@@ -34,7 +34,7 @@ trait ESAuthService: ESInner {
     // tickets that reference that media
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
 
-    // a user owns media if...?  naievely, if they own the library
+    // a user owns media if they are a member of a group that owns a library
     //
     // ownership allows adding media to albums and setting the hidden state
     //

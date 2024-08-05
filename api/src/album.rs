@@ -98,7 +98,6 @@ pub struct SearchAlbumsResp {
 pub struct SearchMediaInAlbumReq {
     pub album_uuid: AlbumUuid,
     pub filter: String,
-    pub media_type: HashSet<MediaType>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

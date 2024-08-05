@@ -4,16 +4,18 @@ use anyhow;
 
 use async_trait::async_trait;
 
-use crate::service::{ESInner, ESMResp, ESMSender};
+use api::library::*;
+
+use crate::fs::scan::ScanReport;
+use crate::service::*;
 
 pub mod msg;
+pub mod scan;
 pub mod svc;
 
 #[async_trait]
 pub trait ESFileService: ESInner {
-    async fn scan_library(&self, user: String) -> anyhow::Result<()>;
-
-    async fn rescan_file(&self, file: PathBuf) -> anyhow::Result<()>;
+    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<ScanReport>;
 
     async fn fix_symlinks(&self) -> anyhow::Result<()>;
 }

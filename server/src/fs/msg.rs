@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use api::library::*;
 
 use crate::service::ESMResp;
+use crate::fs::scan::ScanReport;
 
 #[derive(Debug)]
 pub enum FsMsg {
@@ -8,12 +9,8 @@ pub enum FsMsg {
         resp: ESMResp<()>
     },
     ScanLibrary {
-        resp: ESMResp<()>,
-        library: String,
-    },
-    RescanFile {
-        resp: ESMResp<()>,
-        file: PathBuf,
+        resp: ESMResp<ScanReport>,
+        library_uuid: LibraryUuid,
     },
     FixSymlinks {
         resp: ESMResp<()>,

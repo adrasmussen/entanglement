@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 pub mod album;
 pub mod user;
-pub mod image;
 pub mod library;
 pub mod ticket;
 pub mod group;
@@ -13,31 +12,13 @@ pub mod group;
 use album::AlbumUuid;
 use library::LibraryUuid;
 
-// pub async fn search_images(req: &ImageSearchReq) -> anyhow::Result<ImageSearchResp> {
-//     let resp: ImageSearchResp = Request::post("/api/search/image")
-//         .json(req)?
-//         .send()
-//         .await?
-//         .json()
-//         .await?;
-//     Ok(resp)
-// }
-
-
 // structs and types
 
 pub type MediaUuid = i64;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum MediaType {
-    Image(crate::image::Image),
-    Video,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Media {
-    pub media_type: MediaType,
-    pub library: LibraryUuid,
+    pub library_uuid: LibraryUuid,
     pub path: PathBuf,
     pub hidden: bool,
     pub metadata: MediaMetadata,
@@ -85,24 +66,23 @@ pub struct SetMediaHiddenResp {}
 
 // search media, optionally with a filter on type
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchReq {
+pub struct SearchMediaReq {
     pub filter: String,
-    pub media_type: HashSet<MediaType>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaSearchResp {
+pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
 }
 
 // reverse search and find all albums that contain
 // a particular media file
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaRevSearchForAlbumReq {
+pub struct RevSearchMediaForAlbumReq {
     pub media_uuid: MediaUuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MediaRevSearchForAlbumResp {
+pub struct RevSearchMediaForAlbumResp {
     pub albums: Vec<AlbumUuid>,
 }

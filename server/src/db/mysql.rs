@@ -25,21 +25,15 @@ impl ESDbService for MySQLState {
     // auth queries
     async fn media_access_groups(
         &self,
-        gid: String,
         media_uuid: MediaUuid,
     ) -> anyhow::Result<HashSet<String>> {
         todo!()
     }
-    // add a user to the various tables
-    //
-    // note that this does not sanity check the library location,
-    // and so we should probably standardize that somewhere
+
     async fn add_user(&self, user: User) -> anyhow::Result<()> {
         todo!()
     }
 
-    // get the details for a particular user, none of which are
-    // currently secret or otherwise restricted to just admins
     async fn get_user(&self, uid: String) -> anyhow::Result<User> {
         todo!()
     }
@@ -413,12 +407,11 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for add_library")?;
 
         let query = r"
-            INSERT INTO libraries (library_uuid, path, owner, group, file_count, last_scan)
+            INSERT INTO libraries (library_uuid, path, group, file_count, last_scan)
             OUTPUT INSERTED.library_uuid
             VALUES (UUID_SHORT(), :path, :owner, :group, :file_count, :last_scan)"
             .with(params! {
                 "path" => library.path,
-                "owner" => library.owner,
                 "group" => library.group,
                 "file_count" => library.file_count,
                 "last_scan" => library.last_scan
@@ -471,15 +464,14 @@ impl ESDbService for MySQLState {
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_library"))?;
 
-        let data: (String, String, String, i64, i64) =
+        let data: (String, String, i64, i64) =
             from_row_opt(row).context("Failed to convert row for get_library")?;
 
         Ok(Library {
             path: data.0,
-            owner: data.1,
-            group: data.2,
-            file_count: data.3,
-            last_scan: data.4,
+            group: data.1,
+            file_count: data.2,
+            last_scan: data.3,
         })
     }
 
