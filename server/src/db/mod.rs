@@ -114,16 +114,3 @@ trait ESDbService: ESInner {
         resolved: bool,
     ) -> anyhow::Result<Vec<TicketUuid>>;
 }
-
-// marker trait to allow specific implementations of the ESDbQuery
-trait ESDbConn {}
-
-#[async_trait]
-trait ESDbQuery<T: ESDbConn> {
-    type QueryOutput;
-
-    async fn result_stream(
-        self,
-        conn: T,
-    ) -> anyhow::Result<Option<impl TryStreamExt<Item = Result<Self::QueryOutput, impl Error>>>>;
-}

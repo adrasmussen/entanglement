@@ -1,4 +1,4 @@
-use api::library::*;
+use api::library::LibraryUuid;
 
 use crate::service::ESMResp;
 use crate::fs::scan::ScanReport;

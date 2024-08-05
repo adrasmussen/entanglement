@@ -534,7 +534,7 @@ async fn query_ticket(
                     .into(),
                 )
                 .await
-                .context("Failed to send SearchTickets message");
+                .context("Failed to send SearchTickets message")?;
 
             let result = rx
                 .await
