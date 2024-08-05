@@ -43,6 +43,8 @@ trait ESDbService: ESInner {
 
     async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Media>;
 
+    async fn get_media_by_path(&self, path: String) -> anyhow::Result<MediaUuid>;
+
     async fn update_media(
         &self,
         media_uuid: MediaUuid,

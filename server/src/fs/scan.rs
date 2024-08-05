@@ -89,6 +89,35 @@ pub async fn scan_directory(scan_info: Arc<ScanInfo>, dir_path: PathBuf) -> Resu
 
 // errors generated here are handled by scan_directory
 async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), ScanError> {
+    let pathstr = path.to_str().ok_or_else(|| ScanError {
+        path: path.clone(),
+        info: String::from("Failed to convert path to str"),
+    })?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    scan_info
+        .db_svc_sender
+        .send(
+            DbMsg::GetMediaByPath {
+                resp: tx,
+                path: pathstr.into(),
+            }
+            .into(),
+        )
+        .await
+        .map_err(|_| ScanError {
+            path: path.clone(),
+            info: String::from("Failed to send GetMediaByPath message from register_media"),
+        })?;
+
+    match rx.await        .map_err(|_| ScanError {
+        path: path.clone(),
+        info: String::from("Failed to receive GetMediaByPath response at register_media"),})? {
+            Ok(_) => return Ok(()),
+            Err(_) => {}
+        }
+
     let ext = path
         .extension()
         .ok_or_else(|| ScanError {

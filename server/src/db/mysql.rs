@@ -23,10 +23,7 @@ pub struct MySQLState {
 #[async_trait]
 impl ESDbService for MySQLState {
     // auth queries
-    async fn media_access_groups(
-        &self,
-        media_uuid: MediaUuid,
-    ) -> anyhow::Result<HashSet<String>> {
+    async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
         todo!()
     }
 
@@ -67,6 +64,10 @@ impl ESDbService for MySQLState {
     }
 
     async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Media> {
+        todo!()
+    }
+
+    async fn get_media_by_path(&self, path: String) -> anyhow::Result<MediaUuid> {
         todo!()
     }
 
@@ -736,10 +737,7 @@ impl ESInner for MySQLState {
         match esm {
             ESM::Db(message) => match message {
                 // auth messages
-                DbMsg::MediaAccessGroups {
-                    resp,
-                    media_uuid,
-                } => {
+                DbMsg::MediaAccessGroups { resp, media_uuid } => {
                     self.respond(resp, self.media_access_groups(media_uuid))
                         .await
                 }
@@ -760,6 +758,7 @@ impl ESInner for MySQLState {
                 DbMsg::GetMedia { resp, media_uuid } => {
                     self.respond(resp, self.get_media(media_uuid)).await
                 }
+                DbMsg::GetMediaByPath { resp, path } => self.respond(resp, self.get_media_by_path(path)).await,
                 DbMsg::UpdateMedia {
                     resp,
                     media_uuid,
