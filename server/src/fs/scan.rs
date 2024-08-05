@@ -9,7 +9,7 @@ use crate::db::msg::DbMsg;
 use crate::service::ESMSender;
 use api::{library::LibraryUuid, Media, MediaMetadata, MediaUuid};
 
-pub struct ScanInfo {
+pub struct ScanContext {
     pub scan_sender: tokio::sync::mpsc::Sender<Result<(), ScanError>>,
     pub db_svc_sender: ESMSender,
     pub library_uuid: LibraryUuid,
@@ -29,7 +29,7 @@ pub struct ScanReport {
 }
 
 #[async_recursion]
-pub async fn scan_directory(scan_info: Arc<ScanInfo>, dir_path: PathBuf) -> Result<(), ScanError> {
+pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -> Result<(), ScanError> {
     let mut joinset = tokio::task::JoinSet::new();
 
     let contents = match read_dir(dir_path.clone()) {
@@ -59,9 +59,11 @@ pub async fn scan_directory(scan_info: Arc<ScanInfo>, dir_path: PathBuf) -> Resu
         })?;
 
         if meta.is_dir() {
-            joinset.spawn(scan_directory(scan_info.clone(), path));
+            joinset.spawn(scan_directory(scan_context
+        .clone(), path));
         } else if meta.is_file() {
-            joinset.spawn(register_media(scan_info.clone(), path));
+            joinset.spawn(register_media(scan_context
+        .clone(), path));
         } else {
             return Err(ScanError {
                 path: path,
@@ -79,7 +81,8 @@ pub async fn scan_directory(scan_info: Arc<ScanInfo>, dir_path: PathBuf) -> Resu
                 })
             }
             Ok(res) => {
-                scan_info.scan_sender.send(res).await;
+                scan_context
+        .scan_sender.send(res).await;
             }
         }
     }
@@ -88,7 +91,7 @@ pub async fn scan_directory(scan_info: Arc<ScanInfo>, dir_path: PathBuf) -> Resu
 }
 
 // errors generated here are handled by scan_directory
-async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), ScanError> {
+async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result<(), ScanError> {
     let pathstr = path.to_str().ok_or_else(|| ScanError {
         path: path.clone(),
         info: String::from("Failed to convert path to str"),
@@ -96,10 +99,10 @@ async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), S
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    scan_info
+    scan_context
         .db_svc_sender
         .send(
-            DbMsg::GetMediaByPath {
+            DbMsg::GetMediaUuidByPath {
                 resp: tx,
                 path: pathstr.into(),
             }
@@ -111,12 +114,22 @@ async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), S
             info: String::from("Failed to send GetMediaByPath message from register_media"),
         })?;
 
-    match rx.await        .map_err(|_| ScanError {
-        path: path.clone(),
-        info: String::from("Failed to receive GetMediaByPath response at register_media"),})? {
-            Ok(_) => return Ok(()),
-            Err(_) => {}
-        }
+    match rx
+        .await
+        .map_err(|_| ScanError {
+            path: path.clone(),
+            info: String::from("Failed to receive GetMediaByPath response at register_media"),
+        })?
+        .map_err(|err| ScanError {
+            path: path.clone(),
+            info: format!(
+                "Failure when searching for media uuid in database: {}",
+                err.to_string()
+            ),
+        })? {
+        Some(_) => return Ok(()),
+        None => {}
+    }
 
     let ext = path
         .extension()
@@ -131,7 +144,8 @@ async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), S
         })?;
 
     let uuid: MediaUuid = match ext {
-        ".jpg" | ".png" | ".tiff" => register_image(scan_info.clone(), path.clone()).await?,
+        ".jpg" | ".png" | ".tiff" => register_image(scan_context
+    .clone(), path.clone()).await?,
         _ => {
             return Err(ScanError {
                 path: path.clone(),
@@ -142,7 +156,7 @@ async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), S
 
     // this should probably be another helper function so that the http server can easily
     // map uuid -> path without relying on magic numbers
-    let link = scan_info.media_linkdir.join(uuid.to_string());
+    let link = scan_context.media_linkdir.join(uuid.to_string());
 
     match symlink(path.clone(), link) {
         Ok(()) => Ok(()),
@@ -153,7 +167,7 @@ async fn register_media(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<(), S
     }
 }
 
-async fn register_image(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<i64, ScanError> {
+async fn register_image(scan_context: Arc<ScanContext>, path: PathBuf) -> Result<i64, ScanError> {
     use exif::{In, Reader, Tag};
 
     // following the exif docs, open the file synchronously and read from the container
@@ -180,7 +194,8 @@ async fn register_image(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<i64, 
     };
 
     let media = Media {
-        library_uuid: scan_info.library_uuid,
+        library_uuid: scan_context
+.library_uuid,
         path: path.clone(),
         hidden: false,
         metadata: MediaMetadata {
@@ -189,7 +204,7 @@ async fn register_image(scan_info: Arc<ScanInfo>, path: PathBuf) -> Result<i64, 
         },
     };
     let (tx, rx) = tokio::sync::oneshot::channel();
-    scan_info
+    scan_context
         .db_svc_sender
         .send(
             DbMsg::AddMedia {

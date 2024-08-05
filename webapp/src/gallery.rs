@@ -5,13 +5,17 @@ use dioxus::prelude::*;
 use api::*;
 
 pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
-    let resp: SearchMediaResp = gloo_net::http::Request::post("/api/search/image")
+    let resp = gloo_net::http::Request::post("/api/search/image")
         .json(req)?
         .send()
-        .await?
-        .json()
         .await?;
-    Ok(resp)
+
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
 }
 
 #[derive(Clone, PartialEq, Props)]

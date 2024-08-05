@@ -31,7 +31,7 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn get_user(&self, uid: String) -> anyhow::Result<User> {
+    async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>> {
         todo!()
     }
 
@@ -43,7 +43,7 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn get_group(&self, gid: String) -> anyhow::Result<Group> {
+    async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>> {
         todo!()
     }
 
@@ -63,11 +63,11 @@ impl ESDbService for MySQLState {
         todo!()
     }
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Media> {
+    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>> {
         todo!()
     }
 
-    async fn get_media_by_path(&self, path: String) -> anyhow::Result<MediaUuid> {
+    async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
         todo!()
     }
 
@@ -179,7 +179,7 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album> {
+    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
         let conn = self
             .pool
             .get_conn()
@@ -202,21 +202,22 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to collect get_album results")?;
 
-        let row = rows
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_album"))?;
+        let row = match rows.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
 
         let data: (String, String, String, String) =
             from_row_opt(row).context("Failed to convert row for get_album")?;
 
-        Ok(Album {
+        Ok(Some(Album {
             owner: data.0,
             group: data.1,
             metadata: AlbumMetadata {
                 name: data.2,
                 note: data.3,
             },
-        })
+        }))
     }
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
@@ -438,7 +439,7 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Library> {
+    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
         let conn = self
             .pool
             .get_conn()
@@ -461,19 +462,20 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to collect get_library results")?;
 
-        let row = rows
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_library"))?;
+        let row = match rows.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
 
         let data: (String, String, i64, i64) =
             from_row_opt(row).context("Failed to convert row for get_library")?;
 
-        Ok(Library {
+        Ok(Some(Library {
             path: data.0,
             group: data.1,
             file_count: data.2,
             last_scan: data.3,
-        })
+        }))
     }
 
     async fn search_media_in_library(
@@ -602,7 +604,7 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket> {
+    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>> {
         let conn = self
             .pool
             .get_conn()
@@ -626,9 +628,10 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to collect get_ticket ticket results")?;
 
-        let ticket_row = ticket_rows
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for get_ticket"))?;
+        let ticket_row = match ticket_rows.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
 
         let ticket_data: (MediaUuid, String, String, i64, bool) =
             from_row_opt(ticket_row).context("Failed to convert ticket row for get_ticket")?;
@@ -666,14 +669,14 @@ impl ESDbService for MySQLState {
             }
         }
 
-        Ok(Ticket {
+        Ok(Some(Ticket {
             media_uuid: ticket_data.0,
             owner: ticket_data.1,
             title: ticket_data.2,
             timestamp: ticket_data.3,
             resolved: ticket_data.4,
             comments: comment_data,
-        })
+        }))
     }
 
     async fn search_tickets(
@@ -758,7 +761,9 @@ impl ESInner for MySQLState {
                 DbMsg::GetMedia { resp, media_uuid } => {
                     self.respond(resp, self.get_media(media_uuid)).await
                 }
-                DbMsg::GetMediaByPath { resp, path } => self.respond(resp, self.get_media_by_path(path)).await,
+                DbMsg::GetMediaUuidByPath { resp, path } => {
+                    self.respond(resp, self.get_media_uuid_by_path(path)).await
+                }
                 DbMsg::UpdateMedia {
                     resp,
                     media_uuid,

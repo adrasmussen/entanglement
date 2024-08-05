@@ -21,7 +21,7 @@ pub enum DbMsg {
         user: User,
     },
     GetUser {
-        resp: ESMResp<User>,
+        resp: ESMResp<Option<User>>,
         uid: String,
     },
 
@@ -31,7 +31,7 @@ pub enum DbMsg {
         group: Group,
     },
     GetGroup {
-        resp: ESMResp<Group>,
+        resp: ESMResp<Option<Group>>,
         gid: String,
     },
     DeleteGroup {
@@ -55,11 +55,11 @@ pub enum DbMsg {
         media: Media,
     },
     GetMedia {
-        resp: ESMResp<Media>,
+        resp: ESMResp<Option<Media>>,
         media_uuid: MediaUuid,
     },
-    GetMediaByPath {
-        resp: ESMResp<MediaUuid>,
+    GetMediaUuidByPath {
+        resp: ESMResp<Option<MediaUuid>>,
         path: String,
     },
     UpdateMedia {
@@ -79,7 +79,7 @@ pub enum DbMsg {
         album: Album,
     },
     GetAlbum {
-        resp: ESMResp<Album>,
+        resp: ESMResp<Option<Album>>,
         album_uuid: AlbumUuid,
     },
     DeleteAlbum {
@@ -119,7 +119,7 @@ pub enum DbMsg {
         library: Library,
     },
     GetLibary {
-        resp: ESMResp<Library>,
+        resp: ESMResp<Option<Library>>,
         uuid: LibraryUuid,
     },
     // UpdateLibrary
@@ -141,7 +141,7 @@ pub enum DbMsg {
         comment: TicketComment,
     },
     GetTicket {
-        resp: ESMResp<Ticket>,
+        resp: ESMResp<Option<Ticket>>,
         ticket_uuid: TicketUuid,
     },
     SearchTickets {

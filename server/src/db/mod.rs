@@ -1,11 +1,8 @@
 use std::collections::HashSet;
-use std::error::Error;
 
 use anyhow;
 
 use async_trait::async_trait;
-
-use futures::TryStreamExt;
 
 use crate::service::ESInner;
 use api::{album::*, group::*, library::*, ticket::*, user::*, *};
@@ -24,13 +21,13 @@ trait ESDbService: ESInner {
 
     async fn add_user(&self, user: User) -> anyhow::Result<()>;
 
-    async fn get_user(&self, uid: String) -> anyhow::Result<User>;
+    async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>>;
 
     async fn delete_user(&self, uid: String) -> anyhow::Result<()>;
 
     async fn add_group(&self, group: Group) -> anyhow::Result<()>;
 
-    async fn get_group(&self, gid: String) -> anyhow::Result<Group>;
+    async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>>;
 
     async fn delete_group(&self, gid: String) -> anyhow::Result<()>;
 
@@ -41,9 +38,9 @@ trait ESDbService: ESInner {
     // media functions
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Media>;
+    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>>;
 
-    async fn get_media_by_path(&self, path: String) -> anyhow::Result<MediaUuid>;
+    async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>>;
 
     async fn update_media(
         &self,
@@ -66,7 +63,7 @@ trait ESDbService: ESInner {
     // album functions
     async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
 
-    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Album>;
+    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>>;
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()>;
 
@@ -92,7 +89,7 @@ trait ESDbService: ESInner {
     // library functions
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid>;
 
-    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Library>;
+    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>>;
 
     async fn search_media_in_library(
         &self,
@@ -107,7 +104,7 @@ trait ESDbService: ESInner {
 
     async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid>;
 
-    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Ticket>;
+    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>>;
 
     async fn search_tickets(
         &self,

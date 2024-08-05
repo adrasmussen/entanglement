@@ -9,14 +9,12 @@ use async_trait::async_trait;
 
 use tokio::sync::{Mutex, RwLock};
 
-use api::{user::User, MediaUuid};
-
-use crate::service::*;
+use api::MediaUuid;
 
 use crate::auth::ESAuthService;
 use crate::auth::{msg::AuthMsg, AuthType};
-
 use crate::db::msg::DbMsg;
+use crate::service::*;
 
 pub struct AuthCache {
     db_svc_sender: ESMSender,
@@ -112,9 +110,13 @@ impl ESAuthService for AuthCache {
 
         // this should fail if the user doesn't exist, so we are safe to add the user
         // to the cache after it returns
-        let user = rx
+        let user = match rx
             .await
-            .context("Fail to receive GetUser response at is_group_member")??;
+            .context("Failed to receive GetUser response at is_group_member")??
+        {
+            Some(result) => result,
+            None => return Ok(false),
+        };
 
         let groups = user.groups;
 
@@ -200,9 +202,13 @@ impl ESAuthService for AuthCache {
             .await
             .context("Failed to send GetMedia mesaage in owns_media")?;
 
-        let media = media_rx
+        let media = match media_rx
             .await
-            .context("Failed to receive GetMedia response in owns_media")??;
+            .context("Failed to receive GetMedia response in owns_media")??
+        {
+            Some(result) => result,
+            None => return Ok(false),
+        };
 
         let (library_tx, library_rx) = tokio::sync::oneshot::channel();
 
@@ -218,9 +224,13 @@ impl ESAuthService for AuthCache {
             .await
             .context("Failed to send GetLibrary mesaage in owns_media")?;
 
-        let library = library_rx
+        let library = match library_rx
             .await
-            .context("Failed to receive GetLibrary response in owns_media")??;
+            .context("Failed to receive GetLibrary response in owns_media")??
+        {
+            Some(result) => result,
+            None => return Ok(false),
+        };
 
         Ok(self
             .is_group_member(uid, HashSet::from([library.group]))

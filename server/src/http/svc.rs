@@ -112,11 +112,13 @@ impl HttpEndpoint {
             .await
             .context("Failed to send GetTicket from HttpEndpoint")?;
 
-        let ticket = rx
+        match rx
             .await
-            .context("Failed to receive GetTicket response at HttpEndpoint")??;
-
-        self.can_access_media(&user, &ticket.media_uuid).await
+            .context("Failed to receive GetTicket response at HttpEndpoint")??
+        {
+            Some(ticket) => self.can_access_media(&user, &ticket.media_uuid).await,
+            None => Ok(false),
+        }
     }
 }
 
@@ -511,9 +513,10 @@ async fn query_ticket(
                 .await
                 .context("Failed to send GetTicket message")?;
 
-            let result = rx.await.context("Failed to receive GetTicket response")??;
-
-            Ok(Json(GetTicketResp { ticket: result }).into_response())
+            match rx.await.context("Failed to receive GetTicket response")?? {
+                Some(result) => Ok(Json(GetTicketResp { ticket: result }).into_response()),
+                None => Ok(StatusCode::NOT_FOUND.into_response()),
+            }
         }
         TicketMessage::TicketSearch(msg) => {
             // auth

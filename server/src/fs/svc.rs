@@ -35,14 +35,17 @@ impl ESFileService for FileScanner {
 
         let library = library_rx
             .await
-            .context("Failed to receive GetLibrary response at scan_library")??;
+            .context("Failed to receive GetLibrary response at scan_library")??
+            .ok_or_else(|| {
+                anyhow::Error::msg(format!("Failed to find library {}", library_uuid.clone()))
+            })?;
 
         // then set up the scanner error collection loop
         let scan_count = Arc::new(Mutex::new(i64::from(0)));
         let scan_errors = Arc::new(Mutex::new(Vec::new()));
         let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel(1024);
 
-        let scan_info = Arc::new(ScanInfo {
+        let scan_info = Arc::new(ScanContext {
             scan_sender: scan_tx,
             library_uuid: library_uuid,
             db_svc_sender: self.db_svc_sender.clone(),
