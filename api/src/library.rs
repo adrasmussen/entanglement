@@ -10,6 +10,11 @@ pub type LibraryUuid = i64;
 pub struct Library {
     pub path: String,
     pub group: String,
+    pub metadata: LibraryMetadata
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryMetadata {
     pub file_count: i64,
     pub last_scan: i64,
 }

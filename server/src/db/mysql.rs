@@ -24,7 +24,43 @@ pub struct MySQLState {
 impl ESDbService for MySQLState {
     // auth queries
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
-        todo!()
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for media_access_groups")?;
+
+        // the first half of this query hinges on the hidden flag
+        let query = r"
+            (SELECT media_uuid FROM media WHERE (media_uuid = :media_uuid AND hidden = false)) AS t1
+            (SELECT album_uuid FROM (album_contents INNER JOIN t1 ON album_contents.media_uuid = t1.media_uuid)) AS media_albums
+            (SELECT group FROM FROM (media_albums INNER JOIN albums ON media_albums.album_uuid = albums.album_uuid)) AS album_groups
+
+            (SELECT library_uuid FROM media where media_uuid = :media_uuid) as t2
+            (SELECT group FROM (t2 INNER JOIN libraries ON t2.library_uuid = libraries.library_uuid)) as library_group
+
+            SELECT group from (library_group OUTER JOIN album_groups)"
+            .with(params! {
+                "media_uuid" => media_uuid,
+            });
+
+            let mut result = query
+            .run(conn)
+            .await
+            .context("Failed to run media_access_groups query")?;
+
+        let rows = result
+            .collect::<Row>()
+            .await
+            .context("Failed to collect media_access_groups results")?;
+
+        let data = rows
+            .into_iter()
+            .map(|row| from_row_opt::<String>(row))
+            .collect::<Result<HashSet<_>, FromRowError>>()
+            .context("Failed to convert gid row for media_access_groups")?;
+
+        Ok(data)
     }
 
     async fn add_user(&self, user: User) -> anyhow::Result<()> {
@@ -99,10 +135,11 @@ impl ESDbService for MySQLState {
     }
 
     async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()> {
+        // this needs to clear the cache
         todo!()
     }
 
-    async fn search_media(&self, user: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
+    async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
         let conn = self
             .pool
             .get_conn()
@@ -110,15 +147,15 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media")?;
 
         let query = r"
-            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
-            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
+            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
+            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) AS user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
 
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
                 WHERE (hidden = false)
                 AND (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
-                "user" => user,
+                "uid" => uid,
                 "filter" => filter,
             });
 
@@ -321,7 +358,7 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
-    async fn search_albums(&self, user: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
+    async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
         let conn = self
             .pool
             .get_conn()
@@ -329,11 +366,11 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_albums")?;
 
         let query = r"
-            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
+            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
             SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group)
                 WHERE (filter LIKE CONCAT_WS(' ', name, note)"
             .with(params! {
-                "user" => user,
+                "uid" => uid,
                 "filter" => filter,
             });
 
@@ -358,7 +395,7 @@ impl ESDbService for MySQLState {
 
     async fn search_media_in_album(
         &self,
-        user: String,
+        uid: String,
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
@@ -369,14 +406,14 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media_in_album")?;
 
         let query = r"
-            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
-            (SELECT :album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
+            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
+            (SELECT :album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) AS user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
 
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
                 WHERE (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
-                "user" => user,
+                "uid" => uid,
                 "album_uuid" => album_uuid,
                 "filter" => filter,
             });
@@ -415,8 +452,8 @@ impl ESDbService for MySQLState {
             .with(params! {
                 "path" => library.path,
                 "group" => library.group,
-                "file_count" => library.file_count,
-                "last_scan" => library.last_scan
+                "file_count" => library.metadata.file_count,
+                "last_scan" => library.metadata.last_scan
             });
 
         let mut result = query
@@ -473,14 +510,43 @@ impl ESDbService for MySQLState {
         Ok(Some(Library {
             path: data.0,
             group: data.1,
-            file_count: data.2,
-            last_scan: data.3,
+            metadata: LibraryMetadata {
+                file_count: data.2,
+                last_scan: data.3,
+            },
         }))
+    }
+
+    async fn update_library(
+        &self,
+        library_uuid: LibraryUuid,
+        change: LibraryMetadata,
+    ) -> anyhow::Result<()> {
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for update_library")?;
+
+        let query = r"
+            UPDATE libraries SET file_count = :file_count, last_scan = :last_scan WHERE library_uuid = :library_uuid"
+            .with(params! {
+                "file_count" => change.file_count,
+                "last_scan" => change.last_scan,
+                "library_uuid" => library_uuid,
+            });
+
+        query
+            .run(conn)
+            .await
+            .context("Failed to run update_libary query")?;
+
+        Ok(())
     }
 
     async fn search_media_in_library(
         &self,
-        user: String,
+        uid: String,
         library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
@@ -492,16 +558,16 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media_in_library")?;
 
         let query = r"
-            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
-            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) as user_media
+            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
+            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) AS user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
 
             SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
                 WHERE (library = :library_uuid)
                     AND (hidden = :hidden)
                     AND (filter LIKE CONCAT_WS(' ', date, note))"
             .with(params! {
-                "user" => user,
+                "uid" => uid,
                 "library_uuid" => library_uuid,
                 "hidden" => hidden,
                 "filter" => filter,
@@ -681,7 +747,7 @@ impl ESDbService for MySQLState {
 
     async fn search_tickets(
         &self,
-        user: String,
+        uid: String,
         filter: String,
         resolved: bool,
     ) -> anyhow::Result<Vec<TicketUuid>> {
@@ -692,15 +758,15 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_tickets")?;
 
         let query = r"
-            (SELECT gid FROM ((SELECT uid FROM users WHERE uid = :user) INNER JOIN group_membership)) as user_gids
-            (SELECT uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) as user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.uuid = album_contents.album_uuid) as user_media
+            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
+            (SELECT uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.group) AS user_albums
+            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.uuid = album_contents.album_uuid) AS user_media
 
             SELECT ticket_uuid FROM (user_media INNER JOIN tickets ON user_media.media_uuid = tickets.media_uuid)
                 WHERE (resolved = :resolved)
                     AND (filter LIKE text)"
             .with(params! {
-                "user" => user,
+                "uid" => uid,
                 "resolved" => resolved,
                 "filter" => filter,
             });
@@ -828,6 +894,7 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.add_library(library)).await
                 }
                 DbMsg::GetLibary { resp, uuid } => self.respond(resp, self.get_library(uuid)).await,
+                DbMsg::UpdateLibrary { resp, library_uuid, change } => self.respond(resp, self.update_library(library_uuid, change)).await,
                 DbMsg::SearchMediaInLibrary {
                     resp,
                     user,

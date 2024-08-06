@@ -65,6 +65,8 @@ pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -
             joinset.spawn(register_media(scan_context
         .clone(), path));
         } else {
+            // technically, this should be unreachable, but we want to cover the eventuality
+            // that the behavior of is_dir()/is_file() change
             return Err(ScanError {
                 path: path,
                 info: String::from("Failed to determine if path or dir"),
@@ -75,14 +77,23 @@ pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -
     while let Some(join_res) = joinset.join_next().await {
         match join_res {
             Err(err) => {
+                // this should also be unreachable, at least until we include logic to cancel
+                // running scans (or accidentally introduce a scan function that can panic)
                 return Err(ScanError {
                     path: dir_path.clone(),
                     info: format!("Failed to join process handle: {}", err.to_string()),
                 })
             }
-            Ok(res) => {
-                scan_context
-        .scan_sender.send(res).await;
+            Ok(res) => match scan_context.scan_sender.send(res).await {
+                Ok(()) => continue,
+                // this error is somewhat harder to deal with
+                //
+                // it should probably be replaced with an appropriate error log
+                Err(_) => return Err(ScanError {
+                    path: dir_path.clone(),
+                    info: String::from("Failed to send result to scan listener"),
+                })
+
             }
         }
     }

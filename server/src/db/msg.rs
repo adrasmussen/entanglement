@@ -122,7 +122,11 @@ pub enum DbMsg {
         resp: ESMResp<Option<Library>>,
         uuid: LibraryUuid,
     },
-    // UpdateLibrary
+    UpdateLibrary {
+        resp: ESMResp<()>,
+        library_uuid: LibraryUuid,
+        change: LibraryMetadata,
+    },
     SearchMediaInLibrary {
         resp: ESMResp<Vec<MediaUuid>>,
         user: String,
