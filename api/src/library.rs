@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::*;
 
@@ -9,8 +9,8 @@ pub type LibraryUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub path: String,
-    pub group: String,
-    pub metadata: LibraryMetadata
+    pub gid: String,
+    pub metadata: LibraryMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -21,12 +21,19 @@ pub struct LibraryMetadata {
 
 // messages
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum LibraryMessage {
+    GetLibary(GetLibraryReq),
+    SearchMediaInLibrary(SearchMediaInLibraryReq),
+}
+
 // get the details for a particular library
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetLibraryReq {
     pub library_uuid: LibraryUuid,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetLibaryResp {
     pub library: Library,
 }
@@ -36,6 +43,7 @@ pub struct GetLibaryResp {
 pub struct SearchMediaInLibraryReq {
     pub library_uuid: LibraryUuid,
     pub filter: String,
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

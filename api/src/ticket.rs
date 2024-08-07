@@ -12,7 +12,7 @@ pub type CommentUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ticket {
     pub media_uuid: MediaUuid,
-    pub owner: String,
+    pub uid: String,
     pub title: String,
     pub timestamp: i64,
     pub resolved: bool,
@@ -22,12 +22,20 @@ pub struct Ticket {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TicketComment {
     pub ticket_uuid: TicketUuid,
-    pub owner: String,
+    pub uid: String,
     pub text: String,
     pub timestamp: i64,
 }
 
 // messages
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum TicketMessage {
+    CreateTicket(CreateTicketReq),
+    CreateComment(CreateCommentReq),
+    GetTicket(GetTicketReq),
+    TicketSearch(SearchTicketsReq),
+}
 
 // creates a ticket
 #[derive(Clone, Debug, Serialize, Deserialize)]

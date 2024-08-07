@@ -24,9 +24,9 @@ impl ESFileService for FileScanner {
 
         self.db_svc_sender
             .send(
-                DbMsg::GetLibary {
+                DbMsg::GetLibrary {
                     resp: library_tx,
-                    uuid: library_uuid.clone(),
+                    library_uuid: library_uuid.clone(),
                 }
                 .into(),
             )

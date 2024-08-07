@@ -11,7 +11,7 @@ const PROXY_AUTH_HEADER: &str = "Proxy-User";
 // user auth information passed in from middleware to the axum extractors
 #[derive(Clone)]
 pub struct CurrentUser {
-    pub user: String,
+    pub uid: String,
 }
 
 pub async fn proxy_auth(mut req: Request, next: Next) -> Result<Response, StatusCode> {
@@ -27,7 +27,7 @@ pub async fn proxy_auth(mut req: Request, next: Next) -> Result<Response, Status
     };
 
     let user = CurrentUser {
-        user: auth_header.to_owned(),
+        uid: auth_header.to_owned(),
     };
 
     // if auth succeeds, pass CurrentUser as a request extension to handlers

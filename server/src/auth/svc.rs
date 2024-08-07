@@ -215,9 +215,9 @@ impl ESAuthService for AuthCache {
         self.db_svc_sender
             .clone()
             .send(
-                DbMsg::GetLibary {
+                DbMsg::GetLibrary {
                     resp: library_tx,
-                    uuid: media.library_uuid,
+                    library_uuid: media.library_uuid,
                 }
                 .into(),
             )
@@ -233,7 +233,7 @@ impl ESAuthService for AuthCache {
         };
 
         Ok(self
-            .is_group_member(uid, HashSet::from([library.group]))
+            .is_group_member(uid, HashSet::from([library.gid]))
             .await?)
     }
 }

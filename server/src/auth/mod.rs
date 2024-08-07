@@ -9,6 +9,10 @@ use crate::service::*;
 pub mod msg;
 pub mod svc;
 
+pub fn get_admin_groups() -> HashSet<String> {
+    HashSet::from([String::from("admins")])
+}
+
 #[derive(Debug)]
 pub enum AuthType {
     ProxyHeader,

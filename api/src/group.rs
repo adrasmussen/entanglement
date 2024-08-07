@@ -12,12 +12,55 @@ pub struct Group {
 
 // messages
 
-// add group
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GroupMessage {
+    CreateGroup(CreateGroupReq),
+    GetGroup(GetGroupReq),
+    DeleteGroup(DeleteGroupReq),
+    AddUserToGroup(AddUserToGroupReq),
+    RmUserFromGroup(RmUserFromGroupReq),
+}
 
-// delete group
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateGroupReq {
+    pub group: Group,
+}
 
-// get group
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateGroupResp {}
 
-// add user to group
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetGroupReq {
+    pub gid: String
+}
 
-// remove user from group
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetGroupResp {
+    pub group: Group,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteGroupReq {
+    pub gid: String
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteGroupResp {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddUserToGroupReq {
+    pub uid: String,
+    pub gid: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddUserToGroupResp {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RmUserFromGroupReq {
+    pub uid: String,
+    pub gid: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RmUserFromGroupResp {}

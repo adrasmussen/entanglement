@@ -26,7 +26,7 @@ pub enum DbMsg {
     },
 
     // group messages
-    AddGroup {
+    CreateGroup {
         resp: ESMResp<()>,
         group: Group,
     },
@@ -69,7 +69,7 @@ pub enum DbMsg {
     },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
-        user: String,
+        uid: String,
         filter: String,
     },
 
@@ -118,9 +118,9 @@ pub enum DbMsg {
         resp: ESMResp<LibraryUuid>,
         library: Library,
     },
-    GetLibary {
+    GetLibrary {
         resp: ESMResp<Option<Library>>,
-        uuid: LibraryUuid,
+        library_uuid: LibraryUuid,
     },
     UpdateLibrary {
         resp: ESMResp<()>,
@@ -129,8 +129,8 @@ pub enum DbMsg {
     },
     SearchMediaInLibrary {
         resp: ESMResp<Vec<MediaUuid>>,
-        user: String,
-        uuid: LibraryUuid,
+        uid: String,
+        library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
     },

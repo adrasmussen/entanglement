@@ -8,8 +8,8 @@ pub type AlbumUuid = u64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Album {
-    pub owner: String,
-    pub group: String,
+    pub uid: String,
+    pub gid: String,
     pub metadata: AlbumMetadata,
 }
 
@@ -20,6 +20,18 @@ pub struct AlbumMetadata {
 }
 
 // messages
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AlbumMessage {
+    CreateAlbum(CreateAlbumReq),
+    GetAlbum(GetAlbumReq),
+    DeleteAlbum(DeleteAlbumReq),
+    UpdateAlbum(UpdateAlbumReq),
+    AddMediaToAlbum(AddMediaToAlbumReq),
+    RmMediaFromAlbum(RmMediaFromAlbumReq),
+    SearchAlbums(SearchAlbumsReq),
+    SearchMediaInAlbum(SearchMediaInAlbumReq),
+}
 
 // create a new album
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,7 +67,7 @@ pub struct DeleteAlbumResp {}
 // change album properties
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateAlbumReq {
-    pub uuid: AlbumUuid,
+    pub album_uuid: AlbumUuid,
     pub metadata: AlbumMetadata,
 }
 
