@@ -7,7 +7,10 @@ use async_recursion::async_recursion;
 
 use crate::db::msg::DbMsg;
 use crate::service::ESMSender;
-use api::{library::LibraryUuid, Media, MediaMetadata, MediaUuid};
+use api::{
+    library::LibraryUuid,
+    media::{Media, MediaMetadata, MediaUuid},
+};
 
 pub struct ScanContext {
     pub scan_sender: tokio::sync::mpsc::Sender<Result<(), ScanError>>,
@@ -29,7 +32,10 @@ pub struct ScanReport {
 }
 
 #[async_recursion]
-pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -> Result<(), ScanError> {
+pub async fn scan_directory(
+    scan_context: Arc<ScanContext>,
+    dir_path: PathBuf,
+) -> Result<(), ScanError> {
     let mut joinset = tokio::task::JoinSet::new();
 
     let contents = match read_dir(dir_path.clone()) {
@@ -59,11 +65,9 @@ pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -
         })?;
 
         if meta.is_dir() {
-            joinset.spawn(scan_directory(scan_context
-        .clone(), path));
+            joinset.spawn(scan_directory(scan_context.clone(), path));
         } else if meta.is_file() {
-            joinset.spawn(register_media(scan_context
-        .clone(), path));
+            joinset.spawn(register_media(scan_context.clone(), path));
         } else {
             // technically, this should be unreachable, but we want to cover the eventuality
             // that the behavior of is_dir()/is_file() change
@@ -82,19 +86,20 @@ pub async fn scan_directory(scan_context: Arc<ScanContext>, dir_path: PathBuf) -
                 return Err(ScanError {
                     path: dir_path.clone(),
                     info: format!("Failed to join process handle: {}", err.to_string()),
-                })
+                });
             }
             Ok(res) => match scan_context.scan_sender.send(res).await {
                 Ok(()) => continue,
                 // this error is somewhat harder to deal with
                 //
                 // it should probably be replaced with an appropriate error log
-                Err(_) => return Err(ScanError {
-                    path: dir_path.clone(),
-                    info: String::from("Failed to send result to scan listener"),
-                })
-
-            }
+                Err(_) => {
+                    return Err(ScanError {
+                        path: dir_path.clone(),
+                        info: String::from("Failed to send result to scan listener"),
+                    })
+                }
+            },
         }
     }
 
@@ -155,8 +160,7 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
         })?;
 
     let uuid: MediaUuid = match ext {
-        ".jpg" | ".png" | ".tiff" => register_image(scan_context
-    .clone(), path.clone()).await?,
+        ".jpg" | ".png" | ".tiff" => register_image(scan_context.clone(), path.clone()).await?,
         _ => {
             return Err(ScanError {
                 path: path.clone(),
@@ -205,8 +209,7 @@ async fn register_image(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
     };
 
     let media = Media {
-        library_uuid: scan_context
-.library_uuid,
+        library_uuid: scan_context.library_uuid,
         path: path.clone(),
         hidden: false,
         metadata: MediaMetadata {

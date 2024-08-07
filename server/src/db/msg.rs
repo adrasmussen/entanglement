@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, group::*, library::*, ticket::*, user::*, *};
+use api::{album::*, group::*, library::*, ticket::*, user::*, media::*};
 
 use crate::service::*;
 

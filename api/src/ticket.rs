@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::MediaUuid;
+use crate::media::MediaUuid;
 
 // structs and types
 

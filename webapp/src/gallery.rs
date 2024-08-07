@@ -2,7 +2,7 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use api::*;
+use api::media::*;
 
 pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
     let resp = gloo_net::http::Request::post("/api/search/image")

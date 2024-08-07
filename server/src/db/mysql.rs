@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{album::*, group::*, library::*, ticket::*, user::*, *};
+use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
 
 pub struct MySQLState {
     pool: Pool,
@@ -815,7 +815,9 @@ impl ESInner for MySQLState {
                 }
                 DbMsg::AddUser { resp, user } => self.respond(resp, self.add_user(user)).await,
                 DbMsg::GetUser { resp, uid } => self.respond(resp, self.get_user(uid)).await,
-                DbMsg::CreateGroup { resp, group } => self.respond(resp, self.add_group(group)).await,
+                DbMsg::CreateGroup { resp, group } => {
+                    self.respond(resp, self.add_group(group)).await
+                }
                 DbMsg::GetGroup { resp, gid } => self.respond(resp, self.get_group(gid)).await,
                 DbMsg::DeleteGroup { resp, gid } => {
                     self.respond(resp, self.delete_group(gid)).await
@@ -842,7 +844,7 @@ impl ESInner for MySQLState {
                         .await
                 }
                 DbMsg::SearchMedia { resp, uid, filter } => {
-                    self.respond(resp, self.search_media(user, filter)).await
+                    self.respond(resp, self.search_media(uid, filter)).await
                 }
 
                 // album messages

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, *};
+use api::media::MediaUuid;
 
 use crate::auth::AuthType;
 use crate::service::*;

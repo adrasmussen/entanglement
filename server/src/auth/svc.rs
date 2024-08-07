@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 use tokio::sync::{Mutex, RwLock};
 
-use api::MediaUuid;
+use api::media::MediaUuid;
 
 use crate::auth::ESAuthService;
 use crate::auth::{msg::AuthMsg, AuthType};

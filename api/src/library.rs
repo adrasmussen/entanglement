@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::*;
+use crate::media::MediaUuid;
 
 // structs and types
 

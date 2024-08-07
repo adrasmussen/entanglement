@@ -33,7 +33,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{album::*, group::*, library::*, ticket::*, *};
+use api::{album::*, group::*, library::*, ticket::*, media::*};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
