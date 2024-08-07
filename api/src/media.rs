@@ -25,6 +25,15 @@ pub struct MediaMetadata {
 
 // messages
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MediaMessage {
+    GetMedia(GetMediaReq),
+    UpdateMedia(UpdateMediaReq),
+    SetMediaHidden(SetMediaHiddenReq),
+    SearchMedia(SearchMediaReq),
+    RevSearchMediaForAlbum(RevSearchMediaForAlbumReq),
+}
+
 // fetch the media information for a particular file
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMediaReq {

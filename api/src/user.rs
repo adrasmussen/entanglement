@@ -19,15 +19,18 @@ pub struct UserSettings {
 
 // messages
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum UserMessage {
+    CreateUser(CreateUserReq),
+}
+
 // add a new user
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AddUserReq {
+pub struct CreateUserReq {
     user: User,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AddUserResp {
-    resp: String,
-}
+pub struct CreateUserResp {}
 
 // get user

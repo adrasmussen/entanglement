@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use anyhow::{self, Context};
 
+use api::user::UserMessage;
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
 
 use axum::{
-    extract::{Extension, Json, Path, Query, Request, State},
+    extract::{Extension, Json, Path, Request, State},
     http::{StatusCode, Uri},
     middleware,
     response::{IntoResponse, Response},
@@ -33,7 +34,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{album::*, group::*, library::*, ticket::*, media::*};
+use api::{album::*, group::*, library::*, media::*, ticket::*};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -62,6 +63,7 @@ impl HttpEndpoint {
         rx.await
             .context("Failed to receive IsGroupMember response at is_group_member")?
     }
+
     async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -100,7 +102,6 @@ impl HttpEndpoint {
             .context("Failed to receive CanAccessMedia response at owns_media")?
     }
 
-    // same for these two
     async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -120,9 +121,7 @@ impl HttpEndpoint {
             .context("Failed to receive GetAlbum response at can_access_album")??
             .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
 
-        Ok(self
-            .is_group_member(&uid, HashSet::from([album.gid]))
-            .await?)
+        self.is_group_member(&uid, HashSet::from([album.gid])).await
     }
 
     async fn owns_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
@@ -147,7 +146,6 @@ impl HttpEndpoint {
         Ok(uid.to_owned() == album.uid)
     }
 
-    // same for these two
     async fn can_access_library(
         &self,
         uid: &String,
@@ -171,12 +169,10 @@ impl HttpEndpoint {
             .context("Failed to receive GetLibrary response at can_access_library")??
             .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
 
-        Ok(self
-            .is_group_member(&uid, HashSet::from([library.gid]))
-            .await?)
+        self.is_group_member(&uid, HashSet::from([library.gid]))
+            .await
     }
 
-    // this can likely be cached somehow -- move to Auth service since we can cache the group info
     async fn can_access_ticket(
         &self,
         uid: &String,
@@ -195,13 +191,12 @@ impl HttpEndpoint {
             .await
             .context("Failed to send GetTicket from HttpEndpoint")?;
 
-        match rx
+        let ticket = rx
             .await
             .context("Failed to receive GetTicket response at HttpEndpoint")??
-        {
-            Some(ticket) => self.can_access_media(&uid, &ticket.media_uuid).await,
-            None => Ok(false),
-        }
+            .ok_or_else(|| anyhow::Error::msg("unknown ticket_uuid"))?;
+
+        self.can_access_media(&uid, &ticket.media_uuid).await
     }
 }
 
@@ -369,9 +364,17 @@ async fn stream_media(
 async fn query_user(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Query(query): Query<(String)>,
-) -> Response {
-    StatusCode::IM_A_TEAPOT.into_response()
+    Json(message): Json<UserMessage>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+
+    let uid = current_user.uid.clone();
+
+    match message {
+        UserMessage::CreateUser(msg) => {
+            todo!()
+        }
+    }
 }
 
 async fn query_group(
@@ -537,9 +540,29 @@ async fn query_group(
 async fn query_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Query(query): Query<(String)>,
+    Json(message): Json<MediaMessage>,
 ) -> Response {
-    StatusCode::IM_A_TEAPOT.into_response()
+    let state = state.clone();
+
+    let uid = current_user.uid.clone();
+
+    match message {
+        MediaMessage::GetMedia(msg) => {
+            todo!()
+        }
+        MediaMessage::UpdateMedia(msg) => {
+            todo!()
+        }
+        MediaMessage::SetMediaHidden(msg) => {
+            todo!()
+        }
+        MediaMessage::SearchMedia(msg) => {
+            todo!()
+        }
+        MediaMessage::RevSearchMediaForAlbum(msg) => {
+            todo!()
+        }
+    }
 }
 
 async fn query_album(
