@@ -27,7 +27,7 @@ pub enum UserMessage {
 // add a new user
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateUserReq {
-    user: User,
+    pub user: User,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{self, Context};
 
-use api::user::UserMessage;
+use api::user::{CreateUserResp, UserMessage};
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -372,7 +372,20 @@ async fn query_user(
 
     match message {
         UserMessage::CreateUser(msg) => {
-            todo!()
+            // auth
+            //
+            // admins can create users
+            if !state.is_group_member(&uid, get_admin_groups()).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state.db_svc_sender.send(DbMsg::CreateUser { resp: tx, user: msg.user }.into()).await.context("Failed to send CreateUser message")?;
+
+            rx.await.context("Failed to receive CreateUser response")??;
+
+            Ok(Json(CreateUserResp {}).into_response())
         }
     }
 }

@@ -16,7 +16,7 @@ pub enum DbMsg {
     },
 
     // user messages
-    AddUser {
+    CreateUser {
         resp: ESMResp<()>,
         user: User,
     },

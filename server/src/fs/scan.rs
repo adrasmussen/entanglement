@@ -159,7 +159,7 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             info: String::from("Failed to convert file extension"),
         })?;
 
-    let uuid: MediaUuid = match ext {
+    let media_uuid: MediaUuid = match ext {
         ".jpg" | ".png" | ".tiff" => register_image(scan_context.clone(), path.clone()).await?,
         _ => {
             return Err(ScanError {
@@ -171,7 +171,7 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
 
     // this should probably be another helper function so that the http server can easily
     // map uuid -> path without relying on magic numbers
-    let link = scan_context.media_linkdir.join(uuid.to_string());
+    let link = scan_context.media_linkdir.join(media_uuid.to_string());
 
     match symlink(path.clone(), link) {
         Ok(()) => Ok(()),
@@ -217,7 +217,9 @@ async fn register_image(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             note: String::from(""),
         },
     };
+
     let (tx, rx) = tokio::sync::oneshot::channel();
+
     scan_context
         .db_svc_sender
         .send(
@@ -233,7 +235,7 @@ async fn register_image(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             info: String::from("Failed to send AddMedia message from register_image"),
         })?;
 
-    let uuid = rx
+    let media_uuid = rx
         .await
         .map_err(|_| ScanError {
             path: path.clone(),
@@ -244,5 +246,5 @@ async fn register_image(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             info: format!("Failure when adding media to database: {}", err.to_string()),
         })?;
 
-    Ok(uuid)
+    Ok(media_uuid)
 }

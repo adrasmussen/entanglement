@@ -21,7 +21,6 @@ pub enum AuthMsg {
         uid: String,
         password: String,
     },
-    // this likely does not need to be a message -- almost nothing would ever construct it
     IsGroupMember {
         resp: ESMResp<bool>,
         uid: String,
@@ -37,19 +36,6 @@ pub enum AuthMsg {
         uid: String,
         media_uuid: MediaUuid,
     },
-    // CanAccessAlbum {
-    //     resp: ESMResp<bool>,
-    //     uid: String,
-    //     album_uuid: AlbumUuid,
-    // },
-    // OwnsAlbum {
-    //     resp: ESMResp<bool>,
-    //     uid: String,
-    //     album_uuid: AlbumUuid,
-    // },
-    // CanAccessTicket
-    // OwnsTicket
-    // OwnsComment
 }
 
 impl From<AuthMsg> for ESM {
