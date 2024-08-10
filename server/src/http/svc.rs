@@ -381,9 +381,20 @@ async fn query_user(
 
             let (tx, rx) = tokio::sync::oneshot::channel();
 
-            state.db_svc_sender.send(DbMsg::CreateUser { resp: tx, user: msg.user }.into()).await.context("Failed to send CreateUser message")?;
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::CreateUser {
+                        resp: tx,
+                        user: msg.user,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send CreateUser message")?;
 
-            rx.await.context("Failed to receive CreateUser response")??;
+            rx.await
+                .context("Failed to receive CreateUser response")??;
 
             Ok(Json(CreateUserResp {}).into_response())
         }
@@ -554,26 +565,118 @@ async fn query_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<MediaMessage>,
-) -> Response {
+) -> Result<Response, AppError> {
     let state = state.clone();
 
     let uid = current_user.uid.clone();
 
     match message {
         MediaMessage::GetMedia(msg) => {
-            todo!()
+            // auth
+            if !state.can_access_media(&uid, &msg.media_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::GetMedia {
+                        resp: tx,
+                        media_uuid: msg.media_uuid,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send GetMedia message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive GetMedia response")??
+                .ok_or_else(|| anyhow::Error::msg("unknown media_uuid"))?;
+
+            Ok(Json(GetMediaResp { media: result }).into_response())
         }
         MediaMessage::UpdateMedia(msg) => {
-            todo!()
+            // auth
+            if !state.owns_media(&uid, &msg.media_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::UpdateMedia {
+                        resp: tx,
+                        media_uuid: msg.media_uuid,
+                        change: msg.change,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send UpdateMedia message")?;
+
+            rx.await
+                .context("Failed to receive UpdateMedia response")??;
+
+            Ok(Json(UpdateMediaResp {}).into_response())
         }
         MediaMessage::SetMediaHidden(msg) => {
-            todo!()
+            // auth
+            if !state.owns_media(&uid, &msg.media_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SetMediaHidden {
+                        resp: tx,
+                        media_uuid: msg.media_uuid,
+                        hidden: msg.hidden,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send UpdateMedia message")?;
+
+            rx.await
+                .context("Failed to receive UpdateMedia response")??;
+
+            Ok(Json(SetMediaHiddenResp {}).into_response())
         }
         MediaMessage::SearchMedia(msg) => {
-            todo!()
+            // auth
+            //
+            // handled as part of search query
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SearchMedia {
+                        resp: tx,
+                        uid: uid,
+                        filter: msg.filter,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send SearchMedia message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive SearchMedia message")??;
+
+            Ok(Json(SearchMediaResp { media: result }).into_response())
         }
         MediaMessage::RevSearchMediaForAlbum(msg) => {
-            todo!()
+            Err(anyhow::Error::msg("not implemented").into())
         }
     }
 }

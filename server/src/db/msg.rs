@@ -67,6 +67,11 @@ pub enum DbMsg {
         media_uuid: MediaUuid,
         change: MediaMetadata,
     },
+    SetMediaHidden {
+        resp: ESMResp<()>,
+        media_uuid: MediaUuid,
+        hidden: bool,
+    },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,

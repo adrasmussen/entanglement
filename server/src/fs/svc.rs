@@ -6,10 +6,13 @@ use anyhow::{self, Context};
 
 use async_trait::async_trait;
 
+use chrono::offset::Local;
+
 use tokio::sync::Mutex;
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, *};
+use api::library::LibraryMetadata;
 
 pub struct FileScanner {
     db_svc_sender: ESMSender,
@@ -80,6 +83,25 @@ impl ESFileService for FileScanner {
 
         let scan_count = scan_count.lock().await;
         let scan_errors = scan_errors.lock().await;
+
+        let (update_tx, update_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .send(
+                DbMsg::UpdateLibrary {
+                    resp: update_tx,
+                    library_uuid: library_uuid.clone(),
+                    change: LibraryMetadata {
+                        file_count: scan_count.clone(),
+                        last_scan: Local::now().timestamp(),
+                    },
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send UpdateLibrary message from scan_library")?;
+
+        update_rx.await.context("Failed to receive UpdateLibrary response at scan_library")??;
 
         Ok(ScanReport {
             count: scan_count.clone(),

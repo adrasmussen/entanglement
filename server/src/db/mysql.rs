@@ -828,6 +828,8 @@ impl ESInner for MySQLState {
                 DbMsg::RmUserFromGroup { resp, uid, gid } => {
                     self.respond(resp, self.rm_user_from_group(uid, gid)).await
                 }
+
+                // media messages
                 DbMsg::AddMedia { resp, media } => self.respond(resp, self.add_media(media)).await,
                 DbMsg::GetMedia { resp, media_uuid } => {
                     self.respond(resp, self.get_media(media_uuid)).await
@@ -841,6 +843,14 @@ impl ESInner for MySQLState {
                     change,
                 } => {
                     self.respond(resp, self.update_media(media_uuid, change))
+                        .await
+                }
+                DbMsg::SetMediaHidden {
+                    resp,
+                    media_uuid,
+                    hidden,
+                } => {
+                    self.respond(resp, self.set_media_hidden(media_uuid, hidden))
                         .await
                 }
                 DbMsg::SearchMedia { resp, uid, filter } => {
