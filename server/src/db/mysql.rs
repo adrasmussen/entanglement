@@ -1219,6 +1219,7 @@ impl ESInner for MySQLState {
                     metadata,
                 } => self.respond(resp, self.create_user(uid, metadata)).await,
                 DbMsg::GetUser { resp, uid } => self.respond(resp, self.get_user(uid)).await,
+                DbMsg::DeleteUser { resp, uid } => self.respond(resp, self.delete_user(uid)).await,
                 DbMsg::CreateGroup {
                     resp,
                     gid,

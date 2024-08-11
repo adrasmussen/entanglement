@@ -22,6 +22,10 @@ pub enum DbMsg {
         resp: ESMResp<Option<User>>,
         uid: String,
     },
+    DeleteUser {
+        resp: ESMResp<()>,
+        uid: String,
+    },
 
     // group messages
     CreateGroup {

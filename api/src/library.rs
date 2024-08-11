@@ -23,8 +23,20 @@ pub struct LibraryMetadata {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LibraryMessage {
+    AddLibrary(AddLibraryReq),
     GetLibary(GetLibraryReq),
     SearchMediaInLibrary(SearchMediaInLibraryReq),
+}
+
+// attach a library to the database
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddLibraryReq {
+    pub library: Library,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AddLibaryResp {
+    pub library_uuid: LibraryUuid,
 }
 
 // get the details for a particular library

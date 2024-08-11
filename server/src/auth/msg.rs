@@ -15,7 +15,7 @@ pub enum AuthMsg {
         resp: ESMResp<()>,
         uuid: Vec<MediaUuid>,
     },
-    IsValidUser {
+    _IsValidUser {
         resp: ESMResp<bool>,
         auth_type: AuthType,
         uid: String,

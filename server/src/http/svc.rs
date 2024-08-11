@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use anyhow::{self, Context};
 
-use api::user::{CreateUserResp, UserMessage};
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -34,7 +33,7 @@ use crate::http::{
     AppError,
 };
 use crate::service::*;
-use api::{album::*, group::*, library::*, media::*, ticket::*};
+use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
@@ -399,6 +398,56 @@ async fn query_user(
 
             Ok(Json(CreateUserResp {}).into_response())
         }
+        UserMessage::GetUser(msg) => {
+            // auth
+            //
+            // admins and self can inspect users
+            if !(uid == msg.uid) && !state.is_group_member(&uid, get_admin_groups()).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::GetUser {
+                        resp: tx,
+                        uid: msg.uid,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send GetUser message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive GetUser response")??
+                .ok_or_else(|| anyhow::Error::msg("unknown uid"))?;
+
+            Ok(Json(GetUserResp { user: result }).into_response())
+        }
+        UserMessage::DeleteUser(msg) => {
+            // auth
+            //
+            // admins may delete users
+            if !state.is_group_member(&uid, get_admin_groups()).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(DbMsg::DeleteUser { resp: tx, uid: msg.uid }.into())
+                .await
+                .context("Failed to send DeleteUser message")?;
+
+            rx.await
+                .context("Failed to receive DeleteUser response")??;
+
+            Ok(Json(DeleteUserResp {}).into_response())
+        }
     }
 }
 
@@ -745,8 +794,10 @@ async fn query_album(
         AlbumMessage::DeleteAlbum(msg) => {
             // auth
             //
-            // the album owner may delete an album
-            if !state.owns_album(&uid, &msg.album_uuid).await? {
+            // the album owner (and admins) may delete an album
+            if !state.owns_album(&uid, &msg.album_uuid).await?
+                && !state.is_group_member(&uid, get_admin_groups()).await?
+            {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
 
@@ -924,6 +975,34 @@ async fn query_library(
     let uid = current_user.uid.clone();
 
     match message {
+        LibraryMessage::AddLibrary(msg) => {
+            if !state.is_group_member(&uid, get_admin_groups()).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::AddLibrary {
+                        resp: tx,
+                        library: msg.library,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send AddLibrary message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive AddLibrary response")??;
+
+            Ok(Json(AddLibaryResp {
+                library_uuid: result,
+            })
+            .into_response())
+        }
         LibraryMessage::GetLibary(msg) => {
             // auth
             //

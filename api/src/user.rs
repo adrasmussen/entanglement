@@ -19,6 +19,8 @@ pub struct UserMetadata {}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum UserMessage {
     CreateUser(CreateUserReq),
+    GetUser(GetUserReq),
+    DeleteUser(DeleteUserReq),
 }
 
 // add a new user
@@ -32,3 +34,21 @@ pub struct CreateUserReq {
 pub struct CreateUserResp {}
 
 // get user
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetUserReq {
+    pub uid: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetUserResp {
+    pub user: User,
+}
+
+// delete user
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteUserReq {
+    pub uid: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteUserResp {}

@@ -85,8 +85,8 @@ impl ESAuthService for AuthCache {
         _password: String,
     ) -> anyhow::Result<bool> {
         match auth_type {
-            AuthType::ProxyHeader => Ok(true),
-            AuthType::LDAP => Err(anyhow::Error::msg("ldap auth not implemented")),
+            AuthType::_ProxyHeader => Ok(true),
+            AuthType::_LDAP => Err(anyhow::Error::msg("ldap auth not implemented")),
         }
     }
 
@@ -262,7 +262,7 @@ impl ESInner for AuthCache {
                 AuthMsg::ClearAccessCache { resp, uuid } => {
                     self.respond(resp, self.clear_access_cache(uuid)).await
                 }
-                AuthMsg::IsValidUser {
+                AuthMsg::_IsValidUser {
                     resp,
                     auth_type,
                     uid,

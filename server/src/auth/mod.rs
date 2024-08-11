@@ -15,8 +15,8 @@ pub fn get_admin_groups() -> HashSet<String> {
 
 #[derive(Debug)]
 pub enum AuthType {
-    ProxyHeader,
-    LDAP
+    _ProxyHeader,
+    _LDAP
 }
 
 #[async_trait]
