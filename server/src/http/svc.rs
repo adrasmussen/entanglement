@@ -386,7 +386,8 @@ async fn query_user(
                 .send(
                     DbMsg::CreateUser {
                         resp: tx,
-                        user: msg.user,
+                        uid: msg.uid,
+                        metadata: msg.metadata,
                     }
                     .into(),
                 )
@@ -426,7 +427,8 @@ async fn query_group(
                 .send(
                     DbMsg::CreateGroup {
                         resp: tx,
-                        group: msg.group,
+                        gid: msg.gid,
+                        metadata: msg.metadata,
                     }
                     .into(),
                 )

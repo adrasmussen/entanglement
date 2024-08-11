@@ -4,9 +4,6 @@ use api::{album::*, group::*, library::*, ticket::*, user::*, media::*};
 
 use crate::service::*;
 
-// TODO -- in basically all of these, we should switch to Option<> on the Get operations
-// to signify not found (i.e. no rows)
-
 #[derive(Debug)]
 pub enum DbMsg {
     // auth messages
@@ -18,7 +15,8 @@ pub enum DbMsg {
     // user messages
     CreateUser {
         resp: ESMResp<()>,
-        user: User,
+        uid: String,
+        metadata: UserMetadata,
     },
     GetUser {
         resp: ESMResp<Option<User>>,
@@ -28,7 +26,8 @@ pub enum DbMsg {
     // group messages
     CreateGroup {
         resp: ESMResp<()>,
-        group: Group,
+        gid: String,
+        metadata: GroupMetadata,
     },
     GetGroup {
         resp: ESMResp<Option<Group>>,

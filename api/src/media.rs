@@ -12,7 +12,7 @@ pub type MediaUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Media {
     pub library_uuid: LibraryUuid,
-    pub path: PathBuf,
+    pub path: String,
     pub hidden: bool,
     pub metadata: MediaMetadata,
 }

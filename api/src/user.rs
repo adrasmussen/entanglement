@@ -1,21 +1,18 @@
 use std::collections::HashSet;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 // structs and types
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     pub uid: String,
+    pub metadata: UserMetadata,
     pub groups: HashSet<String>,
-    pub library: String,
-    pub settings: UserSettings
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UserSettings {
-    pub theme: Option<String>,
-}
+pub struct UserMetadata {}
 
 // messages
 
@@ -27,7 +24,8 @@ pub enum UserMessage {
 // add a new user
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateUserReq {
-    pub user: User,
+    pub uid: String,
+    pub metadata: UserMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

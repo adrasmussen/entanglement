@@ -7,8 +7,12 @@ use serde::{Serialize, Deserialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub gid: String,
+    pub metadata: GroupMetadata,
     pub members: HashSet<String>
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GroupMetadata {}
 
 // messages
 
@@ -23,7 +27,8 @@ pub enum GroupMessage {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateGroupReq {
-    pub group: Group,
+    pub gid: String,
+    pub metadata: GroupMetadata,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

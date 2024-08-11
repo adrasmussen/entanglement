@@ -21,9 +21,9 @@ pub enum AuthType {
 
 #[async_trait]
 trait ESAuthService: ESInner {
-    async fn clear_user_cache(&self, uid: Option<String>) -> anyhow::Result<()>;
+    async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()>;
 
-    async fn clear_access_cache(&self, media_uuid: Option<MediaUuid>) -> anyhow::Result<()>;
+    async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()>;
 
     // used if the server is providing authn via some sort of backend
     async fn is_valid_user(&self, auth_type: AuthType, uid: String, password: String) -> anyhow::Result<bool>;

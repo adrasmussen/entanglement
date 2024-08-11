@@ -38,18 +38,18 @@ pub struct AuthCache {
 // then, after we commit changes to any images, refresh just that image
 #[async_trait]
 impl ESAuthService for AuthCache {
-    async fn clear_user_cache(&self, uid: Option<String>) -> anyhow::Result<()> {
+    async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
         let user_cache = self.user_cache.clone();
 
         {
             let mut user_cache = user_cache.write().await;
 
-            match uid {
-                Some(uid) => {
-                    user_cache.remove(&uid);
-                }
-                None => {
+            match uid.len() {
+                0 => {
                     user_cache.drain();
+                }
+                _ => {
+                    let _ = uid.into_iter().map(|uid| user_cache.remove(&uid));
                 }
             }
         }
@@ -57,18 +57,20 @@ impl ESAuthService for AuthCache {
         Ok(())
     }
 
-    async fn clear_access_cache(&self, media_uuid: Option<MediaUuid>) -> anyhow::Result<()> {
+    async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()> {
         let access_cache = self.access_cache.clone();
 
         {
             let mut access_cache = access_cache.write().await;
 
-            match media_uuid {
-                Some(media) => {
-                    access_cache.remove(&media);
-                }
-                None => {
+            match media_uuid.len() {
+                0 => {
                     access_cache.drain();
+                }
+                _ => {
+                    let _ = media_uuid
+                        .into_iter()
+                        .map(|media_uuid| access_cache.remove(&media_uuid));
                 }
             }
         }

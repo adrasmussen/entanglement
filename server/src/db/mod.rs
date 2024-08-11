@@ -4,8 +4,9 @@ use anyhow;
 
 use async_trait::async_trait;
 
+use crate::auth::msg::AuthMsg;
 use crate::service::ESInner;
-use api::{album::*, group::*, library::*, ticket::*, user::*, media::*};
+use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
 
 pub mod msg;
 pub mod mysql;
@@ -19,13 +20,13 @@ trait ESDbService: ESInner {
     // get this from checking all albums that contain the media + owning group of the library
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
 
-    async fn add_user(&self, user: User) -> anyhow::Result<()>;
+    async fn create_user(&self, uid: String, metadata: UserMetadata) -> anyhow::Result<()>;
 
     async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>>;
 
     async fn delete_user(&self, uid: String) -> anyhow::Result<()>;
 
-    async fn add_group(&self, group: Group) -> anyhow::Result<()>;
+    async fn create_group(&self, gid: String, metadata: GroupMetadata) -> anyhow::Result<()>;
 
     async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>>;
 
@@ -48,17 +49,9 @@ trait ESDbService: ESInner {
         change: MediaMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn set_media_hidden(
-        &self,
-        media_uuid: MediaUuid,
-        hidden: bool,
-    ) -> anyhow::Result<()>;
+    async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()>;
 
-    async fn search_media(
-        &self,
-        user: String,
-        filter: String,
-    ) -> anyhow::Result<Vec<MediaUuid>>;
+    async fn search_media(&self, user: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
     async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
@@ -73,9 +66,17 @@ trait ESDbService: ESInner {
         change: AlbumMetadata,
     ) -> anyhow::Result<()>;
 
-    async fn add_media_to_album(&self, media_uuid: MediaUuid, album_uuid: AlbumUuid) -> anyhow::Result<()>;
+    async fn add_media_to_album(
+        &self,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    ) -> anyhow::Result<()>;
 
-    async fn rm_media_from_album(&self, media_uuid: MediaUuid, album_uuid: AlbumUuid) -> anyhow::Result<()>;
+    async fn rm_media_from_album(
+        &self,
+        media_uuid: MediaUuid,
+        album_uuid: AlbumUuid,
+    ) -> anyhow::Result<()>;
 
     async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>>;
 
@@ -91,7 +92,11 @@ trait ESDbService: ESInner {
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>>;
 
-    async fn update_library(&self, library_uuid: LibraryUuid, change: LibraryMetadata) -> anyhow::Result<()>;
+    async fn update_library(
+        &self,
+        library_uuid: LibraryUuid,
+        change: LibraryMetadata,
+    ) -> anyhow::Result<()>;
 
     async fn search_media_in_library(
         &self,

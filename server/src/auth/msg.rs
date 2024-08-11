@@ -9,11 +9,11 @@ use crate::service::*;
 pub enum AuthMsg {
     ClearUserCache {
         resp: ESMResp<()>,
-        uid: Option<String>,
+        uid: Vec<String>,
     },
     ClearAccessCache {
         resp: ESMResp<()>,
-        uuid: Option<MediaUuid>,
+        uuid: Vec<MediaUuid>,
     },
     IsValidUser {
         resp: ESMResp<bool>,
