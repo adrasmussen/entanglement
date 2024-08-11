@@ -23,7 +23,7 @@ pub struct FileScanner {
 
 #[async_trait]
 impl ESFileService for FileScanner {
-    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<ScanReport> {
+    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<LibraryScanResult> {
         // first, get the library details
         let (library_tx, library_rx) = tokio::sync::oneshot::channel();
 
@@ -105,9 +105,9 @@ impl ESFileService for FileScanner {
 
         update_rx.await.context("Failed to receive UpdateLibrary response at scan_library")??;
 
-        Ok(ScanReport {
+        Ok(LibraryScanResult {
             count: scan_count.clone(),
-            errors: scan_errors.clone(),
+            errors: scan_errors.clone().into_iter().map(|err| format!("{:?}: {}", err.path, err.info)).collect(),
         })
     }
 

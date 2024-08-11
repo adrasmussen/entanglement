@@ -28,6 +28,7 @@ use tower::Service;
 
 use crate::auth::{get_admin_groups, msg::AuthMsg};
 use crate::db::msg::DbMsg;
+use crate::fs::msg::FsMsg;
 use crate::http::{
     auth::{proxy_auth, CurrentUser},
     AppError,
@@ -439,7 +440,13 @@ async fn query_user(
 
             state
                 .db_svc_sender
-                .send(DbMsg::DeleteUser { resp: tx, uid: msg.uid }.into())
+                .send(
+                    DbMsg::DeleteUser {
+                        resp: tx,
+                        uid: msg.uid,
+                    }
+                    .into(),
+                )
                 .await
                 .context("Failed to send DeleteUser message")?;
 
@@ -1062,6 +1069,36 @@ async fn query_library(
                 .context("Failed to receive SearchMediaInLibrary response")??;
 
             Ok(Json(SearchMediaInLibraryResp { media: result }).into_response())
+        }
+        LibraryMessage::ScanLibrary(msg) => {
+            // auth
+            //
+            // anyone who owns a library (and admins) may start a scan
+            if !state.can_access_library(&uid, &msg.library_uuid).await?
+                && !state.is_group_member(&uid, get_admin_groups()).await?
+            {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .fs_svc_sender
+                .send(
+                    FsMsg::ScanLibrary {
+                        resp: tx,
+                        library_uuid: msg.library_uuid,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send ScanLibrary message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive ScanLibary response")??;
+
+            Ok(Json(ScanLibraryResp { result: result }).into_response())
         }
     }
 }

@@ -25,12 +25,6 @@ pub struct ScanError {
     pub info: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct ScanReport {
-    pub count: i64,
-    pub errors: Vec<ScanError>,
-}
-
 #[async_recursion]
 pub async fn scan_directory(
     scan_context: Arc<ScanContext>,

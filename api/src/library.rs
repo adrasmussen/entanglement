@@ -19,6 +19,12 @@ pub struct LibraryMetadata {
     pub last_scan: i64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanResult {
+    pub count: i64,
+    pub errors: Vec<String>,
+}
+
 // messages
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,6 +32,7 @@ pub enum LibraryMessage {
     AddLibrary(AddLibraryReq),
     GetLibary(GetLibraryReq),
     SearchMediaInLibrary(SearchMediaInLibraryReq),
+    ScanLibrary(ScanLibraryReq),
 }
 
 // attach a library to the database
@@ -61,4 +68,14 @@ pub struct SearchMediaInLibraryReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScanLibraryReq {
+    pub library_uuid: LibraryUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScanLibraryResp {
+    pub result: LibraryScanResult,
 }

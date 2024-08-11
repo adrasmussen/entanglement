@@ -1,7 +1,6 @@
-use api::library::LibraryUuid;
+use api::library::{LibraryScanResult, LibraryUuid};
 
-use crate::service::ESMResp;
-use crate::fs::scan::ScanReport;
+use crate::service::{ESM, ESMResp};
 
 #[derive(Debug)]
 pub enum FsMsg {
@@ -9,10 +8,16 @@ pub enum FsMsg {
         resp: ESMResp<()>
     },
     ScanLibrary {
-        resp: ESMResp<ScanReport>,
+        resp: ESMResp<LibraryScanResult>,
         library_uuid: LibraryUuid,
     },
     FixSymlinks {
         resp: ESMResp<()>,
+    }
+}
+
+impl From<FsMsg> for ESM {
+    fn from(value: FsMsg) -> Self {
+        ESM::Fs(value)
     }
 }
