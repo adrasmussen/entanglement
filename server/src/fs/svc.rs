@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use anyhow::{self, Context};
 
+use async_cell::sync::AsyncCell;
+
 use async_trait::async_trait;
 
 use chrono::offset::Local;
@@ -137,5 +139,60 @@ impl ESInner for FileScanner {
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
+    }
+}
+
+pub struct FileService {
+    config: Arc<ESConfig>,
+    sender: ESMSender,
+    receiver: Arc<Mutex<ESMReceiver>>,
+    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+}
+
+#[async_trait]
+impl EntanglementService for FileService {
+    type Inner = FileScanner;
+
+    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
+
+        (
+            tx.clone(),
+            FileService {
+                config: config.clone(),
+                sender: tx,
+                receiver: Arc::new(Mutex::new(rx)),
+                handle: AsyncCell::new(),
+            }
+        )
+    }
+
+    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+        // falliable stuff can happen here
+
+        let receiver = Arc::clone(&self.receiver);
+        let state = Arc::new(FileScanner::new(self.config.clone(), senders)?);
+
+        let serve = {
+            async move {
+                while let Some(msg) = receiver.lock().await.recv().await {
+                    let state = Arc::clone(&state);
+                    tokio::task::spawn(async move {
+                        match state.message_handler(msg).await {
+                            Ok(()) => (),
+                            Err(_) => println!("file_service failed to reply to message"),
+                        }
+                    });
+                }
+
+                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+            }
+        };
+
+        let handle = tokio::task::spawn(serve);
+
+        self.handle.set(handle);
+
+        Ok(())
     }
 }

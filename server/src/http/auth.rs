@@ -57,7 +57,7 @@ async fn _password_auth(mut req: Request, next: Next) -> Result<Response, Status
             // then, continue on in the tower of middleware
             Ok(next.run(req).await)
         }
-        Err(err) => {
+        Err(_) => {
             // hypothetically, we could pass on further details here... or at least
             // log them in a sensible way
             Err(StatusCode::UNAUTHORIZED)

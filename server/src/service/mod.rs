@@ -18,7 +18,7 @@ pub struct ESConfig {
 }
 
 // these are the services that make up the entanglment server backend
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ServiceType {
     Auth,
     Db,
@@ -42,8 +42,8 @@ pub enum ESM {
     Auth(crate::auth::msg::AuthMsg),
     Db(crate::db::msg::DbMsg),
     Fs(crate::fs::msg::FsMsg),
-    Http(crate::http::msg::HttpMsg),
-    Svc(crate::service::msg::Svc),
+    _Http(crate::http::msg::HttpMsg),
+    _Svc(crate::service::msg::Svc),
 }
 
 #[async_trait]

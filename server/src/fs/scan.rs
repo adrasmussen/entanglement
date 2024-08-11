@@ -200,7 +200,7 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
         })?;
 
     // finally, if the media registers properly, we can use the uuid to make it accessible
-    let media_uuid = rx
+    let media_uuid: MediaUuid = rx
         .await
         .map_err(|_| ScanError {
             path: path.clone(),
