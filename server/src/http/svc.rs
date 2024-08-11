@@ -225,7 +225,6 @@ impl ESInner for HttpEndpoint {
 
 pub struct HttpService {
     config: Arc<ESConfig>,
-    sender: ESMSender,
     receiver: Arc<Mutex<ESMReceiver>>,
     msg_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
     hyper_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
@@ -239,10 +238,9 @@ impl EntanglementService for HttpService {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
 
         (
-            tx.clone(),
+            tx,
             HttpService {
                 config: config.clone(),
-                sender: tx,
                 receiver: Arc::new(Mutex::new(rx)),
                 msg_handle: AsyncCell::new(),
                 hyper_handle: AsyncCell::new(),

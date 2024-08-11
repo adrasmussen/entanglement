@@ -144,7 +144,6 @@ impl ESInner for FileScanner {
 
 pub struct FileService {
     config: Arc<ESConfig>,
-    sender: ESMSender,
     receiver: Arc<Mutex<ESMReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
@@ -157,10 +156,9 @@ impl EntanglementService for FileService {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
 
         (
-            tx.clone(),
+            tx,
             FileService {
                 config: config.clone(),
-                sender: tx,
                 receiver: Arc::new(Mutex::new(rx)),
                 handle: AsyncCell::new(),
             }
