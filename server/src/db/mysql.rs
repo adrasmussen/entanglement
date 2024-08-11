@@ -1196,12 +1196,12 @@ impl ESDbService for MySQLState {
 #[async_trait]
 impl ESInner for MySQLState {
     fn new(
-        _config: Arc<ESConfig>,
+        config: Arc<ESConfig>,
         senders: HashMap<ServiceType, ESMSender>,
     ) -> anyhow::Result<Self> {
         Ok(MySQLState {
             auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
-            pool: Pool::new(""),
+            pool: Pool::new(config.mysql_url.clone().as_str()),
         })
     }
 

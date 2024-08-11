@@ -17,6 +17,7 @@ use service::{ESConfig, EntanglementService, ServiceType};
 async fn main() -> anyhow::Result<()> {
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
+        mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/tmp/entanglement/src"),
         media_linkdir: PathBuf::from("/tmp/entanglement/srv"),
     });
@@ -38,5 +39,5 @@ async fn main() -> anyhow::Result<()> {
     auth_svc.start(senders.clone()).await?;
     http_svc.start(senders.clone()).await?;
 
-    Ok(())
+    loop {}
 }

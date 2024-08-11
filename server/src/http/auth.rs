@@ -6,7 +6,7 @@ use axum::{
 };
 
 // the header set by the reverse proxy that we will implicitly trust
-const PROXY_AUTH_HEADER: &str = "Proxy-User";
+const PROXY_AUTH_HEADER: &str = "proxy-user";
 
 // user auth information passed in from middleware to the axum extractors
 #[derive(Clone)]

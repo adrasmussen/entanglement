@@ -13,6 +13,7 @@ pub mod msg;
 
 // config
 pub struct ESConfig {
+    pub mysql_url: String,
     pub media_srcdir: PathBuf,
     pub media_linkdir: PathBuf,
 }
