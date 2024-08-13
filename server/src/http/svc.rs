@@ -198,6 +198,28 @@ impl HttpEndpoint {
 
         self.can_access_media(&uid, &ticket.media_uuid).await
     }
+
+    async fn owns_ticket(&self, uid: &String, ticket_uuid: &TicketUuid) -> anyhow::Result<bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .send(
+                DbMsg::GetTicket {
+                    resp: tx,
+                    ticket_uuid: ticket_uuid.clone(),
+                }
+                .into(),
+            )
+            .await
+            .context("Failed to send GetTicket from HttpEndpoint")?;
+
+        let ticket = rx
+            .await
+            .context("Failed to receive GetTicket response at HttpEndpoint")??
+            .ok_or_else(|| anyhow::Error::msg("unknown ticket_uuid"))?;
+
+        Ok(uid.to_owned() == ticket.uid)
+    }
 }
 
 #[async_trait]
@@ -253,7 +275,12 @@ impl EntanglementService for HttpService {
         let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders)?);
 
         // this will eventually come from the config
-        let socket = SocketAddr::from(self.config.http_socket.parse::<SocketAddrV6>().expect("Failed to parse http_socket ipv6 address/port"));
+        let socket = SocketAddr::from(
+            self.config
+                .http_socket
+                .parse::<SocketAddrV6>()
+                .expect("Failed to parse http_socket ipv6 address/port"),
+        );
 
         let hyper_handle = tokio::task::spawn(serve_http(socket, Arc::clone(&state)));
 
@@ -751,8 +778,11 @@ async fn query_album(
             // auth
             //
             // anyone may create an album, but they must be in the group they are creating
-            if !state.is_group_member(&uid, HashSet::from([msg.album.gid.clone()])).await? {
-                return Err(anyhow::Error::msg("User must be a member of album group").into())
+            if !state
+                .is_group_member(&uid, HashSet::from([msg.album.gid.clone()]))
+                .await?
+            {
+                return Err(anyhow::Error::msg("User must be a member of album group").into());
             }
 
             let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1215,6 +1245,26 @@ async fn query_ticket(
                 Some(result) => Ok(Json(GetTicketResp { ticket: result }).into_response()),
                 None => Ok(StatusCode::NOT_FOUND.into_response()),
             }
+        }
+        TicketMessage::SetTicketResolved(msg) => {
+            // auth
+            //
+            // the ticket owner may update the resolved status
+            if !state.owns_ticket(&uid, &msg.ticket_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state.db_svc_sender.send(DbMsg::SetTicketResolved {
+                resp: tx,
+                ticket_uuid: msg.ticket_uuid,
+                resolved: msg.resolved,
+            }.into()).await.context("Failed to send SetTicketResolved message")?;
+
+            rx.await.context("Failed to receive SetTicketResolved response")??;
+
+            Ok(Json(SetTicketResolvedResp {}).into_response())
         }
         TicketMessage::TicketSearch(msg) => {
             // auth

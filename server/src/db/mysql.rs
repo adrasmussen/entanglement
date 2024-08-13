@@ -64,6 +64,9 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for media_access_groups")?;
 
+        // for a given media_uuid, find all gids that match either:
+        //  * if the media is not hidden, any album that contains the media
+        //  * the library that contains that media
         let query = r"
             SELECT
                 gid
@@ -539,6 +542,10 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_media")?;
 
+        // for a given uid and filter, find all media that match either:
+        //  * is in a library owned by a group containing the uid
+        //  * if the media is not hidden, is in an album owned
+        //    by a group containing the uid
         let query = r"
             SELECT
                 media.media_uuid
@@ -819,6 +826,7 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_albums")?;
 
+        // for a given uid and filter, find all albums owned by groups that contain the uid
         let query = r"
             SELECT
                 album_uuid
@@ -870,6 +878,8 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_media_in_album")?;
 
+        // for a given uid, filter, and album_uuid, find all non-hidden media in that album
+        // provided that the album is owned by a group containing the uid
         let query = r"
             SELECT
                 media.media_uuid
@@ -1045,6 +1055,10 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_media_in_library")?;
 
+        // for a given uid, filter, hidden state and library_uuid, find all media in that album
+        // provided that the library is owned by a group containing the uid
+        //
+        // note that this is the only search query where media with "hidden = true" can be found
         let query = r"
             SELECT
                 media_uuid
@@ -1249,6 +1263,25 @@ impl ESDbService for MySQLState {
         }))
     }
 
+    async fn set_ticket_resolved(&self, ticket_uuid: TicketUuid, resolved: bool) -> anyhow::Result<()> {
+        let conn = self
+        .pool
+        .get_conn()
+        .await
+        .context("Failed to get MySQL database connection for set_ticket_resolved")?;
+
+        let query = r"
+            UPDATE tickets SET resolved = :resolved WHERE ticket_uuid = :ticket_uuid"
+            .with(params!{
+                "resolved" => resolved,
+                "ticket_uuid" => ticket_uuid,
+            });
+
+        query.run(conn).await.context("Failed to run set_ticket_resolved query")?;
+
+        Ok(())
+    }
+
     async fn search_tickets(
         &self,
         uid: String,
@@ -1261,6 +1294,7 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for search_tickets")?;
 
+        // for a given uid and filter, find all tickets associated with media that
         let query = r"
             SELECT
                 ticket_uuid
@@ -1284,10 +1318,29 @@ impl ESDbService for MySQLState {
                 INNER JOIN albums ON t1.gid = albums.gid
                 ) AS t2
             INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            UNION
+            SELECT
+                media_uuid
+            FROM
+                (
+                SELECT
+                    library_uuid
+                FROM
+                    (
+                    SELECT
+                        gid
+                    FROM
+                        group_membership
+                    WHERE
+                        uid = :uid
+                ) AS t1
+            INNER JOIN libraries ON t1.gid = libraries.gid
+            ) AS t2
+            INNER JOIN media ON t2.library_uuid = media.library_uuid
             ) AS t3
             INNER JOIN tickets ON t3.media_uuid = tickets.media_uuid
             WHERE
-                (resolved = :resolved AND title LIKE :filter)"
+                resolved = :resolved AND title LIKE :filter"
             .with(params! {
                 "uid" => uid,
                 "resolved" => resolved,
@@ -1471,6 +1524,7 @@ impl ESInner for MySQLState {
                 DbMsg::GetTicket { resp, ticket_uuid } => {
                     self.respond(resp, self.get_ticket(ticket_uuid)).await
                 }
+                DbMsg::SetTicketResolved { resp, ticket_uuid, resolved } => self.respond(resp, self.set_ticket_resolved(ticket_uuid, resolved)).await,
                 DbMsg::SearchTickets {
                     resp,
                     user,

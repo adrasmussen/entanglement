@@ -34,6 +34,7 @@ pub enum TicketMessage {
     CreateTicket(CreateTicketReq),
     CreateComment(CreateCommentReq),
     GetTicket(GetTicketReq),
+    SetTicketResolved(SetTicketResolvedReq),
     TicketSearch(SearchTicketsReq),
 }
 
@@ -72,6 +73,15 @@ pub struct GetTicketReq {
 pub struct GetTicketResp {
     pub ticket: Ticket,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetTicketResolvedReq {
+    pub ticket_uuid: TicketUuid,
+    pub resolved: bool
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetTicketResolvedResp {}
 
 // search tickets on their titles (and possibly comments)
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -112,6 +112,8 @@ trait ESDbService: ESInner {
 
     async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>>;
 
+    async fn set_ticket_resolved(&self, ticket_uuid: TicketUuid, resolved: bool) -> anyhow::Result<()>;
+
     async fn search_tickets(
         &self,
         uid: String,

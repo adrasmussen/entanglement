@@ -156,6 +156,11 @@ pub enum DbMsg {
         resp: ESMResp<Option<Ticket>>,
         ticket_uuid: TicketUuid,
     },
+    SetTicketResolved {
+        resp: ESMResp<()>,
+        ticket_uuid: TicketUuid,
+        resolved: bool,
+    },
     SearchTickets {
         resp: ESMResp<Vec<TicketUuid>>,
         user: String,
