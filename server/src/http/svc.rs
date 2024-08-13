@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV6};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -253,7 +253,7 @@ impl EntanglementService for HttpService {
         let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders)?);
 
         // this will eventually come from the config
-        let socket = SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081));
+        let socket = SocketAddr::from(self.config.http_socket.parse::<SocketAddrV6>().expect("Failed to parse http_socket ipv6 address/port"));
 
         let hyper_handle = tokio::task::spawn(serve_http(socket, Arc::clone(&state)));
 
@@ -750,7 +750,11 @@ async fn query_album(
         AlbumMessage::CreateAlbum(msg) => {
             // auth
             //
-            // anyone may create an album
+            // anyone may create an album, but they must be in the group they are creating
+            if !state.is_group_member(&uid, HashSet::from([msg.album.gid.clone()])).await? {
+                return Err(anyhow::Error::msg("User must be a member of album group").into())
+            }
+
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             state

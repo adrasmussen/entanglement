@@ -17,6 +17,7 @@ use service::{ESConfig, EntanglementService, ServiceType};
 async fn main() -> anyhow::Result<()> {
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
+        http_socket: String::from("[::]:8080"),
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/tmp/entanglement/src"),
         media_linkdir: PathBuf::from("/tmp/entanglement/srv"),

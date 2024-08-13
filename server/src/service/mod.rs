@@ -13,6 +13,7 @@ pub mod msg;
 
 // config
 pub struct ESConfig {
+    pub http_socket: String,
     pub mysql_url: String,
     pub media_srcdir: PathBuf,
     pub media_linkdir: PathBuf,

@@ -65,15 +65,23 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for media_access_groups")?;
 
         // the first half of this query hinges on the hidden flag
+        //
+        // t1 -- checks if the media is hidden
+        // t2 -- all albums containing that media
         let query = r"
-            (SELECT media_uuid FROM media WHERE (media_uuid = :media_uuid AND hidden = false)) AS t1
-            (SELECT album_uuid FROM (album_contents INNER JOIN t1 ON album_contents.media_uuid = t1.media_uuid)) AS media_albums
-            (SELECT group FROM FROM (media_albums INNER JOIN albums ON media_albums.album_uuid = albums.album_uuid)) AS album_groups
+            SELECT gid FROM (
+                SELECT album_uuid FROM (
+                    SELECT media_uuid FROM media WHERE media_uuid = :media_uuid AND hidden = false) as t1
+                INNER JOIN album_contents ON t1.media_uuid = album_contents.media_uuid) as t2
+            INNER JOIN albums ON t2.album_uuid = albums.album_uuid
 
-            (SELECT library_uuid FROM media where media_uuid = :media_uuid) as t2
-            (SELECT group FROM (t2 INNER JOIN libraries ON t2.library_uuid = libraries.library_uuid)) as library_group
+            UNION
 
-            SELECT group from (library_group OUTER JOIN album_groups)"
+            SELECT gid FROM (
+                SELECT gid FROM (
+                    SELECT library_uuid FROM media WHERE media_uuid = :media_uuid) AS t3
+                INNER JOIN libraries WHERE t3.library_uuid = libraries.library_uuid) AS t4
+            INNER JOIN group_membership ON t4.gid = group_membership.gid"
             .with(params! {
                 "media_uuid" => media_uuid,
             });
