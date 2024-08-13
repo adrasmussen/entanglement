@@ -64,24 +64,30 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for media_access_groups")?;
 
-        // the first half of this query hinges on the hidden flag
-        //
-        // t1 -- checks if the media is hidden
-        // t2 -- all albums containing that media
         let query = r"
-            SELECT gid FROM (
-                SELECT album_uuid FROM (
-                    SELECT media_uuid FROM media WHERE media_uuid = :media_uuid AND hidden = false) as t1
-                INNER JOIN album_contents ON t1.media_uuid = album_contents.media_uuid) as t2
-            INNER JOIN albums ON t2.album_uuid = albums.album_uuid
-
+            SELECT
+                gid
+            FROM
+                (
+                SELECT
+                    album_uuid
+                FROM
+                    media
+                INNER JOIN album_contents ON media.media_uuid = album_contents.media_uuid
+                WHERE
+                    media.media_uuid = :media_uuid AND media.hidden = FALSE
+            ) AS t1
+            INNER JOIN albums ON t1.album_uuid = albums.album_uuid
             UNION
-
-            SELECT gid FROM (
-                SELECT gid FROM (
-                    SELECT library_uuid FROM media WHERE media_uuid = :media_uuid) AS t3
-                INNER JOIN libraries WHERE t3.library_uuid = libraries.library_uuid) AS t4
-            INNER JOIN group_membership ON t4.gid = group_membership.gid"
+            SELECT
+                gid
+            FROM
+                (
+                    libraries
+                INNER JOIN media ON libraries.library_uuid = media.media_uuid
+                )
+            WHERE
+                media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
             });
@@ -534,13 +540,51 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media")?;
 
         let query = r"
-            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
-            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.gid) AS user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
-
-            SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
-                WHERE (hidden = false)
-                AND (CONCAT_WS(' ', date, note) LIKE :filter)"
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                SELECT
+                    media_uuid
+                FROM
+                    (
+                    SELECT
+                        album_uuid
+                    FROM
+                        (
+                        SELECT
+                            gid
+                        FROM
+                            group_membership
+                        WHERE
+                            uid = :uid
+                    ) AS t1
+                INNER JOIN albums ON t1.gid = albums.gid
+                ) AS t2
+            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            UNION
+            SELECT
+                media_uuid
+            FROM
+                (
+                SELECT
+                    library_uuid
+                FROM
+                    (
+                    SELECT
+                        gid
+                    FROM
+                        group_membership
+                    WHERE
+                        uid = :uid
+                ) AS t1
+            INNER JOIN libraries ON t1.gid = libraries.gid
+            ) AS t2
+            INNER JOIN media ON t2.library_uuid = media.library_uuid
+            ) AS t3
+            INNER JOIN media ON t3.media_uuid = media.media_uuid
+            WHERE
+                hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
             .with(params! {
                 "uid" => uid,
                 "filter" => filter,
@@ -776,9 +820,20 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_albums")?;
 
         let query = r"
-            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
-            SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.gid)
-                WHERE (CONCAT_WS(' ', name, note) LIKE :filter)"
+            SELECT
+                album_uuid
+            FROM
+                (
+                SELECT
+                    gid
+                FROM
+                    group_membership
+                WHERE
+                    uid = :uid
+            ) AS t1
+            INNER JOIN albums ON t1.gid = albums.gid
+            WHERE
+                CONCAT_WS(' ', name, note) LIKE :filter"
             .with(params! {
                 "uid" => uid,
                 "filter" => filter,
@@ -816,12 +871,35 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media_in_album")?;
 
         let query = r"
-            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
-            (SELECT :album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.gid) AS user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
-
-            SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
-                WHERE (CONCAT_WS(' ', date, note) LIKE :filter)"
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                SELECT
+                    media_uuid
+                FROM
+                    (
+                    SELECT
+                        album_uuid
+                    FROM
+                        (
+                        SELECT
+                            gid
+                        FROM
+                            group_membership
+                        WHERE
+                            uid = :uid
+                    ) AS t1
+                INNER JOIN albums ON t1.gid = albums.gid
+                WHERE
+                    album_uuid = :album_uuid
+                ) AS t2
+            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            ) AS t3
+            INNER JOIN media ON t3.media_uuid = media.media_uuid
+            WHERE
+                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter
+            "
             .with(params! {
                 "uid" => uid,
                 "album_uuid" => album_uuid,
@@ -968,14 +1046,30 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_media_in_library")?;
 
         let query = r"
-            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
-            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.gid) AS user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
-
-            SELECT media_uuid FROM (user_media INNER JOIN media ON user_media.media_uuid = media.media_uuid)
-                WHERE (library = :library_uuid)
-                    AND (hidden = :hidden)
-                    AND (CONCAT_WS(' ', date, note) LIKE :filter)"
+            SELECT
+                media_uuid
+            FROM
+                (
+                SELECT
+                    library_uuid
+                FROM
+                    (
+                    SELECT
+                        gid
+                    FROM
+                        group_membership
+                    WHERE
+                        uid = :uid
+                ) AS t1
+            INNER JOIN libraries ON t1.gid = libraries.gid
+            WHERE
+                library_uuid = :library_uuid
+            ) AS t2
+            INNER JOIN media ON t2.library_uuid = media.library_uuid
+            WHERE
+                (
+                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
+                )"
             .with(params! {
                 "uid" => uid,
                 "library_uuid" => library_uuid,
@@ -1168,13 +1262,32 @@ impl ESDbService for MySQLState {
             .context("Failed to get MySQL database connection for search_tickets")?;
 
         let query = r"
-            (SELECT gid FROM group_membership WHERE uid = :uid) AS user_gids
-            (SELECT album_uuid FROM (user_gids INNER JOIN albums ON user_gids.gid = albums.gid) AS user_albums
-            (SELECT media_uuid FROM (user_albums INNER JOIN album_contents ON user_albums.album_uuid = album_contents.album_uuid) AS user_media
-
-            SELECT ticket_uuid FROM (user_media INNER JOIN tickets ON user_media.media_uuid = tickets.media_uuid)
-                WHERE (resolved = :resolved)
-                    AND (text LIKE :filter)"
+            SELECT
+                ticket_uuid
+            FROM
+                (
+                SELECT
+                    media_uuid
+                FROM
+                    (
+                    SELECT
+                        album_uuid
+                    FROM
+                        (
+                        SELECT
+                            gid
+                        FROM
+                            group_membership
+                        WHERE
+                            uid = :uid
+                    ) AS t1
+                INNER JOIN albums ON t1.gid = albums.gid
+                ) AS t2
+            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            ) AS t3
+            INNER JOIN tickets ON t3.media_uuid = tickets.media_uuid
+            WHERE
+                (resolved = :resolved AND title LIKE :filter)"
             .with(params! {
                 "uid" => uid,
                 "resolved" => resolved,

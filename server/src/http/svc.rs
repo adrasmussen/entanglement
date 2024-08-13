@@ -1132,7 +1132,7 @@ async fn query_ticket(
                         resp: tx,
                         ticket: Ticket {
                             media_uuid: msg.media_uuid,
-                            uid,
+                            uid: uid,
                             title: msg.title,
                             timestamp: Local::now().timestamp(),
                             resolved: false,
@@ -1170,7 +1170,7 @@ async fn query_ticket(
                         resp: tx,
                         comment: TicketComment {
                             ticket_uuid: msg.ticket_uuid,
-                            uid,
+                            uid: uid,
                             text: msg.comment_text,
                             timestamp: Local::now().timestamp(),
                         },
