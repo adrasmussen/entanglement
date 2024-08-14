@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV6};
+use std::net::{SocketAddr, SocketAddrV6};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -321,7 +321,8 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
         .route("/api/album", post(query_album))
         .route("/api/library", post(query_library))
         .route("/api/ticket", post(query_ticket))
-        .fallback(fallback)
+        .nest_service("/app", tower_http::services::ServeDir::new("/tmp/entanglement/dist"))
+        .fallback_service(tower_http::services::ServeFile::new("/tmp/entanglement/dist/index.html"))
         .route_layer(middleware::from_fn(proxy_auth))
         .with_state(state);
 
@@ -355,6 +356,7 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
 async fn fallback(_uri: Uri) -> StatusCode {
     StatusCode::NOT_FOUND
 }
+
 
 async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,

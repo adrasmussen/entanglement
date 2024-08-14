@@ -21,6 +21,10 @@ use settings::Settings;
 
 mod status;
 use status::Status;
+
+mod admin;
+use admin::Admin;
+
 fn main() {
     // Init logger
     dioxus_logger::init(Level::INFO).expect("failed to init logger");
@@ -44,6 +48,8 @@ enum Route {
         Settings {},
         #[route("/status")]
         Status {},
+        #[route("/admin")]
+        Admin {}
 
 //    #[end_layout]
 }
@@ -93,6 +99,7 @@ fn NavBar() -> Element {
                 span { Link { to: Route::Library {}, "Library" } }
                 span { Link { to: Route::Settings {}, "Settings" } }
                 span { Link { to: Route::Status {}, "Status" } }
+                span { Link { to: Route::Admin {}, "Admin" } }
             }
         }
         Outlet::<Route> {}

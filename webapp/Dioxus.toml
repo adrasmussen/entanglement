@@ -18,6 +18,8 @@ asset_dir = "assets"
 # HTML title tag content
 title = "entanglement"
 
+base_path = "entanglement/app"
+
 [web.watcher]
 
 # when watcher trigger, regenerate the `index.html`

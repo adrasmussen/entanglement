@@ -153,13 +153,10 @@ impl ESDbService for MySQLState {
         let query = r"
             SELECT (uid) FROM users WHERE uid = :uid;
 
-            SELECT (gid) FROM group_membership WHERE uid = :uid"
+            SELECT (gid) FROM group_membership WHERE uid = :uid;"
             .with(params! {"uid" => uid});
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_user query")?;
+        let mut result = query.run(conn).await?;
 
         // first set of results
         let mut user_rows = result
@@ -910,11 +907,11 @@ impl ESDbService for MySQLState {
             WHERE
                 hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter
             "
-            .with(params! {
-                "uid" => uid,
-                "album_uuid" => album_uuid,
-                "filter" => filter,
-            });
+        .with(params! {
+            "uid" => uid,
+            "album_uuid" => album_uuid,
+            "filter" => filter,
+        });
 
         let mut result = query
             .run(conn)
@@ -1084,12 +1081,12 @@ impl ESDbService for MySQLState {
                 (
                     hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
                 )"
-            .with(params! {
-                "uid" => uid,
-                "library_uuid" => library_uuid,
-                "hidden" => hidden,
-                "filter" => filter,
-            });
+        .with(params! {
+            "uid" => uid,
+            "library_uuid" => library_uuid,
+            "hidden" => hidden,
+            "filter" => filter,
+        });
 
         let mut result = query
             .run(conn)
@@ -1263,21 +1260,28 @@ impl ESDbService for MySQLState {
         }))
     }
 
-    async fn set_ticket_resolved(&self, ticket_uuid: TicketUuid, resolved: bool) -> anyhow::Result<()> {
+    async fn set_ticket_resolved(
+        &self,
+        ticket_uuid: TicketUuid,
+        resolved: bool,
+    ) -> anyhow::Result<()> {
         let conn = self
-        .pool
-        .get_conn()
-        .await
-        .context("Failed to get MySQL database connection for set_ticket_resolved")?;
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for set_ticket_resolved")?;
 
         let query = r"
             UPDATE tickets SET resolved = :resolved WHERE ticket_uuid = :ticket_uuid"
-            .with(params!{
+            .with(params! {
                 "resolved" => resolved,
                 "ticket_uuid" => ticket_uuid,
             });
 
-        query.run(conn).await.context("Failed to run set_ticket_resolved query")?;
+        query
+            .run(conn)
+            .await
+            .context("Failed to run set_ticket_resolved query")?;
 
         Ok(())
     }
@@ -1524,7 +1528,14 @@ impl ESInner for MySQLState {
                 DbMsg::GetTicket { resp, ticket_uuid } => {
                     self.respond(resp, self.get_ticket(ticket_uuid)).await
                 }
-                DbMsg::SetTicketResolved { resp, ticket_uuid, resolved } => self.respond(resp, self.set_ticket_resolved(ticket_uuid, resolved)).await,
+                DbMsg::SetTicketResolved {
+                    resp,
+                    ticket_uuid,
+                    resolved,
+                } => {
+                    self.respond(resp, self.set_ticket_resolved(ticket_uuid, resolved))
+                        .await
+                }
                 DbMsg::SearchTickets {
                     resp,
                     user,
