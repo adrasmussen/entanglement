@@ -5,11 +5,10 @@ use dioxus::prelude::*;
 use api::media::*;
 
 pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
-    let resp = gloo_net::http::Request::post("/api/search/image")
-        .json(req)?
+    let resp = gloo_net::http::Request::post("/entanglement/api/media")
+        .json(&MediaMessage::SearchMedia(req.clone()))?
         .send()
         .await?;
-
 
     if resp.ok() {
         Ok(resp.json().await?)
@@ -20,8 +19,7 @@ pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaRes
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaProps {
-    uuid: String,
-    url: String,
+    media_uuid: String,
 }
 
 #[component]
@@ -35,48 +33,7 @@ pub fn Media(props: MediaProps) -> Element {
             flex_direction: "column",
 
             img {
-                src: "{props.url}",
-            }
-        }
-    }
-}
-
-#[component]
-pub fn Gallery() -> Element {
-    let search_filter: Signal<SearchMediaReq> = use_signal(|| SearchMediaReq {
-        filter: String::from(".*"),
-    });
-
-    // call to the api server
-    let matching_media: Resource<anyhow::Result<SearchMediaResp>> =
-        use_resource(move || async move { search_media(&search_filter()).await });
-
-    // rebind to get around the issues with &*
-    let matching_media = &*matching_media.read();
-
-    let (media, status) = match matching_media {
-        Some(Ok(matches)) => (Some(matches), "".to_owned()),
-        Some(Err(err)) => (None, err.to_string()),
-        None => (None, "still searching...".to_string()),
-    };
-
-    rsx! {
-        GalleryNavBar { search_filter_signal: search_filter }
-        div {
-            match media {
-                Some(media) => rsx! {
-                    div {
-                        display: "grid",
-                        gap: "5px",
-                        grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
-
-                        for m in media.media.iter() {
-                            Media { uuid: "{m}", url: "http://localhost:8081/api/thumbnails/{m}.jpg" }
-                        }
-                    }
-
-                },
-                None => rsx! { p {"error finding images: {status}"} }
+                src: "/entanglement/media/thumbnails/{props.media_uuid}",
             }
         }
     }
@@ -85,12 +42,14 @@ pub fn Gallery() -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryNavBarProps {
     search_filter_signal: Signal<SearchMediaReq>,
+    search_status: String,
 }
 
 #[component]
 fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
-    let mut signal = props.search_filter_signal.clone();
-    let search_filter = &*signal.read().filter;
+    let mut search_filter_signal = props.search_filter_signal.clone();
+
+    let search_filter = search_filter_signal().filter;
 
     let style = r#"
         .subnav {
@@ -113,7 +72,7 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
             color: black;
         }
 
-        .subnav input[type=text] {
+        .subnav input[type=text], input[type=submit] {
             float: left;
             padding: 6px;
             border: none;
@@ -129,14 +88,70 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
             style { "{style}" }
             div {
                 class: "subnav",
-                input {
-                    r#type: "text",
-                    value: "{search_filter}",
-                    oninput: move |event| {
-                        signal.set(SearchMediaReq{filter: event.value()})
-                    }
+                form {
+                    onsubmit: move |event| {
+                        let filter = match event.values().get("search_filter") {
+                            Some(val) => val.as_value(),
+                            None => String::from(""),
+                        };
+                        search_filter_signal.set(SearchMediaReq{filter: filter})
+                    },
+                    input {
+                        name: "search_filter",
+                        r#type: "text",
+                        value: "{search_filter}",
+
+                    },
+                    input {
+                        r#type: "submit"
+                    },
                 },
                 span { "Search History" },
+                span { "{props.search_status}" },
+            }
+        }
+    }
+}
+
+#[component]
+pub fn Gallery() -> Element {
+    let search_filter_signal: Signal<SearchMediaReq> = use_signal(|| SearchMediaReq {
+        filter: String::from(".*"),
+    });
+
+    // call to the api server
+    let search_results: Resource<anyhow::Result<SearchMediaResp>> =
+        use_resource(move || async move { search_media(&search_filter_signal()).await });
+
+    // annoying hack to get around the way the signals are implemented
+    let search_results = &*search_results.read();
+
+    let (results, status) = match search_results {
+        Some(Ok(results)) => (
+            Some(results),
+            format!("found {} results", results.media.len()),
+        ),
+        Some(Err(err)) => (None, format!("error while searching: {}", err)),
+        None => (None, format!("still awaiting search_media future...")),
+    };
+
+    rsx! {
+        GalleryNavBar { search_filter_signal: search_filter_signal, search_status: status }
+        div {
+            match results {
+                Some(results) => rsx! {
+                    div {
+                        display: "grid",
+                        gap: "5px",
+                        grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
+
+                        for m in results.media.iter() {
+                            Media { media_uuid: "{m}" }
+                        }
+                    }
+
+                },
+                None => rsx! { p {""} }
             }
         }
     }

@@ -150,16 +150,13 @@ impl ESDbService for MySQLState {
             .await
             .context("Failed to get MySQL database connection for get_user")?;
 
-        let query = r"
-            SELECT (uid) FROM users WHERE uid = :uid;
+        let user_query = r"
+            SELECT (uid) FROM users WHERE uid = :uid"
+            .with(params! {"uid" => uid.clone()});
 
-            SELECT (gid) FROM group_membership WHERE uid = :uid;"
-            .with(params! {"uid" => uid});
+        let mut user_result = user_query.run(conn).await?;
 
-        let mut result = query.run(conn).await?;
-
-        // first set of results
-        let mut user_rows = result
+        let mut user_rows = user_result
             .collect::<Row>()
             .await
             .context("Failed to collect get_user user results")?;
@@ -172,8 +169,20 @@ impl ESDbService for MySQLState {
         let user_data: String =
             from_row_opt(user_row).context("Failed to convert user row for get_user")?;
 
+        let conn = self
+            .pool
+            .get_conn()
+            .await
+            .context("Failed to get MySQL database connection for get_user")?;
+
+        let group_query = r"
+            SELECT (gid) FROM group_membership WHERE uid = :uid"
+            .with(params! {"uid" => uid});
+
+        let mut group_result = group_query.run(conn).await?;
+
         // second set of results
-        let group_rows = result
+        let group_rows = group_result
             .collect::<Row>()
             .await
             .context("Failed to collect get_user gid results")?;

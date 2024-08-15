@@ -49,9 +49,7 @@ enum Route {
         #[route("/status")]
         Status {},
         #[route("/admin")]
-        Admin {}
-
-//    #[end_layout]
+        Admin {},
 }
 // ANCHOR_END: router
 

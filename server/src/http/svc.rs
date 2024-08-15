@@ -313,16 +313,22 @@ impl EntanglementService for HttpService {
 async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), anyhow::Error> {
     let state = Arc::clone(&state);
 
+    let app_service = tower_http::services::ServeDir::new("/tmp/entanglement/dist");
+
+    // let app = Router::new()
+    //     .nest_service("/", app_service.clone())
+    //     .nest_service("/gallery", app_service.clone());
+
     let router: Router<()> = Router::new()
-        .route("/media/:media_uuid", get(stream_media))
+        .route("/media/:dir/:media_uuid", get(stream_media))
         .route("/api/user", post(query_user))
         .route("/api/group", post(query_group))
         .route("/api/media", post(query_media))
         .route("/api/album", post(query_album))
         .route("/api/library", post(query_library))
         .route("/api/ticket", post(query_ticket))
-        .nest_service("/app", tower_http::services::ServeDir::new("/tmp/entanglement/dist"))
-        .fallback_service(tower_http::services::ServeFile::new("/tmp/entanglement/dist/index.html"))
+        .nest_service("/app", app_service.clone())
+        .fallback(fallback)
         .route_layer(middleware::from_fn(proxy_auth))
         .with_state(state);
 
@@ -357,11 +363,10 @@ async fn fallback(_uri: Uri) -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
-
 async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path(media_uuid): Path<i64>,
+    Path((dir,media_uuid)): Path<(String, i64)>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
 
@@ -374,7 +379,7 @@ async fn stream_media(
 
     // once we've passed the auth check, we get the file handle and build
     // a streaming body from it
-    let filename = state.media_linkdir.join(media_uuid.to_string());
+    let filename = state.media_linkdir.join(dir).join(media_uuid.to_string());
 
     let file_handle = match tokio::fs::File::open(filename).await {
         Ok(f) => f,
@@ -1258,13 +1263,21 @@ async fn query_ticket(
 
             let (tx, rx) = tokio::sync::oneshot::channel();
 
-            state.db_svc_sender.send(DbMsg::SetTicketResolved {
-                resp: tx,
-                ticket_uuid: msg.ticket_uuid,
-                resolved: msg.resolved,
-            }.into()).await.context("Failed to send SetTicketResolved message")?;
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SetTicketResolved {
+                        resp: tx,
+                        ticket_uuid: msg.ticket_uuid,
+                        resolved: msg.resolved,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send SetTicketResolved message")?;
 
-            rx.await.context("Failed to receive SetTicketResolved response")??;
+            rx.await
+                .context("Failed to receive SetTicketResolved response")??;
 
             Ok(Json(SetTicketResolvedResp {}).into_response())
         }
