@@ -33,11 +33,9 @@ impl MySQLState {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send ClearAccessCache message")?;
+            .await?;
 
-        rx.await
-            .context("Failed to receive ClearAccessCache response")?
+        rx.await?
     }
 
     async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
@@ -45,11 +43,9 @@ impl MySQLState {
 
         self.auth_svc_sender
             .send(AuthMsg::ClearUserCache { resp: tx, uid: uid }.into())
-            .await
-            .context("Failed to send ClearUserCache message")?;
+            .await?;
 
-        rx.await
-            .context("Failed to receive ClearUserCache response")?
+        rx.await?
     }
 }
 
@@ -58,16 +54,10 @@ impl MySQLState {
 impl ESDbService for MySQLState {
     // auth queries
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for media_access_groups")?;
-
         // for a given media_uuid, find all gids that match either:
         //  * if the media is not hidden, any album that contains the media
         //  * the library that contains that media
-        let query = r"
+        let result = r"
             SELECT
                 gid
             FROM
@@ -93,105 +83,74 @@ impl ESDbService for MySQLState {
                 media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run media_access_groups query")?;
-
-        let rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect media_access_groups results")?;
+            .await?;
 
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()
-            .context("Failed to convert gid row for media_access_groups")?;
+            .collect::<Result<HashSet<_>, FromRowError>>()?;
 
         Ok(data)
     }
 
     // user queries
     async fn create_user(&self, uid: String, _metadata: UserMetadata) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for create_user")?;
-
-        let query = r"
-            INSERT INTO groups (gid)
-            VALUES (:uid);
-
-            INSERT INTO group_membership (uid, gid)
-            VALUES (:uid, :uid);
-
+        r"
             INSERT INTO users (uid)
-            VALUES (:uid);"
-            .with(params! {
-                "uid" => uid,
-            });
+            VALUES (:uid)"
+            .with(params! {"uid" => uid.clone()})
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        query
-            .run(conn)
-            .await
-            .context("Failed to run create_user query")?;
+        r"
+            INSERT INTO groups (gid)
+            VALUES (:uid)"
+            .with(params! {"uid" => uid.clone()})
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        r"
+            INSERT INTO group_membership (uid, gid)
+            VALUES (:uid, :uid)"
+            .with(params! {"uid" => uid.clone()})
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
 
     async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_user")?;
-
-        let user_query = r"
+        let mut user_result = r"
             SELECT (uid) FROM users WHERE uid = :uid"
-            .with(params! {"uid" => uid.clone()});
-
-        let mut user_result = user_query.run(conn).await?;
-
-        let mut user_rows = user_result
+            .with(params! {"uid" => uid.clone()})
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_user user results")?;
+            .await?;
 
-        let user_row = match user_rows.pop() {
+        let user_row = match user_result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let user_data: String =
-            from_row_opt(user_row).context("Failed to convert user row for get_user")?;
+        let user_data = from_row_opt::<String>(user_row)?;
 
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_user")?;
-
-        let group_query = r"
+        let group_result = r"
             SELECT (gid) FROM group_membership WHERE uid = :uid"
-            .with(params! {"uid" => uid});
-
-        let mut group_result = group_query.run(conn).await?;
-
-        // second set of results
-        let group_rows = group_result
+            .with(params! {"uid" => uid})
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_user gid results")?;
+            .await?;
 
-        let group_data = group_rows
+        let group_data = group_result
             .into_iter()
             .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()
-            .context("Failed to convert gid row for get_user")?;
+            .collect::<Result<HashSet<_>, FromRowError>>()?;
 
         Ok(Some(User {
             uid: user_data,
@@ -201,24 +160,21 @@ impl ESDbService for MySQLState {
     }
 
     async fn delete_user(&self, uid: String) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for delete_user")?;
-
-        let query = r"
-            DELETE FROM users WHERE uid = :uid;
-
-            DELETE FROM group_membership WHERE uid = :uid;"
+        r"
+            DELETE FROM users WHERE uid = :uid"
             .with(params! {
                 "uid" => uid.clone(),
-            });
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        query
-            .run(conn)
-            .await
-            .context("Failed to run delete_user query")?;
+        r"
+            DELETE FROM group_membership WHERE uid = :uid"
+            .with(params! {
+                "uid" => uid.clone(),
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_user_cache(Vec::from([uid])).await?;
 
@@ -227,70 +183,46 @@ impl ESDbService for MySQLState {
 
     // group queries
     async fn create_group(&self, gid: String, _metadata: GroupMetadata) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for create_group")?;
-
-        let query = r"
+        r"
             INSERT INTO groups (gid)
             VALUES (:gid)"
             .with(params! {
                 "gid" => gid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run create_group query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
 
     async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_group")?;
-
-        let query = r"
-            SELECT (gid) FROM groups WHERE gid = :gid;
-
-            SELECT (uid) FROM group_membership WHERE gid = :gid"
-            .with(params! {"gid" => gid});
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_group query")?;
-
-        // first set of results
-        let mut group_rows = result
+        let mut group_rows = r"
+            SELECT (gid) FROM groups WHERE gid = :gid"
+            .with(params! {"gid" => gid.clone()})
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_group group results")?;
+            .await?;
 
         let group_row = match group_rows.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let group_data: String =
-            from_row_opt(group_row).context("Failed to convert group row for get_group")?;
+        let group_data = from_row_opt::<String>(group_row)?;
 
-        // second set of results
-        let user_rows = result
+        let user_rows = r"
+            SELECT (uid) FROM group_membership WHERE gid = :gid"
+            .with(params! {"gid" => gid})
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_group uid results")?;
+            .await?;
 
         let user_data = user_rows
             .into_iter()
             .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()
-            .context("Failed to convert uid row for get_group")?;
+            .collect::<Result<HashSet<_>, FromRowError>>()?;
 
         Ok(Some(Group {
             gid: group_data,
@@ -300,24 +232,21 @@ impl ESDbService for MySQLState {
     }
 
     async fn delete_group(&self, gid: String) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for delete_group")?;
+        r"
+            DELETE FROM users WHERE gid = :gid"
+            .with(params! {
+                "gid" => gid.clone(),
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        let query = r"
-            DELETE FROM users WHERE gid = :gid;
-
-            DELETE FROM group_membership WHERE gid = :gid;"
+        r"
+            DELETE FROM group_membership WHERE gid = :gid"
             .with(params! {
                 "gid" => gid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run delete_group query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_user_cache(Vec::new()).await?;
 
@@ -325,24 +254,15 @@ impl ESDbService for MySQLState {
     }
 
     async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for add_user_to_group")?;
-
-        let query = r"
+        r"
             INSERT INTO group_membership (uid, gid)
             VALUES (:uid, :gid)"
             .with(params! {
                 "uid" => uid.clone(),
                 "gid" => gid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run add_user_to_group query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_user_cache(Vec::from([uid])).await?;
 
@@ -350,24 +270,15 @@ impl ESDbService for MySQLState {
     }
 
     async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for rm_user_from_group")?;
-
-        let query = r"
+        r"
             DELETE FROM group_membership WHERE (uid = :uid AND gid = :gid)
             VALUES (:uid, :gid)"
             .with(params! {
                 "uid" => uid.clone(),
                 "gid" => gid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run rm_user_from_group query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_user_cache(Vec::from([uid])).await?;
 
@@ -376,13 +287,7 @@ impl ESDbService for MySQLState {
 
     // media queries
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for add_media")?;
-
-        let query = r"
+        let mut result = r"
             INSERT INTO media (media_uuid, library_uuid, path, hidden, date, note)
             OUTPUT INSERTED.media_uuid
             VALUES (UUID_SHORT(), :library_uuid, :path, :hidden, :date, :note)"
@@ -392,57 +297,38 @@ impl ESDbService for MySQLState {
                 "hidden" => media.hidden,
                 "date" => media.metadata.date,
                 "note" => media.metadata.note,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run add_media query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect add_media results")?;
+            .await?;
 
-        let row = rows
+        let row = result
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_media"))?;
 
-        let data: MediaUuid = from_row_opt(row).context("Failed to convert row for add_media")?;
+        let data = from_row_opt::<MediaUuid>(row)?;
 
         Ok(data)
     }
 
     async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_media")?;
-
-        let query = r"
+        let mut result = r"
             SELECT (library_uuid, path, hidden, date, note) FROM media WHERE media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_media query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_media results")?;
+            .await?;
 
-        let row = match rows.pop() {
+        let row = match result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let data: (LibraryUuid, String, bool, String, String) =
-            from_row_opt(row).context("Failed to convert row for get_media")?;
+        let data = from_row_opt::<(LibraryUuid, String, bool, String, String)>(row)?;
 
         Ok(Some(Media {
             library_uuid: data.0,
@@ -456,35 +342,22 @@ impl ESDbService for MySQLState {
     }
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_media_uuid_by_path")?;
-
-        let query = r"
+        let mut result = r"
             SELECT media_uuid FROM media WHERE path = :path"
             .with(params! {
                 "path" => path,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_media_by_path query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_media_by_path results")?;
+            .await?;
 
-        let row = match rows.pop() {
+        let row = match result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let data: MediaUuid =
-            from_row_opt(row).context("Failed to convert row for get_media_by_path")?;
+        let data = from_row_opt::<MediaUuid>(row)?;
 
         Ok(Some(data))
     }
@@ -494,46 +367,28 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         change: MediaMetadata,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for update_media")?;
-
-        let query = r"
+        r"
             UPDATE media SET date = :date, note = :note WHERE media_uuid = :media_uuid"
             .with(params! {
                 "date" => change.date,
                 "note" => change.note,
                 "media_uuid" => media_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run update_media query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
 
     async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for set_media_hidden")?;
-
-        let query = r"
+        r"
             UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
             .with(params! {
                 "hidden" => hidden,
                 "media_uuid" => media_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run set_media_hidden_query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -542,17 +397,11 @@ impl ESDbService for MySQLState {
     }
 
     async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for search_media")?;
-
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
         //  * if the media is not hidden, is in an album owned
         //    by a group containing the uid
-        let query = r"
+        let result = r"
             SELECT
                 media.media_uuid
             FROM
@@ -601,36 +450,23 @@ impl ESDbService for MySQLState {
             .with(params! {
                 "uid" => uid,
                 "filter" => filter,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run search_media query")?;
-
-        let rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect search_media results")?;
+            .await?;
 
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert uuid row for search_media")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         Ok(data)
     }
 
     // album queries
     async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for create_album")?;
-
-        let query = r"
+        let mut result = r"
             INSERT INTO album (album_uuid, uid, gid, name, note)
             OUTPUT INSERTED.album_uuid
             VALUES (UUID_SHORT(), :uid, :gid, :name, :note)"
@@ -639,58 +475,38 @@ impl ESDbService for MySQLState {
                 "gid" => album.gid,
                 "name" => album.metadata.name,
                 "note" => album.metadata.note,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run create_album query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect create_album results")?;
+            .await?;
 
-        let row = rows
+        let row = result
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_album"))?;
 
-        let data: AlbumUuid =
-            from_row_opt(row).context("Failed to convert row for create_album")?;
+        let data = from_row_opt::<AlbumUuid>(row)?;
 
         Ok(data)
     }
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_album")?;
-
-        let query = r"
+        let mut result = r"
             SELECT (uid, group, name, note) FROM albums WHERE album_uuid = :album_uuid"
             .with(params! {
                 "album_uuid" => album_uuid,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_album query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect get_album results")?;
+            .await?;
 
-        let row = match rows.pop() {
+        let row = match result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let data: (String, String, String, String) =
-            from_row_opt(row).context("Failed to convert row for get_album")?;
+        let data = from_row_opt::<(String, String, String, String)>(row)?;
 
         Ok(Some(Album {
             uid: data.0,
@@ -703,36 +519,29 @@ impl ESDbService for MySQLState {
     }
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for delete_album")?;
-
-        let query = r"
+        let result = r"
             DELETE FROM album_contents WHERE album_uuid = :album_uuid;
-            OUTPUT DELETED.media_uuid;
+            OUTPUT DELETED.media_uuid"
+            .with(params! {
+                "album_uuid" => album_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
+        r"
             DELETE FROM albums WHERE album_uuid = :album_uuid;"
             .with(params! {
                 "album_uuid" => album_uuid,
-            });
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run delete_album query")?;
-
-        let deleted_media_rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect delete_album media results")?;
-
-        let deleted_media_data = deleted_media_rows
+        let deleted_media_data = result
             .into_iter()
             .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert media row for delete_album")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         self.clear_access_cache(deleted_media_data).await?;
 
@@ -744,24 +553,15 @@ impl ESDbService for MySQLState {
         album_uuid: AlbumUuid,
         change: AlbumMetadata,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for update_album")?;
-
-        let query = r"
+        r"
             UPDATE albums SET name = :name, note = :note WHERE album_uuid = :album_uuid"
             .with(params! {
                 "name" => change.name,
                 "note" => change.note,
                 "album_uuid" => album_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run update_album query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
@@ -771,24 +571,15 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for add_media_to_album")?;
-
-        let query = r"
+        r"
             INSERT INTO album_contents (media_uuid, album_uuid)
             VALUES (:media_uuid, :album_uuid)"
             .with(params! {
                 "media_uuid" => media_uuid,
                 "album_uuid" => album_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run add_media_to_album query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -801,23 +592,14 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for rm_media_from_album")?;
-
-        let query = r"
+        r"
             DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
             .with(params!{
                 "media_uuid" => media_uuid,
                 "album_uuid" => album_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run rm_media_from_album query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -826,14 +608,8 @@ impl ESDbService for MySQLState {
     }
 
     async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for search_albums")?;
-
         // for a given uid and filter, find all albums owned by groups that contain the uid
-        let query = r"
+        let result = r"
             SELECT
                 album_uuid
             FROM
@@ -851,23 +627,16 @@ impl ESDbService for MySQLState {
             .with(params! {
                 "uid" => uid,
                 "filter" => filter,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run search_albums query")?;
-
-        let rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect search_albums results")?;
+            .await?;
 
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<AlbumUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert uuid row for search_albums")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         Ok(data)
     }
@@ -878,15 +647,9 @@ impl ESDbService for MySQLState {
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for search_media_in_album")?;
-
         // for a given uid, filter, and album_uuid, find all non-hidden media in that album
         // provided that the album is owned by a group containing the uid
-        let query = r"
+        let result = r"
             SELECT
                 media.media_uuid
             FROM
@@ -920,36 +683,23 @@ impl ESDbService for MySQLState {
             "uid" => uid,
             "album_uuid" => album_uuid,
             "filter" => filter,
-        });
+        })
+        .run(self.pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run search_media_in_album query")?;
-
-        let rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect search_media_in_album results")?;
-
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert uuid row for search_media_in_album")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         Ok(data)
     }
 
     // library queries
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for add_library")?;
-
-        let query = r"
+        let mut result = r"
             INSERT INTO libraries (library_uuid, path, gid, file_count, last_scan)
             OUTPUT INSERTED.library_uuid
             VALUES (UUID_SHORT(), :path, :gid, :file_count, :last_scan)"
@@ -958,58 +708,36 @@ impl ESDbService for MySQLState {
                 "gid" => library.gid,
                 "file_count" => library.metadata.file_count,
                 "last_scan" => library.metadata.last_scan
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run add_library query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect add_library results")?;
+            .await?;
 
-        let row = rows
+        let row = result
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_library"))?;
 
-        let data: LibraryUuid =
-            from_row_opt(row).context("Failed to convert row for add_library")?;
+        let data = from_row_opt::<LibraryUuid>(row)?;
 
         Ok(data)
     }
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_library")?;
-
-        let query = r"
+        let mut result = r"
             SELECT (path, group, file_count, last_scan) FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
                 "library_uuid" => library_uuid,
-            });
+            }).run(self.pool.get_conn().await?)
+            .await?.collect::<Row>()
+            .await?;
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_library query")?;
-
-        let mut rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect get_library results")?;
-
-        let row = match rows.pop() {
+        let row = match result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let data: (String, String, i64, i64) =
-            from_row_opt(row).context("Failed to convert row for get_library")?;
+        let data = from_row_opt::<(String, String, i64, i64)>(row)?;
 
         Ok(Some(Library {
             path: data.0,
@@ -1026,24 +754,14 @@ impl ESDbService for MySQLState {
         library_uuid: LibraryUuid,
         change: LibraryMetadata,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for update_library")?;
-
-        let query = r"
+        r"
             UPDATE libraries SET file_count = :file_count, last_scan = :last_scan WHERE library_uuid = :library_uuid"
             .with(params! {
                 "file_count" => change.file_count,
                 "last_scan" => change.last_scan,
                 "library_uuid" => library_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run update_libary query")?;
+            }).run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
@@ -1055,17 +773,11 @@ impl ESDbService for MySQLState {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for search_media_in_library")?;
-
         // for a given uid, filter, hidden state and library_uuid, find all media in that album
         // provided that the library is owned by a group containing the uid
         //
         // note that this is the only search query where media with "hidden = true" can be found
-        let query = r"
+        let result = r"
             SELECT
                 media_uuid
             FROM
@@ -1095,36 +807,23 @@ impl ESDbService for MySQLState {
             "library_uuid" => library_uuid,
             "hidden" => hidden,
             "filter" => filter,
-        });
+        })
+        .run(self.pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run search_media_in_library query")?;
-
-        let rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect search_media_in_library results")?;
-
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert uuid row for search_media_in_library")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         Ok(data)
     }
 
     // ticket queries
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for create_ticket")?;
-
-        let query = r"
+        let mut result = r"
             INSERT INTO tickets (ticket_uuid, media_uuid, uid, title, timestamp, resolved)
             OUTPUT INSERTED.ticket_uuid
             VALUES (UUID_SHORT(), :media_uuid, :uid, :title, :timestamp, :resolved)"
@@ -1134,36 +833,23 @@ impl ESDbService for MySQLState {
                 "title" => ticket.title,
                 "timestamp" => ticket.timestamp,
                 "resolved" => ticket.resolved,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run create_ticket query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect create_ticket results")?;
+            .await?;
 
-        let row = rows
+        let row = result
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_ticket"))?;
 
-        let data: TicketUuid =
-            from_row_opt(row).context("Failed to convert row for create_ticket")?;
+        let data = from_row_opt::<TicketUuid>(row)?;
 
         Ok(data)
     }
 
     async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for create_comment")?;
-
-        let query = r"
+        let mut result = r"
             INSERT INTO comments (comment_uuid, ticket_uuid, uid, text, timestamp)
             OUTPUT INSERTED.comment_uuid
             VALUES (UUID_SHORT(), :ticket_uuid, :uid, :text, :timestamp)"
@@ -1172,71 +858,45 @@ impl ESDbService for MySQLState {
                 "uid" => comment.uid,
                 "text" => comment.text,
                 "timestamp" => comment.timestamp,
-            });
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run create_comment query")?;
-
-        let mut rows = result
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
             .collect::<Row>()
-            .await
-            .context("Failed to collect create_comment results")?;
+            .await?;
 
-        let row = rows
+        let row = result
             .pop()
             .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_comment"))?;
 
-        let data: CommentUuid =
-            from_row_opt(row).context("Failed to convert row for create_comment")?;
+        let data = from_row_opt::<CommentUuid>(row)?;
 
         Ok(data)
     }
 
     async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for get_ticket")?;
+        let mut ticket_result = r"
+            SELECT (media_uuid, uid, title, timestamp, resolved) FROM tickets WHERE ticket_uuid = :ticket_uuid"
+            .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
+            .await?.collect::<Row>()
+            .await?;
 
-        let query = r"
-            SELECT (media_uuid, uid, title, timestamp, resolved) FROM tickets WHERE ticket_uuid = :ticket_uuid;
-
-            SELECT (comment_uuid, uid, text, timestamp) FROM comments WHERE ticket_uuid = :ticket_uuid"
-            .with(params! {"ticket_uuid" => ticket_uuid});
-
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run get_ticket query")?;
-
-        // first set of results
-        let mut ticket_rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect get_ticket ticket results")?;
-
-        let ticket_row = match ticket_rows.pop() {
+        let ticket_row = match ticket_result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let ticket_data: (MediaUuid, String, String, i64, bool) =
-            from_row_opt(ticket_row).context("Failed to convert ticket row for get_ticket")?;
+        let ticket_data = from_row_opt::<(MediaUuid, String, String, i64, bool)>(ticket_row)?;
 
-        // second set of results
-        let comment_rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect get_ticket comment results")?;
+        let comment_result = r"
+            SELECT (comment_uuid, uid, text, timestamp) FROM comments WHERE ticket_uuid = :ticket_uuid"
+            .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
+            .await?.collect::<Row>()
+            .await?;
 
-        let comment_rows = comment_rows
+        let comment_rows = comment_result
             .into_iter()
             .map(|row| from_row_opt::<(CommentUuid, String, String, i64)>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert comment row for get_ticket")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         let mut comment_data = HashMap::new();
 
@@ -1274,23 +934,14 @@ impl ESDbService for MySQLState {
         ticket_uuid: TicketUuid,
         resolved: bool,
     ) -> anyhow::Result<()> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for set_ticket_resolved")?;
-
-        let query = r"
+        r"
             UPDATE tickets SET resolved = :resolved WHERE ticket_uuid = :ticket_uuid"
             .with(params! {
                 "resolved" => resolved,
                 "ticket_uuid" => ticket_uuid,
-            });
-
-        query
-            .run(conn)
-            .await
-            .context("Failed to run set_ticket_resolved query")?;
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
         Ok(())
     }
@@ -1301,14 +952,8 @@ impl ESDbService for MySQLState {
         filter: String,
         resolved: bool,
     ) -> anyhow::Result<Vec<TicketUuid>> {
-        let conn = self
-            .pool
-            .get_conn()
-            .await
-            .context("Failed to get MySQL database connection for search_tickets")?;
-
         // for a given uid and filter, find all tickets associated with media that
-        let query = r"
+        let result = r"
             SELECT
                 ticket_uuid
             FROM
@@ -1358,23 +1003,14 @@ impl ESDbService for MySQLState {
                 "uid" => uid,
                 "resolved" => resolved,
                 "filter" => filter,
-            });
+            }).run(self.pool.get_conn().await?)
+            .await?.collect::<Row>()
+            .await?;
 
-        let mut result = query
-            .run(conn)
-            .await
-            .context("Failed to run search_tickets query")?;
-
-        let rows = result
-            .collect::<Row>()
-            .await
-            .context("Failed to collect search_tickets results")?;
-
-        let data = rows
+        let data = result
             .into_iter()
             .map(|row| from_row_opt::<TicketUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()
-            .context("Failed to convert uuid row for search_tickets")?;
+            .collect::<Result<Vec<_>, FromRowError>>()?;
 
         Ok(data)
     }
