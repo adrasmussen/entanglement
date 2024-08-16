@@ -98,7 +98,7 @@ fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
                 Some(result) => rsx!{
                     div {
                         img {
-                            src: "/entanglement/media/thumbnails/{media_uuid}",
+                            src: "/entanglement/media/full/{media_uuid}",
                         }
                         span { "library: {result.media.library_uuid}" },
                         span { "path: {result.media.path}" },

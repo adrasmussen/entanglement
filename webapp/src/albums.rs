@@ -3,13 +3,13 @@ use dioxus::prelude::*;
 use api::album::*;
 
 pub async fn search_albums(req: &SearchAlbumsReq) -> anyhow::Result<SearchAlbumsResp> {
-    todo!()
+    Err(anyhow::Error::msg("not implemented"))
 }
 
 pub async fn search_media_in_album(
     req: &Option<SearchMediaInAlbumReq>,
 ) -> Option<anyhow::Result<SearchMediaInAlbumResp>> {
-    todo!()
+    Some(Err(anyhow::Error::msg("not implemented")))
 }
 
 // idea: drop down bar under subnav

@@ -207,8 +207,9 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
 
     // this should probably be another helper function so that the http server can easily
     // map uuid -> path without relying on magic numbers
-    let link = scan_context.media_linkdir.join(media_uuid.to_string());
+    let link = scan_context.media_linkdir.join("full").join(media_uuid.to_string());
 
+    // TODO -- change to relative by adjusting original path
     symlink(path.clone(), link).map_err(|err| ScanError {
         path: path.clone(),
         info: format!("Failed to create symlink: {}", err.to_string()),
