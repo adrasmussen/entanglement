@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use anyhow::Context;
-
 use async_cell::sync::AsyncCell;
 
 use async_trait::async_trait;
@@ -125,7 +123,7 @@ impl ESDbService for MySQLState {
 
     async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>> {
         let mut user_result = r"
-            SELECT (uid) FROM users WHERE uid = :uid"
+            SELECT uid FROM users WHERE uid = :uid"
             .with(params! {"uid" => uid.clone()})
             .run(self.pool.get_conn().await?)
             .await?
@@ -140,7 +138,7 @@ impl ESDbService for MySQLState {
         let user_data = from_row_opt::<String>(user_row)?;
 
         let group_result = r"
-            SELECT (gid) FROM group_membership WHERE uid = :uid"
+            SELECT gid FROM group_membership WHERE uid = :uid"
             .with(params! {"uid" => uid})
             .run(self.pool.get_conn().await?)
             .await?
@@ -197,7 +195,7 @@ impl ESDbService for MySQLState {
 
     async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>> {
         let mut group_rows = r"
-            SELECT (gid) FROM groups WHERE gid = :gid"
+            SELECT gid FROM groups WHERE gid = :gid"
             .with(params! {"gid" => gid.clone()})
             .run(self.pool.get_conn().await?)
             .await?
@@ -212,7 +210,7 @@ impl ESDbService for MySQLState {
         let group_data = from_row_opt::<String>(group_row)?;
 
         let user_rows = r"
-            SELECT (uid) FROM group_membership WHERE gid = :gid"
+            SELECT uid FROM group_membership WHERE gid = :gid"
             .with(params! {"gid" => gid})
             .run(self.pool.get_conn().await?)
             .await?
@@ -314,7 +312,7 @@ impl ESDbService for MySQLState {
 
     async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>> {
         let mut result = r"
-            SELECT (library_uuid, path, hidden, date, note) FROM media WHERE media_uuid = :media_uuid"
+            SELECT library_uuid, path, hidden, date, note FROM media WHERE media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
             })
@@ -449,7 +447,7 @@ impl ESDbService for MySQLState {
                 hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
             .with(params! {
                 "uid" => uid,
-                "filter" => filter,
+                "filter" => format!("%{}%", filter),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -492,7 +490,7 @@ impl ESDbService for MySQLState {
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
         let mut result = r"
-            SELECT (uid, group, name, note) FROM albums WHERE album_uuid = :album_uuid"
+            SELECT uid, group, name, note FROM albums WHERE album_uuid = :album_uuid"
             .with(params! {
                 "album_uuid" => album_uuid,
             })
@@ -623,7 +621,7 @@ impl ESDbService for MySQLState {
             ) AS t1
             INNER JOIN albums ON t1.gid = albums.gid
             WHERE
-                CONCAT_WS(' ', name, note) LIKE :filter"
+                CONCAT_WS(' ', name, note) LIKE %:filter%"
             .with(params! {
                 "uid" => uid,
                 "filter" => filter,
@@ -677,7 +675,7 @@ impl ESDbService for MySQLState {
             ) AS t3
             INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter
+                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE %:filter%
             "
         .with(params! {
             "uid" => uid,
@@ -725,7 +723,7 @@ impl ESDbService for MySQLState {
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
         let mut result = r"
-            SELECT (path, group, file_count, last_scan) FROM libraries WHERE library_uuid = :library_uuid"
+            SELECT path, group, file_count, last_scan FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
                 "library_uuid" => library_uuid,
             }).run(self.pool.get_conn().await?)
@@ -800,7 +798,7 @@ impl ESDbService for MySQLState {
             INNER JOIN media ON t2.library_uuid = media.library_uuid
             WHERE
                 (
-                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
+                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE %:filter%
                 )"
         .with(params! {
             "uid" => uid,
@@ -875,7 +873,7 @@ impl ESDbService for MySQLState {
 
     async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>> {
         let mut ticket_result = r"
-            SELECT (media_uuid, uid, title, timestamp, resolved) FROM tickets WHERE ticket_uuid = :ticket_uuid"
+            SELECT media_uuid, uid, title, timestamp, resolved FROM tickets WHERE ticket_uuid = :ticket_uuid"
             .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
             .await?.collect::<Row>()
             .await?;
@@ -888,7 +886,7 @@ impl ESDbService for MySQLState {
         let ticket_data = from_row_opt::<(MediaUuid, String, String, i64, bool)>(ticket_row)?;
 
         let comment_result = r"
-            SELECT (comment_uuid, uid, text, timestamp) FROM comments WHERE ticket_uuid = :ticket_uuid"
+            SELECT comment_uuid, uid, text, timestamp FROM comments WHERE ticket_uuid = :ticket_uuid"
             .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
             .await?.collect::<Row>()
             .await?;
@@ -998,7 +996,7 @@ impl ESDbService for MySQLState {
             ) AS t3
             INNER JOIN tickets ON t3.media_uuid = tickets.media_uuid
             WHERE
-                resolved = :resolved AND title LIKE :filter"
+                resolved = :resolved AND title LIKE %:filter%"
             .with(params! {
                 "uid" => uid,
                 "resolved" => resolved,

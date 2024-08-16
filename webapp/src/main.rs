@@ -4,6 +4,8 @@ use dioxus_router::prelude::*;
 
 use tracing::{info, Level};
 
+mod style;
+
 mod home;
 use home::Home;
 

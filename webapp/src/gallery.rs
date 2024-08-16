@@ -2,9 +2,12 @@ use anyhow;
 
 use dioxus::prelude::*;
 
+use crate::style;
 use api::media::*;
 
-pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
+// api functions
+
+async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
     let resp = gloo_net::http::Request::post("/entanglement/api/media")
         .json(&MediaMessage::SearchMedia(req.clone()))?
         .send()
@@ -17,13 +20,30 @@ pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaRes
     }
 }
 
+async fn get_media(req: &GetMediaReq) -> anyhow::Result<GetMediaResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/media")
+        .json(&MediaMessage::GetMedia(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
+}
+
 #[derive(Clone, PartialEq, Props)]
-pub struct MediaProps {
-    media_uuid: String,
+struct MediaProps {
+    view_media_signal: Signal<Option<MediaUuid>>,
+    media_uuid: MediaUuid,
 }
 
 #[component]
-pub fn Media(props: MediaProps) -> Element {
+fn Media(props: MediaProps) -> Element {
+    let mut view_media_signal = props.view_media_signal.clone();
+    let media_uuid = props.media_uuid.clone();
+
     rsx! {
         div {
             height: "400px",
@@ -34,13 +54,67 @@ pub fn Media(props: MediaProps) -> Element {
 
             img {
                 src: "/entanglement/media/thumbnails/{props.media_uuid}",
+                onclick: move |_| { view_media_signal.set(Some(media_uuid)) }
             }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
-pub struct GalleryNavBarProps {
+struct MediaSidePanelProps {
+    view_media_signal: Signal<Option<MediaUuid>>,
+}
+
+#[component]
+fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
+    let view_media_signal = props.view_media_signal.clone();
+
+    let media_uuid = match view_media_signal() {
+        Some(val) => val,
+        None => return rsx! {},
+    };
+
+    let media = use_resource(move || async move {
+        get_media(&GetMediaReq {
+            media_uuid: media_uuid,
+        })
+        .await
+    });
+
+    let media = &*media.read();
+
+    let (result, status) = match media {
+        Some(Ok(res)) => (Some(res), format!("")),
+        Some(Err(err)) => (None, err.to_string()),
+        None => (None, format!("still awaiting get_media future...")),
+    };
+
+    rsx! {
+        style { "{style::SIDEPANEL}" }
+        div {
+            class: "sidepanel",
+
+            match result {
+                Some(result) => rsx!{
+                    div {
+                        img {
+                            src: "/entanglement/media/thumbnails/{media_uuid}",
+                        }
+                        span { "library: {result.media.library_uuid}" },
+                        span { "path: {result.media.path}" },
+                        span { "hidden: {result.media.hidden}" },
+                        span { "date: {result.media.metadata.date}" },
+                        span { "note: {result.media.metadata.note}" },
+                    }
+                },
+                None => rsx! {}
+        }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct GalleryNavBarProps {
     search_filter_signal: Signal<SearchMediaReq>,
     search_status: String,
 }
@@ -51,41 +125,9 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 
     let search_filter = search_filter_signal().filter;
 
-    let style = r#"
-        .subnav {
-            overflow: hidden;
-            background-color: #2196F3;
-        }
-
-        .subnav span {
-            float: left;
-            display: block;
-            color: black;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-            font-size: 17px;
-        }
-
-        .subnav span:hover {
-            background-color: #eaeaea;
-            color: black;
-        }
-
-        .subnav input[type=text], input[type=submit] {
-            float: left;
-            padding: 6px;
-            border: none;
-            margin-top: 8px;
-            margin-right: 16px;
-            margin-left: 6px;
-            font-size: 17px;
-  "#;
-
-    // change this to a form and use onsubmit
     rsx! {
         div {
-            style { "{style}" }
+            style { "{style::SUBNAV}" }
             div {
                 class: "subnav",
                 form {
@@ -115,12 +157,14 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter_signal: Signal<SearchMediaReq> = use_signal(|| SearchMediaReq {
-        filter: String::from(".*"),
+    let search_filter_signal = use_signal(|| SearchMediaReq {
+        filter: String::from(""),
     });
 
+    let view_media_signal = use_signal::<Option<MediaUuid>>(|| None);
+
     // call to the api server
-    let search_results: Resource<anyhow::Result<SearchMediaResp>> =
+    let search_results =
         use_resource(move || async move { search_media(&search_filter_signal()).await });
 
     // annoying hack to get around the way the signals are implemented
@@ -137,6 +181,8 @@ pub fn Gallery() -> Element {
 
     rsx! {
         GalleryNavBar { search_filter_signal: search_filter_signal, search_status: status }
+        MediaSidePanel { view_media_signal: view_media_signal }
+
         div {
             match results {
                 Some(results) => rsx! {
@@ -145,11 +191,10 @@ pub fn Gallery() -> Element {
                         gap: "5px",
                         grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
 
-                        for m in results.media.iter() {
-                            Media { media_uuid: "{m}" }
+                        for media_uuid in results.media.iter() {
+                            Media { view_media_signal: view_media_signal, media_uuid: *media_uuid }
                         }
                     }
-
                 },
                 None => rsx! { p {""} }
             }
