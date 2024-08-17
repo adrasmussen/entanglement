@@ -43,6 +43,19 @@ pub struct GetMediaResp {
     pub media: Media,
 }
 
+pub async fn get_media(req: &GetMediaReq) -> anyhow::Result<GetMediaResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/media")
+        .json(&MediaMessage::GetMedia(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
+}
+
 // update the metadata
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateMediaReq {
@@ -64,7 +77,7 @@ pub struct SetMediaHiddenReq {
 pub struct SetMediaHiddenResp {}
 
 
-// search media, optionally with a filter on type
+// search media
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchMediaReq {
     pub filter: String,
@@ -75,8 +88,20 @@ pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
 }
 
-// reverse search and find all albums that contain
-// a particular media file
+pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/media")
+        .json(&MediaMessage::SearchMedia(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
+}
+
+// move this to album search
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RevSearchMediaForAlbumReq {
     pub media_uuid: MediaUuid,

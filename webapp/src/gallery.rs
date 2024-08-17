@@ -2,36 +2,8 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use crate::style;
+use crate::common::{sidebar, style};
 use api::media::*;
-
-// api functions
-
-async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/media")
-        .json(&MediaMessage::SearchMedia(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
-
-async fn get_media(req: &GetMediaReq) -> anyhow::Result<GetMediaResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/media")
-        .json(&MediaMessage::GetMedia(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
 
 #[derive(Clone, PartialEq, Props)]
 struct MediaProps {
@@ -60,58 +32,6 @@ fn Media(props: MediaProps) -> Element {
     }
 }
 
-#[derive(Clone, PartialEq, Props)]
-struct MediaSidePanelProps {
-    view_media_signal: Signal<Option<MediaUuid>>,
-}
-
-#[component]
-fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
-    let view_media_signal = props.view_media_signal.clone();
-
-    let media_uuid = match view_media_signal() {
-        Some(val) => val,
-        None => return rsx! {},
-    };
-
-    let media = use_resource(move || async move {
-        get_media(&GetMediaReq {
-            media_uuid: media_uuid,
-        })
-        .await
-    });
-
-    let media = &*media.read();
-
-    let (result, status) = match media {
-        Some(Ok(res)) => (Some(res), format!("")),
-        Some(Err(err)) => (None, err.to_string()),
-        None => (None, format!("still awaiting get_media future...")),
-    };
-
-    rsx! {
-        style { "{style::SIDEPANEL}" }
-        div {
-            class: "sidepanel",
-
-            match result {
-                Some(result) => rsx!{
-                    div {
-                        img {
-                            src: "/entanglement/media/full/{media_uuid}",
-                        }
-                        span { "library: {result.media.library_uuid}" },
-                        span { "path: {result.media.path}" },
-                        span { "hidden: {result.media.hidden}" },
-                        span { "date: {result.media.metadata.date}" },
-                        span { "note: {result.media.metadata.note}" },
-                    }
-                },
-                None => rsx! {}
-        }
-        }
-    }
-}
 
 #[derive(Clone, PartialEq, Props)]
 struct GalleryNavBarProps {
@@ -181,7 +101,7 @@ pub fn Gallery() -> Element {
 
     rsx! {
         GalleryNavBar { search_filter_signal: search_filter_signal, search_status: status }
-        MediaSidePanel { view_media_signal: view_media_signal }
+        sidebar::MediaSidePanel { view_media_signal: view_media_signal }
 
         div {
             match results {
