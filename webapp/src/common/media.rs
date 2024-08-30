@@ -34,6 +34,9 @@ pub struct MediaBoxProps {
 // TODO: add update logic, possibly internal signals
 #[component]
 pub fn MediaBox(props: MediaBoxProps) -> Element {
+    // the internal signal used to re-render and provide info about a metadata update
+    let update_result_signal = use_signal(|| String::from(""));
+
     let mut view_media_signal = props.view_media_signal;
 
     let media_uuid = match view_media_signal() {
@@ -42,6 +45,8 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
     };
 
     let media = use_resource(move || async move {
+        update_result_signal();
+
         get_media(&GetMediaReq {
             media_uuid: media_uuid,
         })
@@ -55,7 +60,7 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
         None => return rsx! {},
     };
 
-    let update_result_signal = use_signal(|| String::from(""));
+
 
     rsx! {
         div {
@@ -141,7 +146,7 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                                         },
 
                                         label { "Status" }
-                                        p {
+                                        span {
                                             width: "600px",
                                             "{update_result_signal()}"
                                         }

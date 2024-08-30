@@ -723,7 +723,7 @@ impl ESDbService for MySQLState {
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
         let mut result = r"
-            SELECT path, group, file_count, last_scan FROM libraries WHERE library_uuid = :library_uuid"
+            SELECT path, gid, file_count, last_scan FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
                 "library_uuid" => library_uuid,
             }).run(self.pool.get_conn().await?)
