@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::collections::HashMap;
 
 mod auth;
 mod db;
@@ -15,6 +15,10 @@ use service::{ESConfig, EntanglementService, ServiceType};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
         http_socket: String::from("[::]:8080"),

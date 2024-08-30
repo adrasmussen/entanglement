@@ -16,6 +16,9 @@ use gallery::Gallery;
 mod albums;
 use albums::Albums;
 
+mod tickets;
+use tickets::Tickets;
+
 mod library;
 use library::Library;
 
@@ -34,8 +37,7 @@ fn main() {
     launch(App);
 }
 
-// ANCHOR: router
-#[derive(Routable, Clone)]
+#[derive(Clone, PartialEq, Routable)]
 #[rustfmt::skip]
 enum Route {
     #[layout(NavBar)]
@@ -45,6 +47,8 @@ enum Route {
         Gallery {},
         #[route("/albums")]
         Albums {},
+        #[route("/tickets")]
+        Tickets {},
         #[route("/library")]
         Library {},
         #[route("/settings")]
@@ -54,11 +58,10 @@ enum Route {
         #[route("/admin")]
         Admin {},
 }
-// ANCHOR_END: router
 
 #[component]
 pub fn App() -> Element {
-    rsx! { Router::<Route> {} }
+    rsx! { Router::<Route> { config: move || RouterConfig::default().history(WebHistory::default())} }
 }
 
 #[component]
@@ -67,13 +70,14 @@ fn NavBar() -> Element {
         div {
             style { "{style::TOPNAV}" },
             div {class: "topnav",
-                span { Link { to: Route::Home {}, "Home" } }
-                span { Link { to: Route::Gallery {}, "Gallery" } }
-                span { Link { to: Route::Albums {}, "Albums" } }
-                span { Link { to: Route::Library {}, "Library" } }
-                span { Link { to: Route::Settings {}, "Settings" } }
-                span { Link { to: Route::Status {}, "Status" } }
-                span { Link { to: Route::Admin {}, "Admin" } }
+                Link { active_class: "active", to: Route::Home {}, "Home" }
+                Link { active_class: "active", to: Route::Gallery {}, "Gallery" }
+                Link { active_class: "active", to: Route::Albums {}, "Albums" }
+                Link { active_class: "active", to: Route::Tickets {}, "Tickets" }
+                Link { active_class: "active", to: Route::Library {}, "Library" }
+                Link { active_class: "active", to: Route::Settings {}, "Settings" }
+                Link { active_class: "active", to: Route::Status {}, "Status" }
+                Link { active_class: "active", to: Route::Admin {}, "Admin" }
             }
         }
         Outlet::<Route> {}

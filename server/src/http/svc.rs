@@ -13,7 +13,7 @@ use axum::{
     extract::{Extension, Json, Path, Request, State},
     http::{StatusCode, Uri},
     middleware,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Router,
 };
@@ -25,6 +25,11 @@ use tokio::sync::Mutex;
 use tokio_util::io::ReaderStream;
 
 use tower::Service;
+
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use crate::auth::{get_admin_groups, msg::AuthMsg};
 use crate::db::msg::DbMsg;
@@ -313,24 +318,36 @@ impl EntanglementService for HttpService {
 async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), anyhow::Error> {
     let state = Arc::clone(&state);
 
-    let app_service = tower_http::services::ServeDir::new("/tmp/entanglement/dist");
+    let app_url_root = "/entanglement";
+    let app_web_dir = "/tmp/entanglement/dist";
 
-    // let app = Router::new()
-    //     .nest_service("/", app_service.clone())
-    //     .nest_service("/gallery", app_service.clone());
+    let app_router = Router::new().nest_service(
+        "/",
+        ServeDir::new(app_web_dir).fallback(ServeFile::new(
+            PathBuf::from(app_web_dir).join("index.html"),
+        )),
+    );
 
-    let router: Router<()> = Router::new()
-        .route("/media/:dir/:media_uuid", get(stream_media))
-        .route("/api/user", post(query_user))
-        .route("/api/group", post(query_group))
-        .route("/api/media", post(query_media))
-        .route("/api/album", post(query_album))
-        .route("/api/library", post(query_library))
-        .route("/api/ticket", post(query_ticket))
-        .nest_service("/app", app_service.clone())
-        .fallback(fallback)
-        .route_layer(middleware::from_fn(proxy_auth))
+    let api_router: Router<()> = Router::new()
+        .route("/user", post(query_user))
+        .route("/group", post(query_group))
+        .route("/media", post(query_media))
+        .route("/album", post(query_album))
+        .route("/library", post(query_library))
+        .route("/ticket", post(query_ticket))
+        .with_state(state.clone());
+
+    let media_router = Router::new()
+        .route("/:dir/:media_uuid", get(stream_media))
         .with_state(state);
+
+    let router = Router::new()
+        .nest(&format!("{app_url_root}/app"), app_router)
+        .nest(&format!("{app_url_root}/api"), api_router)
+        .nest(&format!("{app_url_root}/media"), media_router)
+        .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
+        .layer(TraceLayer::new_for_http())
+        .route_layer(middleware::from_fn(proxy_auth));
 
     let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
         router.clone().call(request)
@@ -359,14 +376,10 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
     Ok(())
 }
 
-async fn fallback(_uri: Uri) -> StatusCode {
-    StatusCode::NOT_FOUND
-}
-
 async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path((dir,media_uuid)): Path<(String, i64)>,
+    Path((dir, media_uuid)): Path<(String, i64)>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
 

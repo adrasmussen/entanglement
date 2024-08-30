@@ -66,6 +66,21 @@ pub struct UpdateMediaReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateMediaResp {}
 
+pub async fn update_media(req: &UpdateMediaReq) -> anyhow::Result<UpdateMediaResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/media")
+        .json(&MediaMessage::UpdateMedia(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
+}
+
+
+
 // fetch the media information for a particular file
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetMediaHiddenReq {

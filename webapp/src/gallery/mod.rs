@@ -1,8 +1,6 @@
-use anyhow;
-
 use dioxus::prelude::*;
 
-use crate::common::{media::MediaGrid, style};
+use crate::common::{media::MediaGrid, storage::*, style};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -28,7 +26,9 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-                        search_filter_signal.set(SearchMediaReq{filter: filter})
+                        search_filter_signal.set(SearchMediaReq{filter: filter.clone()});
+
+                        set_local_storage("gallery_search_filter", filter);
                     },
                     input {
                         name: "search_filter",
@@ -51,7 +51,10 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 #[component]
 pub fn Gallery() -> Element {
     let search_filter_signal = use_signal(|| SearchMediaReq {
-        filter: String::from(""),
+        filter: match get_local_storage("gallery_search_filter") {
+            Ok(val) => val,
+            Err(_) => String::from(""),
+        },
     });
 
     // call to the api server

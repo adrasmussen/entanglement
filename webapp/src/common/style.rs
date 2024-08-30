@@ -4,7 +4,7 @@ pub const TOPNAV: &str = r#"
     background-color: #e9e9e9;
 }
 
-.topnav span {
+.topnav a {
     float: left;
     display: block;
     color: black;
@@ -14,12 +14,12 @@ pub const TOPNAV: &str = r#"
     font-size: 17px;
 }
 
-.topnav span:hover {
+.topnav a:hover {
     background-color: #ddd;
     color: black;
 }
 
-.topnav span.active {
+.topnav a.active {
     background-color: #2196F3;
     color: white;
 }"#;

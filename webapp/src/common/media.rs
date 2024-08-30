@@ -11,8 +11,8 @@ pub struct MediaTileProps {
 
 #[component]
 pub fn MediaTile(props: MediaTileProps) -> Element {
-    let mut view_media_signal = props.view_media_signal.clone();
-    let media_uuid = props.media_uuid.clone();
+    let mut view_media_signal = props.view_media_signal;
+    let media_uuid = props.media_uuid;
 
     rsx! {
         style { "{style::MEDIA_GRID}" }
@@ -34,7 +34,7 @@ pub struct MediaBoxProps {
 // TODO: add update logic, possibly internal signals
 #[component]
 pub fn MediaBox(props: MediaBoxProps) -> Element {
-    let mut view_media_signal = props.view_media_signal.clone();
+    let mut view_media_signal = props.view_media_signal;
 
     let media_uuid = match view_media_signal() {
         Some(val) => val,
@@ -54,6 +54,8 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
         Some(result) => result,
         None => return rsx! {},
     };
+
+    let update_result_signal = use_signal(|| String::from(""));
 
     rsx! {
         div {
@@ -83,7 +85,32 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                                     form {
                                         class: "modal-info",
 
-                                        onsubmit: move |_| {},
+                                        onsubmit: move |event| async move {
+                                            let mut update_result_signal = update_result_signal;
+
+                                            let date = match event.values().get("date") {
+                                                Some(val) => val.as_value(),
+                                                None => String::from(""),
+                                            };
+
+                                            let note = match event.values().get("note") {
+                                                Some(val) => val.as_value(),
+                                                None => String::from(""),
+                                            };
+
+                                            let result = match update_media(&UpdateMediaReq {
+                                                media_uuid: media_uuid.clone(),
+                                                change: MediaMetadata {
+                                                    date: date,
+                                                    note: note,
+                                                }
+                                            }).await {
+                                                Ok(_) => String::from("Media updated successfully"),
+                                                Err(err) => format!("Error updating media: {}", err.to_string()),
+                                            };
+
+                                            update_result_signal.set(result)
+                                        },
 
                                         label { "Library" },
                                         span { "{result.media.library_uuid}" },
@@ -112,6 +139,12 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                                             r#type: "submit",
                                             value: "Update metadata",
                                         },
+
+                                        label { "Status" }
+                                        p {
+                                            width: "600px",
+                                            "{update_result_signal()}"
+                                        }
                                     },
                                 }
                             },
