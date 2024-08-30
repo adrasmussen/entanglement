@@ -2,36 +2,8 @@ use anyhow;
 
 use dioxus::prelude::*;
 
-use crate::common::{sidebar, style};
+use crate::common::{media::MediaGrid, style};
 use api::media::*;
-
-#[derive(Clone, PartialEq, Props)]
-struct MediaProps {
-    view_media_signal: Signal<Option<MediaUuid>>,
-    media_uuid: MediaUuid,
-}
-
-#[component]
-fn Media(props: MediaProps) -> Element {
-    let mut view_media_signal = props.view_media_signal.clone();
-    let media_uuid = props.media_uuid.clone();
-
-    rsx! {
-        div {
-            height: "400px",
-            width: "400px",
-            border: "5px solid #ffffff",
-            display: "flex",
-            flex_direction: "column",
-
-            img {
-                src: "/entanglement/media/thumbnails/{props.media_uuid}",
-                onclick: move |_| { view_media_signal.set(Some(media_uuid)) }
-            }
-        }
-    }
-}
-
 
 #[derive(Clone, PartialEq, Props)]
 struct GalleryNavBarProps {
@@ -65,7 +37,8 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 
                     },
                     input {
-                        r#type: "submit"
+                        r#type: "submit",
+                        value: "Search",
                     },
                 },
                 span { "Search History" },
@@ -81,8 +54,6 @@ pub fn Gallery() -> Element {
         filter: String::from(""),
     });
 
-    let view_media_signal = use_signal::<Option<MediaUuid>>(|| None);
-
     // call to the api server
     let search_results =
         use_resource(move || async move { search_media(&search_filter_signal()).await });
@@ -92,32 +63,18 @@ pub fn Gallery() -> Element {
 
     let (results, status) = match search_results {
         Some(Ok(results)) => (
-            Some(results),
+            Ok(results.media.clone()),
             format!("found {} results", results.media.len()),
         ),
-        Some(Err(err)) => (None, format!("error while searching: {}", err)),
-        None => (None, format!("still awaiting search_media future...")),
+        Some(Err(err)) => (Err(err.to_string()), format!("error while searching")),
+        None => (
+            Ok(Vec::new()),
+            format!("still awaiting search_media future..."),
+        ),
     };
 
     rsx! {
         GalleryNavBar { search_filter_signal: search_filter_signal, search_status: status }
-        sidebar::MediaSidePanel { view_media_signal: view_media_signal }
-
-        div {
-            match results {
-                Some(results) => rsx! {
-                    div {
-                        display: "grid",
-                        gap: "5px",
-                        grid_template_columns: "repeat(auto-fit, minmax(400px, 1fr))",
-
-                        for media_uuid in results.media.iter() {
-                            Media { view_media_signal: view_media_signal, media_uuid: *media_uuid }
-                        }
-                    }
-                },
-                None => rsx! { p {""} }
-            }
-        }
+        MediaGrid { media: results }
     }
 }

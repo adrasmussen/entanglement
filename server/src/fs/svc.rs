@@ -23,6 +23,9 @@ pub struct FileScanner {
 
 #[async_trait]
 impl ESFileService for FileScanner {
+    // TODO -- overhaul this again, making it so that the library scan is async and possibly stores errors in its own table
+    //
+    // we also need a ScanStatus message to send back to the ui
     async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<LibraryScanResult> {
         // first, get the library details
         let (library_tx, library_rx) = tokio::sync::oneshot::channel();

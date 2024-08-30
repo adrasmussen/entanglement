@@ -1,3 +1,29 @@
+pub const TOPNAV: &str = r#"
+.topnav {
+    overflow: hidden;
+    background-color: #e9e9e9;
+}
+
+.topnav span {
+    float: left;
+    display: block;
+    color: black;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+    font-size: 17px;
+}
+
+.topnav span:hover {
+    background-color: #ddd;
+    color: black;
+}
+
+.topnav span.active {
+    background-color: #2196F3;
+    color: white;
+}"#;
+
 pub const SUBNAV: &str = r#"
 .subnav {
     overflow: hidden;
@@ -27,6 +53,109 @@ pub const SUBNAV: &str = r#"
     margin-right: 16px;
     margin-left: 6px;
     font-size: 17px;
+}"#;
+
+pub const MODAL: &str = r#"
+.modal {
+    display: block;
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgb(0,0,0);
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: fit-content;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal-header {
+    padding: 2px 16px;
+    background-color: #2196F3;
+    color: white;
+}
+
+.modal-body {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-gap: 5px;
+    padding: 10px 16px 10px 0px;
+    height: fit-content;
+    width: fit-content;
+}
+
+.modal-footer {
+    padding: 2px 16px;
+    background-color: #5cb85c;
+    color: white;
+}
+
+.modal-body img {
+    float: left;
+    height: 400px;
+    object-fit: contain;
+}
+
+.modal-info {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-gap: 10px;
+    padding: 20px;
+    color: black;
+    font-size 17px;
+}
+
+.modal-info label {
+    text-align: right;
+}
+
+.modal-info label:after {
+    content: ":";
+}
+
+.modal-info textarea {
+    width: 600px;
+}
+
+.modal-info input[type=submit] {
+    grid-column: 2;
+}"#;
+
+pub const MEDIA_GRID: &str = r#"
+.media-grid {
+    display: grid;
+    gap: 5px;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+
+.media-tile {
+    height: 300px;
+    width: 300px;
+    border: 5px solid #ffffff;
+    display: flex;
+    flex-direction: column;
 }"#;
 
 pub const SIDEPANEL: &str = r#"

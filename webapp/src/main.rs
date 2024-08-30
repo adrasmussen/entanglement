@@ -5,6 +5,7 @@ use dioxus_router::prelude::*;
 use tracing::{info, Level};
 
 mod common;
+use common::style;
 
 mod home;
 use home::Home;
@@ -62,36 +63,9 @@ pub fn App() -> Element {
 
 #[component]
 fn NavBar() -> Element {
-    let style = r#"
-        .topnav {
-            overflow: hidden;
-            background-color: #e9e9e9;
-        }
-
-        .topnav span {
-            float: left;
-            display: block;
-            color: black;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-            font-size: 17px;
-        }
-
-        .topnav span:hover {
-            background-color: #ddd;
-            color: black;
-        }
-
-        .topnav span.active {
-            background-color: #2196F3;
-            color: white;
-        }
-    "#;
-
     rsx! {
         div {
-            style { "{style}" },
+            style { "{style::TOPNAV}" },
             div {class: "topnav",
                 span { Link { to: Route::Home {}, "Home" } }
                 span { Link { to: Route::Gallery {}, "Gallery" } }
