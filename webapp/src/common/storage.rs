@@ -26,3 +26,13 @@ where
         anyhow::Error::msg("Local storage failure, see console log")
     })
 }
+
+pub trait SearchStorage
+where
+    Self: Serialize,
+    Self: for<'a> Deserialize<'a>,
+{
+    fn store(&self) -> ();
+
+    fn fetch() -> anyhow::Result<Self>;
+}

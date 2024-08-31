@@ -1294,7 +1294,7 @@ async fn query_ticket(
 
             Ok(Json(SetTicketResolvedResp {}).into_response())
         }
-        TicketMessage::TicketSearch(msg) => {
+        TicketMessage::SearchTickets(msg) => {
             // auth
             //
             // handled as part of the search query

@@ -35,7 +35,7 @@ pub enum TicketMessage {
     CreateComment(CreateCommentReq),
     GetTicket(GetTicketReq),
     SetTicketResolved(SetTicketResolvedReq),
-    TicketSearch(SearchTicketsReq),
+    SearchTickets(SearchTicketsReq),
 }
 
 // creates a ticket
@@ -74,6 +74,19 @@ pub struct GetTicketResp {
     pub ticket: Ticket,
 }
 
+pub async fn get_ticket(req: &GetTicketReq) -> anyhow::Result<GetTicketResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/ticket")
+        .json(&TicketMessage::GetTicket(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetTicketResolvedReq {
     pub ticket_uuid: TicketUuid,
@@ -84,7 +97,9 @@ pub struct SetTicketResolvedReq {
 pub struct SetTicketResolvedResp {}
 
 // search tickets on their titles (and possibly comments)
-#[derive(Clone, Debug, Serialize, Deserialize)]
+//
+// default is "" and false
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchTicketsReq {
     pub filter: String,
     pub resolved: bool,
@@ -93,4 +108,17 @@ pub struct SearchTicketsReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchTicketsResp {
     pub tickets: Vec<TicketUuid>,
+}
+
+pub async fn search_tickets(req: &SearchTicketsReq) -> anyhow::Result<SearchTicketsResp> {
+    let resp = gloo_net::http::Request::post("/entanglement/api/ticket")
+        .json(&TicketMessage::SearchTickets(req.clone()))?
+        .send()
+        .await?;
+
+    if resp.ok() {
+        Ok(resp.json().await?)
+    } else {
+        Err(anyhow::Error::msg(resp.text().await?))
+    }
 }

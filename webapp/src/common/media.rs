@@ -31,7 +31,6 @@ pub struct MediaBoxProps {
     pub view_media_signal: Signal<Option<MediaUuid>>,
 }
 
-// TODO: add update logic, possibly internal signals
 #[component]
 pub fn MediaBox(props: MediaBoxProps) -> Element {
     // the internal signal used to re-render and provide info about a metadata update
@@ -110,8 +109,8 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                                                     note: note,
                                                 }
                                             }).await {
-                                                Ok(_) => String::from("Media updated successfully"),
-                                                Err(err) => format!("Error updating media: {}", err.to_string()),
+                                                Ok(_) => String::from("Metadata updated successfully"),
+                                                Err(err) => format!("Error updating metadata: {}", err.to_string()),
                                             };
 
                                             update_result_signal.set(result)

@@ -22,7 +22,8 @@ pub const TOPNAV: &str = r#"
 .topnav a.active {
     background-color: #2196F3;
     color: white;
-}"#;
+}
+"#;
 
 pub const SUBNAV: &str = r#"
 .subnav {
@@ -50,10 +51,24 @@ pub const SUBNAV: &str = r#"
     padding: 6px;
     border: none;
     margin-top: 8px;
-    margin-right: 16px;
-    margin-left: 6px;
+    margin-right: 8px;
+    margin-left: 8px;
     font-size: 17px;
-}"#;
+}
+
+.subnav label {
+    float: left;
+    padding: 6px;
+    border: none;
+    margin-top: 8px;
+    font-size: 17px;
+}
+
+.subnav input[type=checkbox] {
+    float: left;
+    margin-top: 17px;
+}
+"#;
 
 pub const MODAL: &str = r#"
 .modal {
@@ -141,7 +156,8 @@ pub const MODAL: &str = r#"
 
 .modal-info input[type=submit] {
     grid-column: 2;
-}"#;
+}
+"#;
 
 pub const MEDIA_GRID: &str = r#"
 .media-grid {
@@ -156,7 +172,36 @@ pub const MEDIA_GRID: &str = r#"
     border: 5px solid #ffffff;
     display: flex;
     flex-direction: column;
-}"#;
+}
+"#;
+
+pub const TABLE: &str = r#"
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+td, th {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2
+}
+
+tr:hover {
+    background-color: #ddd;
+}
+
+th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    text-align: left;
+    background-color: #04AA6D;
+    color: white;
+}
+"#;
 
 pub const SIDEPANEL: &str = r#"
 .sidepanel {
@@ -182,6 +227,7 @@ pub const SIDEPANEL: &str = r#"
     padding: 20px 20px;
     color: black;
     font-size 17px;
-}"#;
+}
+"#;
 
 pub const SIDEPANEL_EXT: &str = "400px";

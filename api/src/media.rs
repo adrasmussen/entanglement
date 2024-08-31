@@ -79,8 +79,6 @@ pub async fn update_media(req: &UpdateMediaReq) -> anyhow::Result<UpdateMediaRes
     }
 }
 
-
-
 // fetch the media information for a particular file
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetMediaHiddenReq {
@@ -93,7 +91,9 @@ pub struct SetMediaHiddenResp {}
 
 
 // search media
-#[derive(Clone, Debug, Serialize, Deserialize)]
+//
+// defaults to ""
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchMediaReq {
     pub filter: String,
 }

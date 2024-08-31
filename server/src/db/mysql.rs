@@ -996,11 +996,11 @@ impl ESDbService for MySQLState {
             ) AS t3
             INNER JOIN tickets ON t3.media_uuid = tickets.media_uuid
             WHERE
-                resolved = :resolved AND title LIKE %:filter%"
+                resolved = :resolved AND title LIKE :filter"
             .with(params! {
                 "uid" => uid,
                 "resolved" => resolved,
-                "filter" => filter,
+                "filter" => format!("%{}%", filter),
             }).run(self.pool.get_conn().await?)
             .await?.collect::<Row>()
             .await?;

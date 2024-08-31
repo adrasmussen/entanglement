@@ -3,6 +3,16 @@ use dioxus::prelude::*;
 use crate::common::{media::MediaGrid, storage::*, style};
 use api::media::*;
 
+impl SearchStorage for SearchMediaReq {
+    fn store(&self) -> () {
+        set_local_storage("gallery_search_req", &self)
+    }
+
+    fn fetch() -> anyhow::Result<Self> {
+        get_local_storage("gallery_search_req")
+    }
+}
+
 #[derive(Clone, PartialEq, Props)]
 struct GalleryNavBarProps {
     search_filter_signal: Signal<SearchMediaReq>,
@@ -12,8 +22,6 @@ struct GalleryNavBarProps {
 #[component]
 fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
     let mut search_filter_signal = props.search_filter_signal.clone();
-
-    let search_filter = search_filter_signal().filter;
 
     rsx! {
         div {
@@ -26,14 +34,17 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-                        search_filter_signal.set(SearchMediaReq{filter: filter.clone()});
 
-                        set_local_storage("gallery_search_filter", filter);
+                        let req = SearchMediaReq{filter: filter};
+
+                        search_filter_signal.set(req.clone());
+
+                        req.store();
                     },
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{search_filter}",
+                        value: "{search_filter_signal().filter}",
 
                     },
                     input {
@@ -50,11 +61,9 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 
 #[component]
 pub fn Gallery() -> Element {
-    let search_filter_signal = use_signal(|| SearchMediaReq {
-        filter: match get_local_storage("gallery_search_filter") {
-            Ok(val) => val,
-            Err(_) => String::from(""),
-        },
+    let search_filter_signal = use_signal(|| match SearchMediaReq::fetch() {
+        Ok(val) => val,
+        Err(_) => SearchMediaReq::default(),
     });
 
     // call to the api server
