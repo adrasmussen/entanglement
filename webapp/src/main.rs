@@ -16,8 +16,8 @@ use gallery::Gallery;
 mod albums;
 use albums::Albums;
 
-mod tickets;
-use tickets::Tickets;
+mod ticket;
+use ticket::Tickets;
 
 mod library;
 use library::Library;

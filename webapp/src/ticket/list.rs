@@ -1,17 +1,17 @@
 use dioxus::prelude::*;
 
-use crate::common::style;
+use crate::common::{modal::{Modal, ModalBox}, style};
 use api::ticket::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct TicketListEntryProps {
-    pub view_ticket_signal: Signal<Option<TicketUuid>>,
+    pub modal_stack_signal: Signal<Vec<Modal>>,
     pub ticket_uuid: TicketUuid,
 }
 
 #[component]
 pub fn TicketListEntry(props: TicketListEntryProps) -> Element {
-    let mut view_ticket_signal = props.view_ticket_signal;
+    let mut modal_stack_signal = props.modal_stack_signal;
     let ticket_uuid = props.ticket_uuid;
 
     let ticket = use_resource(move || async move {
@@ -30,11 +30,13 @@ pub fn TicketListEntry(props: TicketListEntryProps) -> Element {
 
     rsx! {
             tr {
+                onclick: move |_| { modal_stack_signal.push(Modal::Ticket(ticket_uuid)) },
                 td { "{result.media_uuid}" }
                 td { "{result.uid}" }
                 td { "{result.title}" }
                 td { "{result.timestamp}" }
                 td { "{result.resolved}" }
+                td { "{result.comments.len()}" }
             }
     }
 }
@@ -46,10 +48,10 @@ pub struct TicketListProps {
 
 #[component]
 pub fn TicketList(props: TicketListProps) -> Element {
-    let view_ticket_signal = use_signal::<Option<TicketUuid>>(|| None);
+    let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
 
     rsx! {
-        // TicketBox
+        ModalBox { stack_signal: modal_stack_signal }
 
         div {
             style { "{style::TABLE}" }
@@ -62,10 +64,11 @@ pub fn TicketList(props: TicketListProps) -> Element {
                             th { "Title" }
                             th { "Timestamp" }
                             th { "Resolved" }
+                            th { "Comments" }
                         }
 
                         for ticket_uuid in tickets.iter() {
-                            TicketListEntry { view_ticket_signal: view_ticket_signal, ticket_uuid: *ticket_uuid }
+                            TicketListEntry { modal_stack_signal: modal_stack_signal, ticket_uuid: *ticket_uuid }
                         }
                     }
                 },

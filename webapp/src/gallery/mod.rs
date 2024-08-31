@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::common::{media::MediaGrid, storage::*, style};
+use crate::common::{storage::*, style};
 use api::media::*;
+
+mod grid;
+use grid::MediaGrid;
 
 impl SearchStorage for SearchMediaReq {
     fn store(&self) -> () {
@@ -21,7 +24,7 @@ struct GalleryNavBarProps {
 
 #[component]
 fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
-    let mut search_filter_signal = props.search_filter_signal.clone();
+    let mut search_filter_signal = props.search_filter_signal;
 
     rsx! {
         div {
