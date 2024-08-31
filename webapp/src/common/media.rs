@@ -33,15 +33,19 @@ pub struct MediaBoxProps {
 
 #[component]
 pub fn MediaBox(props: MediaBoxProps) -> Element {
-    // the internal signal used to re-render and provide info about a metadata update
-    let update_result_signal = use_signal(|| String::from(""));
-
+    // generalize these two lines to call each type of modal box,
+    // or nothing if the stack is empty
     let mut view_media_signal = props.view_media_signal;
 
     let media_uuid = match view_media_signal() {
         Some(val) => val,
         None => return rsx! {},
     };
+
+    // everything below here is specific to media
+
+    // the internal signal used to re-render and provide info about a metadata update
+    let update_result_signal = use_signal(|| String::from(""));
 
     let media = use_resource(move || async move {
         update_result_signal();
