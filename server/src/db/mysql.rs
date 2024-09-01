@@ -675,12 +675,12 @@ impl ESDbService for MySQLState {
             ) AS t3
             INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE %:filter%
+                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter
             "
         .with(params! {
             "uid" => uid,
             "album_uuid" => album_uuid,
-            "filter" => filter,
+            "filter" => format!("%{}%", filter),
         })
         .run(self.pool.get_conn().await?)
         .await?
@@ -798,13 +798,13 @@ impl ESDbService for MySQLState {
             INNER JOIN media ON t2.library_uuid = media.library_uuid
             WHERE
                 (
-                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE %:filter%
+                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
                 )"
         .with(params! {
             "uid" => uid,
             "library_uuid" => library_uuid,
             "hidden" => hidden,
-            "filter" => filter,
+            "filter" => format!("%{}%", filter),
         })
         .run(self.pool.get_conn().await?)
         .await?
