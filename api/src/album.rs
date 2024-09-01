@@ -5,7 +5,7 @@ use crate::message;
 
 // structs and types
 
-pub type AlbumUuid = u64;
+pub type AlbumUuid = i64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Album {

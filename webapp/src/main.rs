@@ -20,7 +20,7 @@ mod ticket;
 use ticket::Tickets;
 
 mod library;
-use library::Library;
+use library::Libraries;
 
 mod settings;
 use settings::Settings;
@@ -48,7 +48,7 @@ enum Route {
         #[route("/albums")]
         Albums {},
         #[route("/library")]
-        Library {},
+        Libraries {},
         #[route("/tickets")]
         Tickets {},
         #[route("/settings")]
@@ -73,7 +73,7 @@ fn NavBar() -> Element {
                 Link { active_class: "active", to: Route::Home {}, "Home" }
                 Link { active_class: "active", to: Route::Gallery {}, "Gallery" }
                 Link { active_class: "active", to: Route::Albums {}, "Albums" }
-                Link { active_class: "active", to: Route::Library {}, "Library" }
+                Link { active_class: "active", to: Route::Libraries {}, "Libraries" }
                 Link { active_class: "active", to: Route::Tickets {}, "Tickets" }
                 Link { active_class: "active", to: Route::Settings {}, "Settings" }
                 Link { active_class: "active", to: Route::Status {}, "Status" }

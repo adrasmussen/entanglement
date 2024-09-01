@@ -38,6 +38,7 @@ macro_rules! library_message {
 pub enum LibraryMessage {
     AddLibrary(AddLibraryReq),
     GetLibrary(GetLibraryReq),
+    SearchLibraries(SearchLibrariesReq),
     SearchMediaInLibrary(SearchMediaInLibraryReq),
     ScanLibrary(ScanLibraryReq),
 }
@@ -67,6 +68,19 @@ pub struct GetLibraryResp {
 }
 
 library_message! {GetLibrary}
+
+// find libraries
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchLibrariesReq {
+    pub filter: String
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchLibrariesResp {
+    pub libraries: Vec<LibraryUuid>,
+}
+
+library_message! {SearchLibraries}
 
 // search media inside a particular library
 #[derive(Clone, Debug, Serialize, Deserialize)]

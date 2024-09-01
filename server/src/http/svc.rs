@@ -764,7 +764,7 @@ async fn query_media(
                 .send(
                     DbMsg::SearchMedia {
                         resp: tx,
-                        uid: uid,
+                        uid: uid.clone(),
                         filter: msg.filter,
                     }
                     .into(),
@@ -978,7 +978,7 @@ async fn query_album(
                 .send(
                     DbMsg::SearchAlbums {
                         resp: tx,
-                        user: uid,
+                        uid: uid.clone(),
                         filter: msg.filter,
                     }
                     .into(),
@@ -1003,7 +1003,7 @@ async fn query_album(
                 .send(
                     DbMsg::SearchMediaInAlbum {
                         resp: tx,
-                        user: uid,
+                        uid: uid.clone(),
                         album_uuid: msg.album_uuid,
                         filter: msg.filter,
                     }
@@ -1087,6 +1087,31 @@ async fn query_library(
                 .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
 
             Ok(Json(GetLibraryResp { library: result }).into_response())
+        }
+        LibraryMessage::SearchLibraries(msg) => {
+            // auth
+            //
+            // handled as part of search query
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SearchLibraries {
+                        resp: tx,
+                        uid: uid.clone(),
+                        filter: msg.filter,
+                    }
+                    .into(),
+                )
+                .await
+                .context("Failed to send SearchLibraries message")?;
+
+            let result = rx
+                .await
+                .context("Failed to receive SearchLibrary response")??;
+
+            Ok(Json(SearchLibrariesResp { libraries: result }).into_response())
         }
         LibraryMessage::SearchMediaInLibrary(msg) => {
             // auth
@@ -1179,7 +1204,7 @@ async fn query_ticket(
                         resp: tx,
                         ticket: Ticket {
                             media_uuid: msg.media_uuid,
-                            uid: uid,
+                            uid: uid.clone(),
                             title: msg.title,
                             timestamp: Local::now().timestamp(),
                             resolved: false,
@@ -1217,7 +1242,7 @@ async fn query_ticket(
                         resp: tx,
                         comment: TicketComment {
                             ticket_uuid: msg.ticket_uuid,
-                            uid: uid,
+                            uid: uid.clone(),
                             text: msg.comment_text,
                             timestamp: Local::now().timestamp(),
                         },
@@ -1302,7 +1327,7 @@ async fn query_ticket(
                 .send(
                     DbMsg::SearchTickets {
                         resp: tx,
-                        user: uid,
+                        uid: uid.clone(),
                         filter: msg.filter,
                         resolved: msg.resolved,
                     }

@@ -34,6 +34,7 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
     let mut album_view_signal = props.album_view_signal;
     let mut album_search_signal = props.album_search_signal;
     let mut media_search_signal = props.media_search_signal;
+
     let (album_status, media_status) = props.status;
 
     // somewhat unfortunate hack because dioxus requires us to always call the hook,
@@ -191,11 +192,11 @@ pub fn Albums() -> Element {
         ),
         Some(Err(err)) => (
             Err(err.to_string()),
-            String::from("Error from search_media_in_albums"),
+            String::from("Error from search_media_in_album"),
         ),
         None => (
             Err(String::from(
-                "Still waiting on search_media_in_albums future...",
+                "Still waiting on search_media_in_album future...",
             )),
             String::from(""),
         ),

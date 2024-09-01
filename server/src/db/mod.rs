@@ -50,7 +50,7 @@ trait ESDbService: ESInner {
 
     async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()>;
 
-    async fn search_media(&self, user: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
+    async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
     async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
@@ -97,9 +97,11 @@ trait ESDbService: ESInner {
         change: LibraryMetadata,
     ) -> anyhow::Result<()>;
 
+    async fn search_libraries(&self, uid: String, filter: String) -> anyhow::Result<Vec<LibraryUuid>>;
+
     async fn search_media_in_library(
         &self,
-        user: String,
+        uid: String,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,

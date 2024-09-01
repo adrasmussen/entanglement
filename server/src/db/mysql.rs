@@ -764,6 +764,14 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
+    async fn search_libraries(
+        &self,
+        uid: String,
+        filter: String,
+    ) -> anyhow::Result<Vec<LibraryUuid>> {
+        Err(anyhow::Error::msg("not implemented"))
+    }
+
     async fn search_media_in_library(
         &self,
         uid: String,
@@ -1001,8 +1009,10 @@ impl ESDbService for MySQLState {
                 "uid" => uid,
                 "resolved" => resolved,
                 "filter" => format!("%{}%", filter),
-            }).run(self.pool.get_conn().await?)
-            .await?.collect::<Row>()
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
             .await?;
 
         let data = result
@@ -1119,16 +1129,16 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
                         .await
                 }
-                DbMsg::SearchAlbums { resp, user, filter } => {
-                    self.respond(resp, self.search_albums(user, filter)).await
+                DbMsg::SearchAlbums { resp, uid, filter } => {
+                    self.respond(resp, self.search_albums(uid, filter)).await
                 }
                 DbMsg::SearchMediaInAlbum {
                     resp,
-                    user,
+                    uid,
                     album_uuid,
                     filter,
                 } => {
-                    self.respond(resp, self.search_media_in_album(user, album_uuid, filter))
+                    self.respond(resp, self.search_media_in_album(uid, album_uuid, filter))
                         .await
                 }
 
@@ -1145,6 +1155,10 @@ impl ESInner for MySQLState {
                     change,
                 } => {
                     self.respond(resp, self.update_library(library_uuid, change))
+                        .await
+                }
+                DbMsg::SearchLibraries { resp, uid, filter } => {
+                    self.respond(resp, self.search_libraries(uid, filter))
                         .await
                 }
                 DbMsg::SearchMediaInLibrary {
@@ -1181,11 +1195,11 @@ impl ESInner for MySQLState {
                 }
                 DbMsg::SearchTickets {
                     resp,
-                    user,
+                    uid,
                     filter,
                     resolved,
                 } => {
-                    self.respond(resp, self.search_tickets(user, filter, resolved))
+                    self.respond(resp, self.search_tickets(uid, filter, resolved))
                         .await
                 }
             },

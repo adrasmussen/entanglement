@@ -111,12 +111,12 @@ pub enum DbMsg {
     },
     SearchAlbums {
         resp: ESMResp<Vec<AlbumUuid>>,
-        user: String,
+        uid: String,
         filter: String,
     },
     SearchMediaInAlbum {
         resp: ESMResp<Vec<MediaUuid>>,
-        user: String,
+        uid: String,
         album_uuid: AlbumUuid,
         filter: String,
     },
@@ -134,6 +134,11 @@ pub enum DbMsg {
         resp: ESMResp<()>,
         library_uuid: LibraryUuid,
         change: LibraryMetadata,
+    },
+    SearchLibraries {
+        resp: ESMResp<Vec<LibraryUuid>>,
+        uid: String,
+        filter: String,
     },
     SearchMediaInLibrary {
         resp: ESMResp<Vec<MediaUuid>>,
@@ -163,7 +168,7 @@ pub enum DbMsg {
     },
     SearchTickets {
         resp: ESMResp<Vec<TicketUuid>>,
-        user: String,
+        uid: String,
         filter: String,
         resolved: bool,
     },
