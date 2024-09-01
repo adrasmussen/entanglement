@@ -1,33 +1,35 @@
 use dioxus::prelude::*;
 
-use crate::common::{storage::*, style};
+use serde::{Deserialize, Serialize};
+
+use crate::common::{
+    modal::{Modal, ModalBox},
+    storage::*,
+    style,
+};
 use api::ticket::*;
 
 mod list;
 use list::TicketList;
 
-impl SearchStorage for SearchTicketsReq {
-    fn store(&self) -> () {
-        set_local_storage("ticket_search_req", &self)
-    }
+const TICKET_SEARCH_KEY: &str = "ticket_search";
 
-    fn fetch() -> Self {
-        match get_local_storage("ticket_search_req") {
-            Ok(val) => val,
-            Err(_) => Self::default(),
-        }
-    }
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+struct StoredTicketSearch {
+    filter: String,
+    resolved: bool,
 }
 
 #[derive(Clone, PartialEq, Props)]
 struct TicketNavBarProps {
-    search_filter_signal: Signal<SearchTicketsReq>,
-    search_status: String,
+    ticket_search_signal: Signal<StoredTicketSearch>,
+    status: String,
 }
 
 #[component]
 fn TicketNavBar(props: TicketNavBarProps) -> Element {
-    let mut search_filter_signal = props.search_filter_signal;
+    let mut ticket_search_signal = props.ticket_search_signal;
+    let status = props.status;
 
     rsx! {
         div {
@@ -49,19 +51,19 @@ fn TicketNavBar(props: TicketNavBarProps) -> Element {
                             None => false,
                         };
 
-                        let req = SearchTicketsReq{
+                        let search = StoredTicketSearch {
                             filter: filter,
                             resolved: resolved,
                         };
 
-                        search_filter_signal.set(req.clone());
+                        ticket_search_signal.set(search.clone());
 
-                        req.store();
+                        set_local_storage(TICKET_SEARCH_KEY, search)
                     },
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{search_filter_signal().filter}",
+                        value: "{ticket_search_signal().filter}",
 
                     },
                     label {
@@ -72,7 +74,7 @@ fn TicketNavBar(props: TicketNavBarProps) -> Element {
                         id: "resolved",
                         name: "resolved",
                         r#type: "checkbox",
-                        checked: search_filter_signal().resolved,
+                        checked: ticket_search_signal().resolved,
                         value: "true",
                     },
                     input {
@@ -81,7 +83,7 @@ fn TicketNavBar(props: TicketNavBarProps) -> Element {
                     },
                 },
                 span { "Search History" },
-                span { "{props.search_status}" },
+                span { "{status}" },
             }
         }
     }
@@ -89,27 +91,46 @@ fn TicketNavBar(props: TicketNavBarProps) -> Element {
 
 #[component]
 pub fn Tickets() -> Element {
-    let search_filter_signal = use_signal(|| SearchTicketsReq::fetch());
+    let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
+    let ticket_search_signal =
+        use_signal::<StoredTicketSearch>(|| try_local_storage(TICKET_SEARCH_KEY));
 
-    let search_results =
-        use_resource(move || async move { search_tickets(&search_filter_signal()).await });
+    let ticket_future = use_resource(move || async move {
+        let search = ticket_search_signal();
 
-    let search_results = &*search_results.read();
+        search_tickets(&SearchTicketsReq {
+            filter: search.filter,
+            resolved: search.resolved,
+        })
+        .await
+    });
 
-    let (results, status) = match search_results {
-        Some(Ok(results)) => (
-            Ok(results.tickets.clone()),
-            format!("found {} results", results.tickets.len()),
+    let (tickets, status) = match &*ticket_future.read() {
+        Some(Ok(resp)) => (
+            Ok(resp.tickets.clone()),
+            format!("Found {} results", resp.tickets.len()),
         ),
-        Some(Err(err)) => (Err(err.to_string()), format!("error while searching")),
+        Some(Err(err)) => (
+            Err(err.to_string()),
+            String::from("Error from search_tickets"),
+        ),
         None => (
-            Ok(Vec::new()),
-            format!("still awaiting search_tickets future..."),
+            Err(String::from("Still waiting on search_tickets future...")),
+            String::from(""),
         ),
     };
 
     rsx! {
-        TicketNavBar { search_filter_signal: search_filter_signal, search_status: status}
-        TicketList { tickets: results }
+        TicketNavBar { ticket_search_signal: ticket_search_signal, status: status}
+        ModalBox { stack_signal: modal_stack_signal }
+
+        match tickets {
+            Ok(tickets) => rsx! {
+                TicketList { modal_stack_signal: modal_stack_signal, tickets: tickets }
+            },
+            Err(err) => rsx! {
+                span { "{err}" }
+            },
+        }
     }
 }

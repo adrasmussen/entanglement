@@ -1,10 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::common::{
-    modal::{Modal, ModalBox},
-    stream::*,
-    style,
-};
+use crate::common::{modal::Modal, stream::*, style};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]

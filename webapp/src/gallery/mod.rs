@@ -10,52 +10,18 @@ use api::media::*;
 pub mod grid;
 use grid::MediaGrid;
 
-// a compact way to describe the states the media page can be in
-#[derive(Clone)]
-enum GalleryView {
-    Pending,
-    MediaList(Vec<MediaUuid>),
-    SearchError(String),
-}
-
-impl From<anyhow::Result<SearchMediaResp>> for GalleryView {
-    fn from(smr: anyhow::Result<SearchMediaResp>) -> Self {
-        match smr {
-            Ok(resp) => GalleryView::MediaList(resp.media),
-            Err(err) => GalleryView::SearchError(err.to_string()),
-        }
-    }
-}
-
-impl SearchStorage for SearchMediaReq {
-    fn store(&self) -> () {
-        set_local_storage("gallery_search_req", &self)
-    }
-
-    fn fetch() -> Self {
-        match get_local_storage("gallery_search_req") {
-            Ok(val) => val,
-            Err(_) => Self::default()
-        }
-    }
-}
+const MEDIA_SEARCH_KEY: &str = "media_search";
 
 #[derive(Clone, PartialEq, Props)]
 struct GalleryNavBarProps {
-    gallery_view_signal: Signal<GalleryView>,
+    media_search_signal: Signal<String>,
+    status: String,
 }
 
 #[component]
 fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
-    let mut gallery_view_signal = props.gallery_view_signal;
-
-    let search_filter = SearchMediaReq::fetch();
-
-    let status = match gallery_view_signal() {
-        GalleryView::Pending => String::from(""),
-        GalleryView::MediaList(res) => format!("Found {} results", res.len()),
-        GalleryView::SearchError(_) => String::from("Error while searching"),
-    };
+    let mut media_search_signal = props.media_search_signal;
+    let status = props.status;
 
     rsx! {
         div {
@@ -69,16 +35,14 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
                             None => String::from(""),
                         };
 
-                        let req = SearchMediaReq{filter: filter};
+                        media_search_signal.set(filter.clone());
 
-                        gallery_view_signal.set(search_media(&req).await.into());
-
-                        req.store();
+                        set_local_storage(MEDIA_SEARCH_KEY, filter);
                     },
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{search_filter.filter}",
+                        value: "{media_search_signal()}",
 
                     },
                     input {
@@ -96,22 +60,40 @@ fn GalleryNavBar(props: GalleryNavBarProps) -> Element {
 #[component]
 pub fn Gallery() -> Element {
     let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
-    let gallery_view_signal = use_signal(|| GalleryView::Pending);
+    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+
+    let media_future = use_resource(move || async move {
+        let filter = media_search_signal();
+
+        search_media(&SearchMediaReq { filter: filter }).await
+    });
+
+    let (media, status) = match &*media_future.read() {
+        Some(Ok(resp)) => (
+            Ok(resp.media.clone()),
+            format!("Found {} results", resp.media.len()),
+        ),
+        Some(Err(err)) => (
+            Err(err.to_string()),
+            String::from("Error from search_media"),
+        ),
+        None => (
+            Err(String::from("Still waiting on search_media future...")),
+            String::from(""),
+        ),
+    };
 
     rsx! {
-        GalleryNavBar { gallery_view_signal: gallery_view_signal }
+        GalleryNavBar { media_search_signal: media_search_signal, status: status }
         ModalBox { stack_signal: modal_stack_signal }
 
-        match gallery_view_signal() {
-            GalleryView::Pending => rsx! {
-                span { "Search using the box above" }
-            },
-            GalleryView::MediaList(media) => rsx! {
+        match media {
+            Ok(media) => rsx! {
                 MediaGrid { modal_stack_signal: modal_stack_signal, media: media }
             },
-            GalleryView::SearchError(err) => rsx! {
+            Err(err) => rsx! {
                 span { "{err}" }
-            }
+            },
         }
     }
 }

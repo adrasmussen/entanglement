@@ -11,40 +11,14 @@ use api::album::*;
 mod list;
 use list::AlbumList;
 
-pub const ALBUM_SEARCH_KEY: &str = "album_search";
-pub const MEDIA_SEARCH_KEY: &str = "media_in_album_search";
+const ALBUM_SEARCH_KEY: &str = "album_search";
+const MEDIA_SEARCH_KEY: &str = "media_in_album_search";
 
 // states of the album page
 #[derive(Clone)]
 enum AlbumView {
     AlbumList,
     MediaList(AlbumUuid),
-}
-
-impl SearchStorage for SearchAlbumsReq {
-    fn store(&self) -> () {
-        set_local_storage("album_search_req", &self)
-    }
-
-    fn fetch() -> Self {
-        match get_local_storage("album_search_req") {
-            Ok(val) => val,
-            Err(_) => Self::default(),
-        }
-    }
-}
-
-impl SearchStorage for SearchMediaInAlbumReq {
-    fn store(&self) -> () {
-        set_local_storage("media_in_album_search_req", &self)
-    }
-
-    fn fetch() -> Self {
-        match get_local_storage("media_in_album_search_req") {
-            Ok(val) => val,
-            Err(_) => Self::default(),
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Props)]
@@ -60,7 +34,6 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
     let mut album_view_signal = props.album_view_signal;
     let mut album_search_signal = props.album_search_signal;
     let mut media_search_signal = props.media_search_signal;
-
     let (album_status, media_status) = props.status;
 
     // somewhat unfortunate hack because dioxus requires us to always call the hook,
