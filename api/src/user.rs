@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::message;
+
 // structs and types
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -15,6 +17,12 @@ pub struct User {
 pub struct UserMetadata {}
 
 // messages
+
+macro_rules! user_message {
+    ($s:ident) => {
+        message! {$s, "user"}
+    };
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum UserMessage {
@@ -33,6 +41,8 @@ pub struct CreateUserReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateUserResp {}
 
+user_message! {CreateUser}
+
 // get user
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetUserReq {
@@ -44,6 +54,8 @@ pub struct GetUserResp {
     pub user: User,
 }
 
+user_message! {GetUser}
+
 // delete user
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteUserReq {
@@ -52,3 +64,5 @@ pub struct DeleteUserReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteUserResp {}
+
+user_message! {DeleteUser}

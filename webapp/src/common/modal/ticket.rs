@@ -44,7 +44,7 @@ pub fn TicketBox(props: TicketBoxProps) -> Element {
                     rsx! {
                         div {
                             img {
-                                onclick: move |_| { stack_signal.push(Modal::Media(media_uuid)) },
+                                onclick: move |_| { stack_signal.push(Modal::ShowMedia(media_uuid)) },
 
                                 src: full_link(media_uuid),
                             }

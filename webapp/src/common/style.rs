@@ -46,7 +46,7 @@ pub const SUBNAV: &str = r#"
     color: black;
 }
 
-.subnav input[type=text], input[type=submit] {
+.subnav input[type=text], input[type=submit], button {
     float: left;
     padding: 6px;
     border: none;
@@ -67,6 +67,46 @@ pub const SUBNAV: &str = r#"
 .subnav input[type=checkbox] {
     float: left;
     margin-top: 17px;
+}
+"#;
+
+pub const CONTROLBAR: &str = r#"
+.control {
+    overflow: hidden;
+    background-color: #e9e9e9;
+}
+
+.control span {
+    float: left;
+    display: block;
+    color: black;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+    font-size: 17px;
+}
+
+.control span:hover {
+    background-color: #eaeaea;
+    color: black;
+}
+
+.control input[type=text], input[type=submit], button {
+    float: left;
+    padding: 6px;
+    border: none;
+    margin-top: 8px;
+    margin-right: 8px;
+    margin-left: 8px;
+    font-size: 17px;
+}
+
+.control label {
+    float: left;
+    padding: 6px;
+    border: none;
+    margin-top: 8px;
+    font-size: 17px;
 }
 "#;
 
@@ -116,15 +156,16 @@ pub const MODAL: &str = r#"
     display: grid;
     grid-template-columns: max-content max-content;
     grid-gap: 5px;
-    padding: 10px 16px 10px 0px;
+    padding: 10px 0px 10px 0px;
     height: fit-content;
     width: fit-content;
 }
 
 .modal-footer {
     padding: 2px 16px;
-    background-color: #5cb85c;
+    background-color: #2196F3;
     color: white;
+    text-align: center;
 }
 
 .modal-body img {
@@ -152,6 +193,16 @@ pub const MODAL: &str = r#"
 
 .modal-info textarea {
     width: 600px;
+}
+
+.modal-info input[type=text], input[type=submit], button {
+    float: left;
+    padding: 6px;
+    border: none;
+    margin-top: 8px;
+    margin-right: 8px;
+    margin-left: 8px;
+    font-size: 15px;
 }
 
 .modal-info input[type=submit] {

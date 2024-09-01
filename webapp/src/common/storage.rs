@@ -34,5 +34,5 @@ where
 {
     fn store(&self) -> ();
 
-    fn fetch() -> anyhow::Result<Self>;
+    fn fetch() -> Self;
 }

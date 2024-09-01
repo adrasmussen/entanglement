@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::message;
 use crate::media::MediaUuid;
 
 // structs and types
@@ -27,10 +28,16 @@ pub struct LibraryScanResult {
 
 // messages
 
+macro_rules! library_message {
+    ($s:ident) => {
+        message! {$s, "library"}
+    };
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LibraryMessage {
     AddLibrary(AddLibraryReq),
-    GetLibary(GetLibraryReq),
+    GetLibrary(GetLibraryReq),
     SearchMediaInLibrary(SearchMediaInLibraryReq),
     ScanLibrary(ScanLibraryReq),
 }
@@ -42,9 +49,11 @@ pub struct AddLibraryReq {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AddLibaryResp {
+pub struct AddLibraryResp {
     pub library_uuid: LibraryUuid,
 }
+
+library_message! {AddLibrary}
 
 // get the details for a particular library
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,9 +62,11 @@ pub struct GetLibraryReq {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetLibaryResp {
+pub struct GetLibraryResp {
     pub library: Library,
 }
+
+library_message! {GetLibrary}
 
 // search media inside a particular library
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -70,6 +81,8 @@ pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
 }
 
+library_message! {SearchMediaInLibrary}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanLibraryReq {
     pub library_uuid: LibraryUuid,
@@ -79,3 +92,5 @@ pub struct ScanLibraryReq {
 pub struct ScanLibraryResp {
     pub result: LibraryScanResult,
 }
+
+library_message! {ScanLibrary}

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::media::MediaUuid;
+use crate::message;
 
 // structs and types
 
@@ -29,6 +30,12 @@ pub struct TicketComment {
 
 // messages
 
+macro_rules! ticket_message {
+    ($s:ident) => {
+        message! {$s, "ticket"}
+    };
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TicketMessage {
     CreateTicket(CreateTicketReq),
@@ -50,6 +57,8 @@ pub struct CreateTicketResp {
     pub ticket_uuid: TicketUuid,
 }
 
+ticket_message! {CreateTicket}
+
 // create a new comment and associate it with a
 // particular ticket
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,6 +72,8 @@ pub struct CreateCommentResp {
     pub comment_uuid: CommentUuid,
 }
 
+ticket_message! {CreateComment}
+
 // fetch a specific ticket
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetTicketReq {
@@ -74,27 +85,18 @@ pub struct GetTicketResp {
     pub ticket: Ticket,
 }
 
-pub async fn get_ticket(req: &GetTicketReq) -> anyhow::Result<GetTicketResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/ticket")
-        .json(&TicketMessage::GetTicket(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
+ticket_message! {GetTicket}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetTicketResolvedReq {
     pub ticket_uuid: TicketUuid,
-    pub resolved: bool
+    pub resolved: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetTicketResolvedResp {}
+
+ticket_message! {SetTicketResolved}
 
 // search tickets on their titles (and possibly comments)
 //
@@ -110,15 +112,15 @@ pub struct SearchTicketsResp {
     pub tickets: Vec<TicketUuid>,
 }
 
-pub async fn search_tickets(req: &SearchTicketsReq) -> anyhow::Result<SearchTicketsResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/ticket")
-        .json(&TicketMessage::SearchTickets(req.clone()))?
-        .send()
-        .await?;
+ticket_message! {SearchTickets}
 
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
+// search for all tickets corresponding to a particular media
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchTicketsByMediaReq {
+    pub media_uuid: MediaUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchTicketsByMedaiResp {
+    pub tickets: Vec<TicketUuid>,
 }

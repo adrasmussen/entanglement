@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::media::MediaUuid;
+use crate::message;
 
 // structs and types
 
@@ -20,6 +21,12 @@ pub struct AlbumMetadata {
 }
 
 // messages
+
+macro_rules! album_message {
+    ($s:ident) => {
+        message! {$s, "album"}
+    };
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AlbumMessage {
@@ -44,6 +51,8 @@ pub struct CreateAlbumResp {
     pub album_uuid: AlbumUuid,
 }
 
+album_message! {CreateAlbum}
+
 // retrieve the album properties
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetAlbumReq {
@@ -55,6 +64,8 @@ pub struct GetAlbumResp {
     pub album: Album,
 }
 
+album_message! {GetAlbum}
+
 // delete an album
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteAlbumReq {
@@ -63,6 +74,8 @@ pub struct DeleteAlbumReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteAlbumResp {}
+
+album_message! {DeleteAlbum}
 
 // change album properties
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,6 +87,8 @@ pub struct UpdateAlbumReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateAlbumResp {}
 
+album_message! {UpdateAlbum}
+
 // add media to an album
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddMediaToAlbumReq {
@@ -83,6 +98,8 @@ pub struct AddMediaToAlbumReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddMediaToAlbumResp {}
+
+album_message! {AddMediaToAlbum}
 
 // remove media from an album
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -94,8 +111,12 @@ pub struct RmMediaFromAlbumReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RmMediaFromAlbumResp {}
 
+album_message! {RmMediaFromAlbum}
+
 // search albums
-#[derive(Clone, Debug, Serialize, Deserialize)]
+//
+// defaults to ""
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchAlbumsReq {
     pub filter: String,
 }
@@ -105,8 +126,10 @@ pub struct SearchAlbumsResp {
     pub albums: Vec<AlbumUuid>,
 }
 
+album_message! {SearchAlbums}
+
 // search media inside a particular album
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchMediaInAlbumReq {
     pub album_uuid: AlbumUuid,
     pub filter: String,
@@ -116,3 +139,18 @@ pub struct SearchMediaInAlbumReq {
 pub struct SearchMediaInAlbumResp {
     pub media: Vec<MediaUuid>,
 }
+
+album_message! {SearchMediaInAlbum}
+
+// search for all albums that contain a particular media
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchAlbumByMediaReq {
+    pub media_uuid: MediaUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchAlbumByMediaResp {
+    pub albums: Vec<AlbumUuid>,
+}
+
+//album_message! {SearchAlbumByMedia}

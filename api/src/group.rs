@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use serde::{Serialize, Deserialize};
 
+use crate::message;
+
 // structs and types
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -15,6 +17,12 @@ pub struct Group {
 pub struct GroupMetadata {}
 
 // messages
+
+macro_rules! group_message {
+    ($s:ident) => {
+        message! {$s, "group"}
+    };
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GroupMessage {
@@ -34,6 +42,8 @@ pub struct CreateGroupReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateGroupResp {}
 
+group_message! {CreateGroup}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetGroupReq {
     pub gid: String
@@ -44,6 +54,8 @@ pub struct GetGroupResp {
     pub group: Group,
 }
 
+group_message! {GetGroup}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteGroupReq {
     pub gid: String
@@ -51,6 +63,8 @@ pub struct DeleteGroupReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteGroupResp {}
+
+group_message! {DeleteGroup}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddUserToGroupReq {
@@ -61,6 +75,8 @@ pub struct AddUserToGroupReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddUserToGroupResp {}
 
+group_message! {AddUserToGroup}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RmUserFromGroupReq {
     pub uid: String,
@@ -69,3 +85,5 @@ pub struct RmUserFromGroupReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RmUserFromGroupResp {}
+
+group_message! {RmUserFromGroup}

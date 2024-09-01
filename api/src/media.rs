@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::album::AlbumUuid;
+use crate::message;
 use crate::library::LibraryUuid;
 
 // structs and types
@@ -23,13 +23,18 @@ pub struct MediaMetadata {
 
 // messages
 
+macro_rules! media_message {
+    ($s:ident) => {
+        message! {$s, "media"}
+    };
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MediaMessage {
     GetMedia(GetMediaReq),
     UpdateMedia(UpdateMediaReq),
     SetMediaHidden(SetMediaHiddenReq),
     SearchMedia(SearchMediaReq),
-    RevSearchMediaForAlbum(RevSearchMediaForAlbumReq),
 }
 
 // fetch the media information for a particular file
@@ -43,18 +48,7 @@ pub struct GetMediaResp {
     pub media: Media,
 }
 
-pub async fn get_media(req: &GetMediaReq) -> anyhow::Result<GetMediaResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/media")
-        .json(&MediaMessage::GetMedia(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
+media_message! {GetMedia}
 
 // update the metadata
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,18 +60,7 @@ pub struct UpdateMediaReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateMediaResp {}
 
-pub async fn update_media(req: &UpdateMediaReq) -> anyhow::Result<UpdateMediaResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/media")
-        .json(&MediaMessage::UpdateMedia(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
+media_message! {UpdateMedia}
 
 // fetch the media information for a particular file
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -89,6 +72,7 @@ pub struct SetMediaHiddenReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetMediaHiddenResp {}
 
+media_message! {SetMediaHidden}
 
 // search media
 //
@@ -98,31 +82,9 @@ pub struct SearchMediaReq {
     pub filter: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
 }
 
-pub async fn search_media(req: &SearchMediaReq) -> anyhow::Result<SearchMediaResp> {
-    let resp = gloo_net::http::Request::post("/entanglement/api/media")
-        .json(&MediaMessage::SearchMedia(req.clone()))?
-        .send()
-        .await?;
-
-    if resp.ok() {
-        Ok(resp.json().await?)
-    } else {
-        Err(anyhow::Error::msg(resp.text().await?))
-    }
-}
-
-// move this to album search
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RevSearchMediaForAlbumReq {
-    pub media_uuid: MediaUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RevSearchMediaForAlbumResp {
-    pub albums: Vec<AlbumUuid>,
-}
+media_message! {SearchMedia}

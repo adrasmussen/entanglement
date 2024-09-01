@@ -23,7 +23,7 @@ fn MediaTile(props: MediaTileProps) -> Element {
         div {
             class: "media-tile",
             img {
-                onclick: move |_| { modal_stack_signal.push(Modal::Media(media_uuid)) },
+                onclick: move |_| { modal_stack_signal.push(Modal::ShowMedia(media_uuid)) },
 
                 src: thumbnail_link(media_uuid),
             }
@@ -33,31 +33,21 @@ fn MediaTile(props: MediaTileProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaGridProps {
-    media: Result<Vec<MediaUuid>, String>,
+    modal_stack_signal: Signal<Vec<Modal>>,
+    media: Vec<MediaUuid>,
 }
 
 #[component]
 pub fn MediaGrid(props: MediaGridProps) -> Element {
-    let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
-
     rsx! {
-        ModalBox{ stack_signal: modal_stack_signal }
-
         div {
             style { "{style::MEDIA_GRID}" }
-            match props.media {
-                Ok(media) => rsx! {
-                    div {
-                        class: "media-grid",
-                        for media_uuid in media.iter() {
-                            MediaTile { modal_stack_signal: modal_stack_signal, media_uuid: *media_uuid }
-                        }
+                div {
+                    class: "media-grid",
+                    for media_uuid in props.media.iter() {
+                        MediaTile { modal_stack_signal: props.modal_stack_signal, media_uuid: *media_uuid }
                     }
-                },
-                Err(err) => rsx! {
-                    span { "{err}" }
                 }
-            }
         }
     }
 }

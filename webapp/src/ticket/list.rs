@@ -23,6 +23,7 @@ pub fn TicketListEntry(props: TicketListEntryProps) -> Element {
 
     let ticket = &*ticket.read();
 
+    // this should throw a more informative error
     let result = match ticket {
         Some(Ok(result)) => result.ticket.clone(),
         _ => return rsx! {}
@@ -30,7 +31,7 @@ pub fn TicketListEntry(props: TicketListEntryProps) -> Element {
 
     rsx! {
             tr {
-                onclick: move |_| { modal_stack_signal.push(Modal::Ticket(ticket_uuid)) },
+                onclick: move |_| { modal_stack_signal.push(Modal::ShowTicket(ticket_uuid)) },
                 td { "{result.media_uuid}" }
                 td { "{result.uid}" }
                 td { "{result.title}" }

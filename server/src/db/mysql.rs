@@ -490,7 +490,7 @@ impl ESDbService for MySQLState {
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
         let mut result = r"
-            SELECT uid, group, name, note FROM albums WHERE album_uuid = :album_uuid"
+            SELECT uid, gid, name, note FROM albums WHERE album_uuid = :album_uuid"
             .with(params! {
                 "album_uuid" => album_uuid,
             })
@@ -621,10 +621,10 @@ impl ESDbService for MySQLState {
             ) AS t1
             INNER JOIN albums ON t1.gid = albums.gid
             WHERE
-                CONCAT_WS(' ', name, note) LIKE %:filter%"
+                CONCAT_WS(' ', name, note) LIKE :filter"
             .with(params! {
                 "uid" => uid,
-                "filter" => filter,
+                "filter" => format!("%{}%", filter),
             })
             .run(self.pool.get_conn().await?)
             .await?

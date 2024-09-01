@@ -6,27 +6,28 @@ use api::ticket::*;
 mod list;
 use list::TicketList;
 
-mod modal;
-
 impl SearchStorage for SearchTicketsReq {
     fn store(&self) -> () {
-        set_local_storage("tickets_search_req", &self)
+        set_local_storage("ticket_search_req", &self)
     }
 
-    fn fetch() -> anyhow::Result<Self> {
-        get_local_storage("tickets_search_req")
+    fn fetch() -> Self {
+        match get_local_storage("ticket_search_req") {
+            Ok(val) => val,
+            Err(_) => Self::default(),
+        }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
-struct TicketsNavBarProps {
+struct TicketNavBarProps {
     search_filter_signal: Signal<SearchTicketsReq>,
     search_status: String,
 }
 
 #[component]
-fn TicketsNavBar(props: TicketsNavBarProps) -> Element {
-    let mut search_filter_signal = props.search_filter_signal.clone();
+fn TicketNavBar(props: TicketNavBarProps) -> Element {
+    let mut search_filter_signal = props.search_filter_signal;
 
     rsx! {
         div {
@@ -88,12 +89,10 @@ fn TicketsNavBar(props: TicketsNavBarProps) -> Element {
 
 #[component]
 pub fn Tickets() -> Element {
-    let search_filter_signal = use_signal(|| match SearchTicketsReq::fetch() {
-        Ok(val) => val,
-        Err(_) => SearchTicketsReq::default(),
-    });
+    let search_filter_signal = use_signal(|| SearchTicketsReq::fetch());
 
-    let search_results = use_resource(move || async move { search_tickets(&search_filter_signal()).await });
+    let search_results =
+        use_resource(move || async move { search_tickets(&search_filter_signal()).await });
 
     let search_results = &*search_results.read();
 
@@ -110,7 +109,7 @@ pub fn Tickets() -> Element {
     };
 
     rsx! {
-        TicketsNavBar { search_filter_signal: search_filter_signal, search_status: status}
+        TicketNavBar { search_filter_signal: search_filter_signal, search_status: status}
         TicketList { tickets: results }
     }
 }

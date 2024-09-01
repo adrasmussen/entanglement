@@ -14,10 +14,10 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
     let _stack_signal = props.stack_signal;
     let media_uuid = props.media_uuid;
 
-    let update_result_signal = use_signal(|| String::from(""));
+    let status_signal = use_signal(|| String::from(""));
 
     let media = use_resource(move || async move {
-        update_result_signal();
+        status_signal();
 
         get_media(&GetMediaReq {
             media_uuid: media_uuid,
@@ -51,7 +51,7 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                             class: "modal-info",
 
                             onsubmit: move |event| async move {
-                                let mut update_result_signal = update_result_signal;
+                                let mut status_signal = status_signal;
 
                                 let date = match event.values().get("date") {
                                     Some(val) => val.as_value(),
@@ -74,7 +74,7 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                                     Err(err) => format!("Error updating metadata: {}", err.to_string()),
                                 };
 
-                                update_result_signal.set(result)
+                                status_signal.set(result)
                             },
 
                             label { "Library" },
@@ -103,20 +103,37 @@ pub fn MediaBox(props: MediaBoxProps) -> Element {
                             input {
                                 r#type: "submit",
                                 value: "Update metadata",
-                            },
+                            }
 
-                            label { "Status" }
-                            span {
-                                width: "600px",
-                                "{update_result_signal()}"
+                            div {
+                                grid_column: "2",
+
+                                button {
+                                    "Create ticket"
+                                }
+                                button {
+                                    "Albums"
+                                }
+                                button {
+                                    "Toggle Hidden"
+                                }
                             }
                         },
                     }
                 },
-                Err(err) => rsx! {
-                    span { "{err.to_string()}" }
+                Err(err) => {
+                    let mut status_signal = status_signal;
+
+                    status_signal.set(err.to_string());
+
+                    rsx! {}
                 }
             }
+        }
+
+        div {
+            class: "modal-footer",
+            span { "{status_signal()}" }
         }
     }
 }

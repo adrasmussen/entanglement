@@ -10,10 +10,13 @@ mod ticket;
 use ticket::TicketBox;
 
 pub enum Modal {
-    Media(MediaUuid),
-    Album(AlbumUuid),
-    Ticket(TicketUuid),
-    Library(LibraryUuid),
+    ShowMedia(MediaUuid),
+    ShowAlbum(AlbumUuid),
+    CreateAlbum,
+    ShowLibrary(LibraryUuid),
+    AddLibrary,
+    ShowTicket(TicketUuid),
+    CreateTicket(MediaUuid),
 }
 
 #[derive(Clone, PartialEq, Props)]
@@ -42,10 +45,13 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     }
                     match stack_signal.last() {
                         Some(val) => match *val {
-                            Modal::Media(media_uuid) => rsx! { MediaBox { stack_signal: stack_signal, media_uuid: media_uuid } },
-                            Modal::Album(album_uuid) => rsx! { span { "{album_uuid}" } },
-                            Modal::Ticket(ticket_uuid) => rsx! { TicketBox { stack_signal: stack_signal, ticket_uuid: ticket_uuid }  },
-                            Modal::Library(library_uuid) => rsx! { span { "{library_uuid}" } },
+                            Modal::ShowMedia(media_uuid) => rsx! { MediaBox { stack_signal: stack_signal, media_uuid: media_uuid } },
+                            Modal::ShowAlbum(album_uuid) => rsx! { span { "{album_uuid}" } },
+                            Modal::CreateAlbum => rsx! {},
+                            Modal::ShowLibrary(library_uuid) => rsx! { span { "{library_uuid}" } },
+                            Modal::AddLibrary => rsx! {},
+                            Modal::ShowTicket(ticket_uuid) => rsx! { TicketBox { stack_signal: stack_signal, ticket_uuid: ticket_uuid }  },
+                            Modal::CreateTicket(media_uuid) => rsx! {},
                         },
                         None => return rsx! {}
                     }

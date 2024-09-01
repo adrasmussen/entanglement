@@ -778,9 +778,6 @@ async fn query_media(
 
             Ok(Json(SearchMediaResp { media: result }).into_response())
         }
-        MediaMessage::RevSearchMediaForAlbum(msg) => {
-            Err(anyhow::Error::msg("not implemented").into())
-        }
     }
 }
 
@@ -1057,12 +1054,12 @@ async fn query_library(
                 .await
                 .context("Failed to receive AddLibrary response")??;
 
-            Ok(Json(AddLibaryResp {
+            Ok(Json(AddLibraryResp {
                 library_uuid: result,
             })
             .into_response())
         }
-        LibraryMessage::GetLibary(msg) => {
+        LibraryMessage::GetLibrary(msg) => {
             // auth
             //
             // anyone in the library group can see the library
@@ -1089,7 +1086,7 @@ async fn query_library(
                 .context("Failed to receive GetLibrary response")??
                 .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
 
-            Ok(Json(GetLibaryResp { library: result }).into_response())
+            Ok(Json(GetLibraryResp { library: result }).into_response())
         }
         LibraryMessage::SearchMediaInLibrary(msg) => {
             // auth

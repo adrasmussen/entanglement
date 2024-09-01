@@ -13,8 +13,8 @@ use home::Home;
 mod gallery;
 use gallery::Gallery;
 
-mod albums;
-use albums::Albums;
+mod album;
+use album::Albums;
 
 mod ticket;
 use ticket::Tickets;
@@ -47,10 +47,10 @@ enum Route {
         Gallery {},
         #[route("/albums")]
         Albums {},
-        #[route("/tickets")]
-        Tickets {},
         #[route("/library")]
         Library {},
+        #[route("/tickets")]
+        Tickets {},
         #[route("/settings")]
         Settings {},
         #[route("/status")]
@@ -73,8 +73,8 @@ fn NavBar() -> Element {
                 Link { active_class: "active", to: Route::Home {}, "Home" }
                 Link { active_class: "active", to: Route::Gallery {}, "Gallery" }
                 Link { active_class: "active", to: Route::Albums {}, "Albums" }
-                Link { active_class: "active", to: Route::Tickets {}, "Tickets" }
                 Link { active_class: "active", to: Route::Library {}, "Library" }
+                Link { active_class: "active", to: Route::Tickets {}, "Tickets" }
                 Link { active_class: "active", to: Route::Settings {}, "Settings" }
                 Link { active_class: "active", to: Route::Status {}, "Status" }
                 Link { active_class: "active", to: Route::Admin {}, "Admin" }
