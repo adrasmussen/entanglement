@@ -27,6 +27,18 @@ where
     })
 }
 
+pub fn try_local_storage<T>(key: &str) -> T
+where
+    T: for<'a> Deserialize<'a> + Default,
+{
+    let key = format!("entanglement_{}", key);
+
+    match LocalStorage::get(key.clone()) {
+        Ok(val) => val,
+        Err(_) => T::default(),
+    }
+}
+
 pub trait SearchStorage
 where
     Self: Serialize,

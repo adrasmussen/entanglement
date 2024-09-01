@@ -1,17 +1,18 @@
 use dioxus::prelude::*;
 
+use crate::album::AlbumView;
 use crate::common::style;
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumListEntryProps {
-    select_album_signal: Signal<Option<AlbumUuid>>,
+    album_view_signal: Signal<AlbumView>,
     album_uuid: AlbumUuid,
 }
 
 #[component]
 fn AlbumListEntry(props: AlbumListEntryProps) -> Element {
-    let mut select_album_signal = props.select_album_signal;
+    let mut album_view_signal = props.album_view_signal;
     let album_uuid = props.album_uuid;
 
     let album = use_resource(move || async move {
@@ -31,7 +32,7 @@ fn AlbumListEntry(props: AlbumListEntryProps) -> Element {
 
     rsx! {
             tr {
-                onclick: move |_| { select_album_signal.set(Some(album_uuid)) },
+                onclick: move |_| { album_view_signal.set(AlbumView::MediaList(album_uuid)) },
                 td { "{result.uid}" }
                 td { "{result.gid}" }
                 td { "{result.metadata.name}" }
@@ -42,7 +43,7 @@ fn AlbumListEntry(props: AlbumListEntryProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct AlbumListProps {
-    select_album_signal: Signal<Option<AlbumUuid>>,
+    album_view_signal: Signal<AlbumView>,
     albums: Vec<AlbumUuid>
 }
 
@@ -60,7 +61,7 @@ pub fn AlbumList(props: AlbumListProps) -> Element {
                     }
 
                     for album_uuid in props.albums.iter() {
-                        AlbumListEntry { select_album_signal: props.select_album_signal, album_uuid: *album_uuid }
+                        AlbumListEntry { album_view_signal: props.album_view_signal, album_uuid: *album_uuid }
                     }
                 }
         }
