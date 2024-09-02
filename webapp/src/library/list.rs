@@ -35,8 +35,7 @@ fn LibraryListEntry(props: LibraryListEntryProps) -> Element {
                 onclick: move |_| { library_view_signal.set(LibraryView::MediaList(library_uuid)) },
                 td { "{result.path}" }
                 td { "{result.gid}" }
-                td { "{result.metadata.file_count}" }
-                td { "{result.metadata.last_scan}" }
+                td { "{result.metadata.file_count} files, last scan {result.metadata.last_scan}" }
             }
     }
 }
@@ -56,8 +55,7 @@ pub fn LibraryList(props: LibaryListProps) -> Element {
                     tr {
                         th { "Path" }
                         th { "Group" }
-                        th { "File Count" }
-                        th { "Last Scan" }
+                        th { "Scan status" }
                     }
 
                     for library_uuid in props.libraries.iter() {

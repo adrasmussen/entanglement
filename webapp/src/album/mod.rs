@@ -23,6 +23,7 @@ enum AlbumView {
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumNavBarProps {
+    modal_stack_signal: Signal<Vec<Modal>>,
     album_view_signal: Signal<AlbumView>,
     album_search_signal: Signal<String>,
     media_search_signal: Signal<String>,
@@ -31,6 +32,7 @@ struct AlbumNavBarProps {
 
 #[component]
 fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
+    let mut modal_stack_signal = props.modal_stack_signal;
     let mut album_view_signal = props.album_view_signal;
     let mut album_search_signal = props.album_search_signal;
     let mut media_search_signal = props.media_search_signal;
@@ -88,9 +90,12 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
                         },
                         span { "Search History" },
                         span { "{album_status}"}
-                        button { "Create Album" },
+                        button {
+                            onclick: move |_| modal_stack_signal.push(Modal::CreateAlbum),
+                            "Create Album"
+                        },
                     },
-                    AlbumView::MediaList(_) => {
+                    AlbumView::MediaList(album_uuid) => {
                         let album = &*album.read();
 
                         let album_name = match album.clone().flatten() {
@@ -122,7 +127,10 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
                                 },
                                 span { "Search History" }
                                 span { "Searching {album_name}: {media_status}" }
-                                button { "View Album" },
+                                button {
+                                    onclick: move |_| modal_stack_signal.push(Modal::ShowAlbum(album_uuid)),
+                                    "View Album"
+                                },
                                 button {
                                     onclick: move |_| album_view_signal.set(AlbumView::AlbumList),
                                     "Reset album search"
@@ -204,6 +212,7 @@ pub fn Albums() -> Element {
 
     rsx! {
         AlbumNavBar {
+            modal_stack_signal: modal_stack_signal,
             album_view_signal: album_view_signal,
             album_search_signal: album_search_signal,
             media_search_signal: media_search_signal,

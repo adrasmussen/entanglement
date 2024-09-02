@@ -4,10 +4,13 @@ use crate::common::style;
 use api::{album::AlbumUuid, library::LibraryUuid, media::MediaUuid, ticket::TicketUuid};
 
 mod media;
-use media::MediaBox;
+use media::ShowMediaBox;
+
+mod album;
+use album::{CreateAlbumBox, ShowAlbumBox};
 
 mod ticket;
-use ticket::TicketBox;
+use ticket::ShowTicketBox;
 
 pub enum Modal {
     ShowMedia(MediaUuid),
@@ -45,12 +48,12 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     }
                     match stack_signal.last() {
                         Some(val) => match *val {
-                            Modal::ShowMedia(media_uuid) => rsx! { MediaBox { stack_signal: stack_signal, media_uuid: media_uuid } },
-                            Modal::ShowAlbum(album_uuid) => rsx! { span { "{album_uuid}" } },
-                            Modal::CreateAlbum => rsx! {},
+                            Modal::ShowMedia(media_uuid) => rsx! { ShowMediaBox { stack_signal: stack_signal, media_uuid: media_uuid } },
+                            Modal::ShowAlbum(album_uuid) => rsx! { ShowAlbumBox { stack_signal: stack_signal, album_uuid: album_uuid } },
+                            Modal::CreateAlbum => rsx! { CreateAlbumBox { stack_signal: stack_signal } },
                             Modal::ShowLibrary(library_uuid) => rsx! { span { "{library_uuid}" } },
                             Modal::AddLibrary => rsx! {},
-                            Modal::ShowTicket(ticket_uuid) => rsx! { TicketBox { stack_signal: stack_signal, ticket_uuid: ticket_uuid }  },
+                            Modal::ShowTicket(ticket_uuid) => rsx! { ShowTicketBox { stack_signal: stack_signal, ticket_uuid: ticket_uuid }  },
                             Modal::CreateTicket(media_uuid) => rsx! {},
                         },
                         None => return rsx! {}
@@ -58,5 +61,26 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                 }
             }
         }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct ModalErrProps {
+    err: String,
+}
+
+#[component]
+fn ModalErr(props: ModalErrProps) -> Element {
+    rsx! {
+        div {
+            class: "modal-body",
+            span { "{props.err}" }
+        }
+    }
+}
+
+pub fn modal_err(err: impl Into<String>) -> Element {
+    rsx! {
+        ModalErr { err: err.into() }
     }
 }

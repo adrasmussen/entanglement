@@ -43,7 +43,9 @@ pub enum AlbumMessage {
 // create a new album
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateAlbumReq {
-    pub album: Album,
+    pub gid: String,
+    pub name: String,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

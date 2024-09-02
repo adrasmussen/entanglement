@@ -70,46 +70,6 @@ pub const SUBNAV: &str = r#"
 }
 "#;
 
-pub const CONTROLBAR: &str = r#"
-.control {
-    overflow: hidden;
-    background-color: #e9e9e9;
-}
-
-.control span {
-    float: left;
-    display: block;
-    color: black;
-    text-align: center;
-    padding: 14px 16px;
-    text-decoration: none;
-    font-size: 17px;
-}
-
-.control span:hover {
-    background-color: #eaeaea;
-    color: black;
-}
-
-.control input[type=text], input[type=submit], button {
-    float: left;
-    padding: 6px;
-    border: none;
-    margin-top: 8px;
-    margin-right: 8px;
-    margin-left: 8px;
-    font-size: 17px;
-}
-
-.control label {
-    float: left;
-    padding: 6px;
-    border: none;
-    margin-top: 8px;
-    font-size: 17px;
-}
-"#;
-
 pub const MODAL: &str = r#"
 .modal {
     display: block;
@@ -162,10 +122,15 @@ pub const MODAL: &str = r#"
 }
 
 .modal-footer {
+    display: grid;
     padding: 2px 16px;
     background-color: #2196F3;
     color: white;
     text-align: center;
+}
+
+.modal-footer span {
+    width: 600px;
 }
 
 .modal-body img {
@@ -195,7 +160,7 @@ pub const MODAL: &str = r#"
     width: 600px;
 }
 
-.modal-info input[type=text], input[type=submit], button {
+.modal-info input[type=submit], button {
     float: left;
     padding: 6px;
     border: none;

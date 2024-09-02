@@ -796,7 +796,7 @@ async fn query_album(
             //
             // anyone may create an album, but they must be in the group they are creating
             if !state
-                .is_group_member(&uid, HashSet::from([msg.album.gid.clone()]))
+                .is_group_member(&uid, HashSet::from([msg.gid.clone()]))
                 .await?
             {
                 return Err(anyhow::Error::msg("User must be a member of album group").into());
@@ -809,7 +809,14 @@ async fn query_album(
                 .send(
                     DbMsg::CreateAlbum {
                         resp: tx,
-                        album: msg.album,
+                        album: Album {
+                            uid: uid.clone(),
+                            gid: msg.gid,
+                            metadata: AlbumMetadata {
+                                name: msg.name,
+                                note: msg.note,
+                            },
+                        },
                     }
                     .into(),
                 )
