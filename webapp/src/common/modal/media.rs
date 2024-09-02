@@ -14,7 +14,7 @@ pub struct ShowMediaBoxProps {
 
 #[component]
 pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
-    let _stack_signal = props.stack_signal;
+    let stack_signal = props.stack_signal;
     let media_uuid = props.media_uuid;
 
     let status_signal = use_signal(|| String::from(""));
@@ -104,12 +104,35 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                         grid_column: "2",
 
                         button {
+                            onclick: move |_| {
+                                let mut stack_signal = stack_signal;
+
+                                stack_signal.push(Modal::CreateTicket(media_uuid))
+                            },
+                            r#type: "button",
                             "Create ticket"
                         }
                         button {
+                            onclick: move |_| {},
+                            r#type: "button",
                             "Albums"
                         }
                         button {
+                            onclick: move |_| async move {
+                                let mut status_signal = status_signal;
+
+                                let result = match set_media_hidden(&SetMediaHiddenReq {
+                                    media_uuid: media_uuid,
+                                    hidden: !media.hidden,
+                                }).await {
+                                    Ok(_) => String::from("Hidden state updated successfully"),
+                                    Err(err) => format!("Error updating hidden state: {}", err.to_string()),
+
+                                };
+
+                                status_signal.set(result);
+                            },
+                            r#type: "button",
                             "Toggle Hidden"
                         }
                     }

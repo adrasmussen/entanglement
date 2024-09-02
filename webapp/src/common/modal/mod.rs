@@ -51,10 +51,10 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                             Modal::ShowMedia(media_uuid) => rsx! { ShowMediaBox { stack_signal: stack_signal, media_uuid: media_uuid } },
                             Modal::ShowAlbum(album_uuid) => rsx! { ShowAlbumBox { stack_signal: stack_signal, album_uuid: album_uuid } },
                             Modal::CreateAlbum => rsx! { CreateAlbumBox { stack_signal: stack_signal } },
-                            Modal::ShowLibrary(library_uuid) => rsx! { span { "{library_uuid}" } },
-                            Modal::AddLibrary => rsx! {},
+                            Modal::ShowLibrary(library_uuid) => rsx! { ModalErr { err: "not implemented" } },
+                            Modal::AddLibrary => rsx! { ModalErr { err: "not implemented" } },
                             Modal::ShowTicket(ticket_uuid) => rsx! { ShowTicketBox { stack_signal: stack_signal, ticket_uuid: ticket_uuid }  },
-                            Modal::CreateTicket(media_uuid) => rsx! {},
+                            Modal::CreateTicket(media_uuid) => rsx! { ModalErr { err: "not implemented" } },
                         },
                         None => return rsx! {}
                     }

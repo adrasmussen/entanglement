@@ -1043,6 +1043,9 @@ async fn query_library(
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
 
+            // TODO -- sanity check that there are no overlapping paths with
+            // existing libraries
+
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             state

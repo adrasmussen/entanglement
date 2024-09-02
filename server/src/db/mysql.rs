@@ -287,8 +287,8 @@ impl ESDbService for MySQLState {
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
         let mut result = r"
             INSERT INTO media (media_uuid, library_uuid, path, hidden, date, note)
-            OUTPUT INSERTED.media_uuid
-            VALUES (UUID_SHORT(), :library_uuid, :path, :hidden, :date, :note)"
+            VALUES (UUID_SHORT(), :library_uuid, :path, :hidden, :date, :note)
+            RETURNING media_uuid"
             .with(params! {
                 "library_uuid" => media.library_uuid,
                 "path" => media.path,
@@ -465,9 +465,9 @@ impl ESDbService for MySQLState {
     // album queries
     async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
         let mut result = r"
-            INSERT INTO album (album_uuid, uid, gid, name, note)
-            OUTPUT INSERTED.album_uuid
-            VALUES (UUID_SHORT(), :uid, :gid, :name, :note)"
+            INSERT INTO albums (album_uuid, uid, gid, name, note)
+            VALUES (UUID_SHORT(), :uid, :gid, :name, :note)
+            RETURNING album_uuid"
             .with(params! {
                 "uid" => album.uid,
                 "gid" => album.gid,
@@ -519,7 +519,7 @@ impl ESDbService for MySQLState {
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
         let result = r"
             DELETE FROM album_contents WHERE album_uuid = :album_uuid;
-            OUTPUT DELETED.media_uuid"
+            RETURNING media_uuid"
             .with(params! {
                 "album_uuid" => album_uuid,
             })
@@ -699,8 +699,8 @@ impl ESDbService for MySQLState {
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
         let mut result = r"
             INSERT INTO libraries (library_uuid, path, gid, file_count, last_scan)
-            OUTPUT INSERTED.library_uuid
-            VALUES (UUID_SHORT(), :path, :gid, :file_count, :last_scan)"
+            VALUES (UUID_SHORT(), :path, :gid, :file_count, :last_scan)
+            RETURNING library_uuid"
             .with(params! {
                 "path" => library.path,
                 "gid" => library.gid,
@@ -831,8 +831,8 @@ impl ESDbService for MySQLState {
     async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid> {
         let mut result = r"
             INSERT INTO tickets (ticket_uuid, media_uuid, uid, title, timestamp, resolved)
-            OUTPUT INSERTED.ticket_uuid
-            VALUES (UUID_SHORT(), :media_uuid, :uid, :title, :timestamp, :resolved)"
+            VALUES (UUID_SHORT(), :media_uuid, :uid, :title, :timestamp, :resolved)
+            RETURNING ticket_uuid"
             .with(params! {
                 "media_uuid" => ticket.media_uuid,
                 "uid" => ticket.uid,
@@ -857,8 +857,8 @@ impl ESDbService for MySQLState {
     async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid> {
         let mut result = r"
             INSERT INTO comments (comment_uuid, ticket_uuid, uid, text, timestamp)
-            OUTPUT INSERTED.comment_uuid
-            VALUES (UUID_SHORT(), :ticket_uuid, :uid, :text, :timestamp)"
+            VALUES (UUID_SHORT(), :ticket_uuid, :uid, :text, :timestamp)
+            RETURNING comment_uuid"
             .with(params! {
                 "ticket_uuid" => comment.ticket_uuid,
                 "uid" => comment.uid,

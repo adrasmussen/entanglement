@@ -49,6 +49,13 @@ pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
                     span { "{album.metadata.note}" }
                 }
             }
+            div {
+                grid_column: "2",
+
+                button {
+                    "Delete album"
+                }
+            }
         }
         div {
             class: "modal-footer",
