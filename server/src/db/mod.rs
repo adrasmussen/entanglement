@@ -38,7 +38,7 @@ trait ESDbService: ESInner {
     // media functions
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>>;
+    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>>;
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>>;
 
@@ -112,7 +112,9 @@ trait ESDbService: ESInner {
 
     async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid>;
 
-    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>>;
+    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<(Ticket, Vec<CommentUuid>)>>;
+
+    async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<TicketComment>>;
 
     async fn set_ticket_resolved(&self, ticket_uuid: TicketUuid, resolved: bool) -> anyhow::Result<()>;
 

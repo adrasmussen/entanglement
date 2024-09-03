@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::media::MediaUuid;
@@ -17,7 +15,6 @@ pub struct Ticket {
     pub title: String,
     pub timestamp: i64,
     pub resolved: bool,
-    pub comments: HashMap<CommentUuid, TicketComment>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,6 +38,7 @@ pub enum TicketMessage {
     CreateTicket(CreateTicketReq),
     CreateComment(CreateCommentReq),
     GetTicket(GetTicketReq),
+    GetComment(GetCommentReq),
     SetTicketResolved(SetTicketResolvedReq),
     SearchTickets(SearchTicketsReq),
 }
@@ -83,9 +81,22 @@ pub struct GetTicketReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetTicketResp {
     pub ticket: Ticket,
+    pub comments: Vec<CommentUuid>,
 }
 
 ticket_message! {GetTicket}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetCommentReq {
+    pub comment_uuid: CommentUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetCommentResp {
+    pub comment: TicketComment,
+}
+
+ticket_message! {GetComment}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetTicketResolvedReq {
@@ -113,14 +124,3 @@ pub struct SearchTicketsResp {
 }
 
 ticket_message! {SearchTickets}
-
-// search for all tickets corresponding to a particular media
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchTicketsByMediaReq {
-    pub media_uuid: MediaUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchTicketsByMedaiResp {
-    pub tickets: Vec<TicketUuid>,
-}

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, group::*, library::*, ticket::*, user::*, media::*};
+use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
 
 use crate::service::*;
 
@@ -58,7 +58,7 @@ pub enum DbMsg {
         media: Media,
     },
     GetMedia {
-        resp: ESMResp<Option<Media>>,
+        resp: ESMResp<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>>,
         media_uuid: MediaUuid,
     },
     GetMediaUuidByPath {
@@ -158,8 +158,12 @@ pub enum DbMsg {
         comment: TicketComment,
     },
     GetTicket {
-        resp: ESMResp<Option<Ticket>>,
+        resp: ESMResp<Option<(Ticket, Vec<CommentUuid>)>>,
         ticket_uuid: TicketUuid,
+    },
+    GetComment {
+        resp: ESMResp<Option<TicketComment>>,
+        comment_uuid: CommentUuid,
     },
     SetTicketResolved {
         resp: ESMResp<()>,

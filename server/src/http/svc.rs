@@ -62,11 +62,9 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send IsGroupMember message in is_group_member")?;
+            .await?;
 
-        rx.await
-            .context("Failed to receive IsGroupMember response at is_group_member")?
+        rx.await?
     }
 
     async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
@@ -81,11 +79,9 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send CanAccessMedia message in can_access_media")?;
+            .await?;
 
-        rx.await
-            .context("Failed to receive CanAccessMedia response at can_access_media")?
+        rx.await?
     }
 
     async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
@@ -100,11 +96,9 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send CanAccessMedia message from owns_media")?;
+            .await?;
 
-        rx.await
-            .context("Failed to receive CanAccessMedia response at owns_media")?
+        rx.await?
     }
 
     async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
@@ -118,12 +112,10 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetAlbum message from can_access_album")?;
+            .await?;
 
         let album = rx
-            .await
-            .context("Failed to receive GetAlbum response at can_access_album")??
+            .await??
             .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
 
         self.is_group_member(&uid, HashSet::from([album.gid])).await
@@ -140,12 +132,10 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetAlbum message from owns_album")?;
+            .await?;
 
         let album = rx
-            .await
-            .context("Failed to receive GetAlbum response at owns_album")??
+            .await??
             .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
 
         Ok(uid.to_owned() == album.uid)
@@ -166,12 +156,10 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetLibrary message from can_access_library")?;
+            .await?;
 
         let library = rx
-            .await
-            .context("Failed to receive GetLibrary response at can_access_library")??
+            .await??
             .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
 
         self.is_group_member(&uid, HashSet::from([library.gid]))
@@ -193,15 +181,13 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetTicket from HttpEndpoint")?;
+            .await?;
 
         let ticket = rx
-            .await
-            .context("Failed to receive GetTicket response at HttpEndpoint")??
+            .await??
             .ok_or_else(|| anyhow::Error::msg("unknown ticket_uuid"))?;
 
-        self.can_access_media(&uid, &ticket.media_uuid).await
+        self.can_access_media(&uid, &ticket.0.media_uuid).await
     }
 
     async fn owns_ticket(&self, uid: &String, ticket_uuid: &TicketUuid) -> anyhow::Result<bool> {
@@ -215,15 +201,39 @@ impl HttpEndpoint {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetTicket from HttpEndpoint")?;
+            .await?;
 
         let ticket = rx
-            .await
-            .context("Failed to receive GetTicket response at HttpEndpoint")??
+            .await??
             .ok_or_else(|| anyhow::Error::msg("unknown ticket_uuid"))?;
 
-        Ok(uid.to_owned() == ticket.uid)
+        Ok(uid.to_owned() == ticket.0.uid)
+    }
+
+    async fn can_access_comment(
+        &self,
+        uid: &String,
+        comment_uuid: &CommentUuid,
+    ) -> anyhow::Result<bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .send(
+                DbMsg::GetComment {
+                    resp: tx,
+                    comment_uuid: comment_uuid.clone(),
+                }
+                .into(),
+            )
+            .await?;
+
+        let comment = rx
+            .await??
+            .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
+
+        Ok(self
+            .can_access_ticket(&uid.clone(), &comment.ticket_uuid)
+            .await?)
     }
 }
 
@@ -699,7 +709,12 @@ async fn query_media(
                 .context("Failed to receive GetMedia response")??
                 .ok_or_else(|| anyhow::Error::msg("unknown media_uuid"))?;
 
-            Ok(Json(GetMediaResp { media: result }).into_response())
+            Ok(Json(GetMediaResp {
+                media: result.0,
+                albums: result.1,
+                tickets: result.2,
+            })
+            .into_response())
         }
         MediaMessage::UpdateMedia(msg) => {
             // auth
@@ -1198,9 +1213,6 @@ async fn query_ticket(
 
     match message {
         TicketMessage::CreateTicket(msg) => {
-            // auth
-            //
-            // anyone who can see media can create a new ticket, even if they don't own it
             if !state.can_access_media(&uid, &msg.media_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -1218,17 +1230,13 @@ async fn query_ticket(
                             title: msg.title,
                             timestamp: Local::now().timestamp(),
                             resolved: false,
-                            comments: HashMap::new(),
                         },
                     }
                     .into(),
                 )
-                .await
-                .context("Failed to send CreateTicket message")?;
+                .await?;
 
-            let result = rx
-                .await
-                .context("Failed to receive CreateTicket response")??;
+            let result = rx.await??;
 
             Ok(Json(CreateTicketResp {
                 ticket_uuid: result,
@@ -1236,9 +1244,6 @@ async fn query_ticket(
             .into_response())
         }
         TicketMessage::CreateComment(msg) => {
-            // auth
-            //
-            // anyone who can see a ticket may attach a comment
             if !state.can_access_ticket(&uid, &msg.ticket_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -1259,12 +1264,9 @@ async fn query_ticket(
                     }
                     .into(),
                 )
-                .await
-                .context("Failed to send CreateComment message")?;
+                .await?;
 
-            let result = rx
-                .await
-                .context("Failed to receive CreateComment response")??;
+            let result = rx.await??;
 
             Ok(Json(CreateCommentResp {
                 comment_uuid: result,
@@ -1272,9 +1274,6 @@ async fn query_ticket(
             .into_response())
         }
         TicketMessage::GetTicket(msg) => {
-            // auth
-            //
-            // anyone who can see a ticket may fetch it
             if !state.can_access_ticket(&uid, &msg.ticket_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -1290,18 +1289,41 @@ async fn query_ticket(
                     }
                     .into(),
                 )
-                .await
-                .context("Failed to send GetTicket message")?;
+                .await?;
 
-            match rx.await.context("Failed to receive GetTicket response")?? {
-                Some(result) => Ok(Json(GetTicketResp { ticket: result }).into_response()),
+            match rx.await?? {
+                Some(result) => Ok(Json(GetTicketResp {
+                    ticket: result.0,
+                    comments: result.1,
+                })
+                .into_response()),
+                None => Ok(StatusCode::NOT_FOUND.into_response()),
+            }
+        }
+        TicketMessage::GetComment(msg) => {
+            if !state.can_access_comment(&uid, &msg.comment_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::GetComment {
+                        resp: tx,
+                        comment_uuid: msg.comment_uuid,
+                    }
+                    .into(),
+                )
+                .await?;
+
+            match rx.await?? {
+                Some(result) => Ok(Json(GetCommentResp { comment: result }).into_response()),
                 None => Ok(StatusCode::NOT_FOUND.into_response()),
             }
         }
         TicketMessage::SetTicketResolved(msg) => {
-            // auth
-            //
-            // the ticket owner may update the resolved status
             if !state.owns_ticket(&uid, &msg.ticket_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
@@ -1318,18 +1340,13 @@ async fn query_ticket(
                     }
                     .into(),
                 )
-                .await
-                .context("Failed to send SetTicketResolved message")?;
+                .await?;
 
-            rx.await
-                .context("Failed to receive SetTicketResolved response")??;
+            rx.await??;
 
             Ok(Json(SetTicketResolvedResp {}).into_response())
         }
         TicketMessage::SearchTickets(msg) => {
-            // auth
-            //
-            // handled as part of the search query
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             state
@@ -1343,12 +1360,9 @@ async fn query_ticket(
                     }
                     .into(),
                 )
-                .await
-                .context("Failed to send SearchTickets message")?;
+                .await?;
 
-            let result = rx
-                .await
-                .context("Failed to receive SearchTickets respsonse")??;
+            let result = rx.await??;
 
             Ok(Json(SearchTicketsResp { tickets: result }).into_response())
         }

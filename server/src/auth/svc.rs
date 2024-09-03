@@ -208,7 +208,7 @@ impl ESAuthService for AuthCache {
             .await
             .context("Failed to receive GetMedia response in owns_media")??
         {
-            Some(result) => result,
+            Some(result) => result.0,
             None => return Ok(false),
         };
 

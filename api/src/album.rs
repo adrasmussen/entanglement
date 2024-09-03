@@ -143,16 +143,3 @@ pub struct SearchMediaInAlbumResp {
 }
 
 album_message! {SearchMediaInAlbum}
-
-// search for all albums that contain a particular media
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchAlbumByMediaReq {
-    pub media_uuid: MediaUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchAlbumByMediaResp {
-    pub albums: Vec<AlbumUuid>,
-}
-
-//album_message! {SearchAlbumByMedia}

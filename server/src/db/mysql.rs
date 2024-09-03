@@ -310,8 +310,11 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<Media>> {
-        let mut result = r"
+    async fn get_media(
+        &self,
+        media_uuid: MediaUuid,
+    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>> {
+        let mut media_result = r"
             SELECT library_uuid, path, hidden, date, note FROM media WHERE media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
@@ -321,22 +324,54 @@ impl ESDbService for MySQLState {
             .collect::<Row>()
             .await?;
 
-        let row = match result.pop() {
-            Some(row) => row,
+        let media_data = match media_result.pop() {
+            Some(row) => from_row_opt::<(LibraryUuid, String, bool, String, String)>(row)?,
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(LibraryUuid, String, bool, String, String)>(row)?;
+        let album_result = r"
+            SELECT album_uuid FROM album_contents WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
-        Ok(Some(Media {
-            library_uuid: data.0,
-            path: data.1,
-            hidden: data.2,
-            metadata: MediaMetadata {
-                date: data.3,
-                note: data.4,
+        let album_data = album_result
+            .into_iter()
+            .map(|row| from_row_opt::<AlbumUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        let ticket_result = r"
+            SELECT ticket_uuid FROM tickets WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let ticket_data = ticket_result
+            .into_iter()
+            .map(|row| from_row_opt::<TicketUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        Ok(Some((
+            Media {
+                library_uuid: media_data.0,
+                path: media_data.1,
+                hidden: media_data.2,
+                metadata: MediaMetadata {
+                    date: media_data.3,
+                    note: media_data.4,
+                },
             },
-        }))
+            album_data,
+            ticket_data,
+        )))
     }
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
@@ -879,59 +914,67 @@ impl ESDbService for MySQLState {
         Ok(data)
     }
 
-    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<Ticket>> {
+    async fn get_ticket(
+        &self,
+        ticket_uuid: TicketUuid,
+    ) -> anyhow::Result<Option<(Ticket, Vec<CommentUuid>)>> {
         let mut ticket_result = r"
             SELECT media_uuid, uid, title, timestamp, resolved FROM tickets WHERE ticket_uuid = :ticket_uuid"
             .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
+            .await?.collect::<Row>().await?;
+
+        let ticket_data = match ticket_result.pop() {
+            Some(row) => from_row_opt::<(MediaUuid, String, String, i64, bool)>(row)?,
+            None => return Ok(None),
+        };
+
+        let comment_result = r"
+            SELECT comment_uuid FROM comments WHERE ticket_uuid = :ticket_uuid"
+            .with(params! {"ticket_uuid" => ticket_uuid})
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let comment_data = comment_result
+            .into_iter()
+            .map(|row| from_row_opt::<CommentUuid>(row))
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        Ok(Some((
+            Ticket {
+                media_uuid: ticket_data.0,
+                uid: ticket_data.1,
+                title: ticket_data.2,
+                timestamp: ticket_data.3,
+                resolved: ticket_data.4,
+            },
+            comment_data,
+        )))
+    }
+
+    async fn get_comment(
+        &self,
+        comment_uuid: CommentUuid,
+    ) -> anyhow::Result<Option<TicketComment>> {
+        let mut comment_result = r"
+            SELECT ticket_uuid, uid, text, timestamp FROM comments WHERE comment_uuid = :commment_uuid"
+            .with(params! {"comment_uuid" => comment_uuid}).run(self.pool.get_conn().await?)
             .await?.collect::<Row>()
             .await?;
 
-        let ticket_row = match ticket_result.pop() {
+        let comment_row = match comment_result.pop() {
             Some(row) => row,
             None => return Ok(None),
         };
 
-        let ticket_data = from_row_opt::<(MediaUuid, String, String, i64, bool)>(ticket_row)?;
+        let comment_data = from_row_opt::<(TicketUuid, String, String, i64)>(comment_row)?;
 
-        let comment_result = r"
-            SELECT comment_uuid, uid, text, timestamp FROM comments WHERE ticket_uuid = :ticket_uuid"
-            .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
-            .await?.collect::<Row>()
-            .await?;
-
-        let comment_rows = comment_result
-            .into_iter()
-            .map(|row| from_row_opt::<(CommentUuid, String, String, i64)>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        let mut comment_data = HashMap::new();
-
-        for row in comment_rows.into_iter() {
-            match comment_data.insert(
-                row.0,
-                TicketComment {
-                    ticket_uuid: ticket_uuid,
-                    uid: row.1,
-                    text: row.2,
-                    timestamp: row.3,
-                },
-            ) {
-                None => {}
-                Some(_) => {
-                    return Err(anyhow::Error::msg(
-                        "Failed to assemble ticket comments due to duplicate comment uuid",
-                    ))
-                }
-            }
-        }
-
-        Ok(Some(Ticket {
-            media_uuid: ticket_data.0,
-            uid: ticket_data.1,
-            title: ticket_data.2,
-            timestamp: ticket_data.3,
-            resolved: ticket_data.4,
-            comments: comment_data,
+        Ok(Some(TicketComment {
+            ticket_uuid: comment_data.0,
+            uid: comment_data.1,
+            text: comment_data.2,
+            timestamp: comment_data.3,
         }))
     }
 
@@ -1158,8 +1201,7 @@ impl ESInner for MySQLState {
                         .await
                 }
                 DbMsg::SearchLibraries { resp, uid, filter } => {
-                    self.respond(resp, self.search_libraries(uid, filter))
-                        .await
+                    self.respond(resp, self.search_libraries(uid, filter)).await
                 }
                 DbMsg::SearchMediaInLibrary {
                     resp,
@@ -1184,6 +1226,9 @@ impl ESInner for MySQLState {
                 }
                 DbMsg::GetTicket { resp, ticket_uuid } => {
                     self.respond(resp, self.get_ticket(ticket_uuid)).await
+                }
+                DbMsg::GetComment { resp, comment_uuid } => {
+                    self.respond(resp, self.get_comment(comment_uuid)).await
                 }
                 DbMsg::SetTicketResolved {
                     resp,

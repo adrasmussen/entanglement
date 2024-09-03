@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::message;
-use crate::library::LibraryUuid;
+use crate::{library::LibraryUuid, ticket::TicketUuid, album::AlbumUuid};
 
 // structs and types
 
@@ -46,6 +46,8 @@ pub struct GetMediaReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMediaResp {
     pub media: Media,
+    pub albums: Vec<AlbumUuid>,
+    pub tickets: Vec<TicketUuid>,
 }
 
 media_message! {GetMedia}
