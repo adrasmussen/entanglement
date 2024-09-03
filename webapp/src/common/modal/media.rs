@@ -28,8 +28,8 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
         .await
     });
 
-    let media = match &*media_future.read() {
-        Some(Ok(resp)) => resp.media.clone(),
+    let (media, albums, tickets) = match &*media_future.read() {
+        Some(Ok(resp)) => (resp.media.clone(), resp.albums.clone(), resp.tickets.clone()),
         Some(Err(err)) => return modal_err(err.to_string()),
         None => return modal_err("Still waiting on get_media future..."),
     };

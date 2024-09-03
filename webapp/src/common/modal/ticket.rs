@@ -24,8 +24,8 @@ pub fn ShowTicketBox(props: ShowTicketBoxProps) -> Element {
         .await
     });
 
-    let ticket = match &*ticket_future.read() {
-        Some(Ok(resp)) => resp.ticket.clone(),
+    let (ticket, comments) = match &*ticket_future.read() {
+        Some(Ok(resp)) => (resp.ticket.clone(), resp.comments.clone()),
         Some(Err(err)) => return modal_err(err.to_string()),
         None => return modal_err("Still waiting on get_ticket future..."),
     };
@@ -59,7 +59,7 @@ pub fn ShowTicketBox(props: ShowTicketBoxProps) -> Element {
                     span { "{ticket.timestamp}"}
 
                     label { "Resolved" },
-                    span { "{ticket.timestamp}"}
+                    span { "{ticket.resolved}"}
                 },
             }
             div {
@@ -69,9 +69,8 @@ pub fn ShowTicketBox(props: ShowTicketBoxProps) -> Element {
                 div {
                     class: "modal-info",
 
-                    for (_, comment) in ticket.comments.iter() {
-                        label { "{comment.uid} ({comment.timestamp})"}
-                        span { "{comment.text}" }
+                    for comment_uuid in comments.iter() {
+                        span { "{comment_uuid}" }
                     }
                 }
             }

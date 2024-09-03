@@ -14,30 +14,28 @@ fn TicketListEntry(props: TicketListEntryProps) -> Element {
     let mut modal_stack_signal = props.modal_stack_signal;
     let ticket_uuid = props.ticket_uuid;
 
-    let ticket = use_resource(move || async move {
+    let ticket_future = use_resource(move || async move {
         get_ticket(&GetTicketReq {
             ticket_uuid: ticket_uuid,
         })
         .await
     });
 
-    let ticket = &*ticket.read();
-
     // this should throw a more informative error
-    let result = match ticket {
-        Some(Ok(result)) => result.ticket.clone(),
+    let (ticket, comments) = match  &*ticket_future.read() {
+        Some(Ok(resp)) => (resp.ticket.clone(), resp.comments.clone()),
         _ => return rsx! {},
     };
 
     rsx! {
             tr {
                 onclick: move |_| { modal_stack_signal.push(Modal::ShowTicket(ticket_uuid)) },
-                td { "{result.media_uuid}" }
-                td { "{result.uid}" }
-                td { "{result.title}" }
-                td { "{result.timestamp}" }
-                td { "{result.resolved}" }
-                td { "{result.comments.len()}" }
+                td { "{ticket.media_uuid}" }
+                td { "{ticket.uid}" }
+                td { "{ticket.title}" }
+                td { "{ticket.timestamp}" }
+                td { "{ticket.resolved}" }
+                td { "{comments.len()}" }
             }
     }
 }
