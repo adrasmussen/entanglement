@@ -11,7 +11,7 @@ mod home;
 use home::Home;
 
 mod gallery;
-use gallery::Gallery;
+use gallery::{Gallery, GalleryList, GalleryDetail};
 
 mod album;
 use album::Albums;
@@ -43,8 +43,14 @@ enum Route {
     #[layout(NavBar)]
         #[route("/")]
         Home {},
-        #[route("/gallery")]
-        Gallery {},
+        #[nest("/gallery")]
+            #[layout(Gallery)]
+                #[route("/")]
+                GalleryList {},
+                #[route("/:media_uuid")]
+                GalleryDetail { media_uuid: String },
+            #[end_layout]
+        #[end_nest]
         #[route("/albums")]
         Albums {},
         #[route("/library")]
@@ -65,19 +71,34 @@ pub fn App() -> Element {
 }
 
 #[component]
+fn NavBarButton(target: Route, text: String) -> Element {
+    let current_path: Route = use_route();
+
+    let active_class = if current_path.is_child_of(&target) {
+        "active"
+    } else {
+        ""
+    };
+
+    rsx! {
+        Link { class: active_class, to: target, "{text}" }
+    }
+}
+
+#[component]
 fn NavBar() -> Element {
     rsx! {
         div {
             style { "{style::TOPNAV}" },
             div {class: "topnav",
                 Link { active_class: "active", to: Route::Home {}, "Home" }
-                Link { active_class: "active", to: Route::Gallery {}, "Gallery" }
-                Link { active_class: "active", to: Route::Albums {}, "Albums" }
-                Link { active_class: "active", to: Route::Libraries {}, "Libraries" }
-                Link { active_class: "active", to: Route::Tickets {}, "Tickets" }
-                Link { active_class: "active", to: Route::Settings {}, "Settings" }
-                Link { active_class: "active", to: Route::Status {}, "Status" }
-                Link { active_class: "active", to: Route::Admin {}, "Admin" }
+                NavBarButton { target: Route::GalleryList {}, text: "Gallery" }
+                NavBarButton { target: Route::Albums {}, text: "Albums" }
+                NavBarButton { target: Route::Libraries {}, text: "Libraries" }
+                NavBarButton { target: Route::Tickets {}, text: "Tickets" }
+                NavBarButton { target: Route::Settings {}, text: "Settings" }
+                NavBarButton { target: Route::Status {}, text: "Status" }
+                NavBarButton { target: Route::Admin {}, text: "Admin" }
             }
         }
         Outlet::<Route> {}

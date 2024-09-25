@@ -175,6 +175,57 @@ pub const MODAL: &str = r#"
 }
 "#;
 
+pub const GALLERY_DETAIL: &str = r#"
+.gallery-outer {
+    display: grid;
+    grid-template-columns: 400px 1fr 1fr;
+    margin-top: 8px;
+    margin-right: 8px;
+    margin-left: 8px;
+}
+
+.gallery-img {
+    width: 400px;
+    object-fit: contain;
+}
+
+.gallery-info {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-gap: 10px;
+    padding: 20px;
+    color: black;
+    font-size 17px;
+}
+
+.gallery-info label {
+    text-align: right;
+}
+
+.gallery-info label:after {
+    content: ":";
+}
+
+.gallery-info textarea {
+    width: 100%;
+}
+
+.gallery-info input[type=submit], button {
+    float: left;
+    padding: 6px;
+    border: none;
+    margin-top: 8px;
+    margin-right: 8px;
+    margin-left: 8px;
+    font-size: 15px;
+}
+
+.gallery-info input[type=submit] {
+    grid-column: 2;
+}
+
+"#;
+
 pub const MEDIA_GRID: &str = r#"
 .media-grid {
     display: grid;

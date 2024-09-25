@@ -170,7 +170,6 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
 
 #[component]
 pub fn Libraries() -> Element {
-    let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
     let library_view_signal = use_signal(|| LibraryView::LibraryList);
 
     // library search logic
@@ -242,7 +241,6 @@ pub fn Libraries() -> Element {
             media_search_signal: media_search_signal,
             status: (library_status, media_status),
         }
-        ModalBox { stack_signal: modal_stack_signal }
 
         match library_view_signal() {
             LibraryView::LibraryList => match libraries {
@@ -255,7 +253,7 @@ pub fn Libraries() -> Element {
             },
             LibraryView::MediaList(_) => match media {
                 Ok(media) => rsx! {
-                    MediaGrid { modal_stack_signal: modal_stack_signal, media: media}
+                    MediaGrid { media: media}
                 },
                 Err(err) => rsx! {
                     span { "{err}" }

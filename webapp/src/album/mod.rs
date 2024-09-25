@@ -23,7 +23,6 @@ enum AlbumView {
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumNavBarProps {
-    modal_stack_signal: Signal<Vec<Modal>>,
     album_view_signal: Signal<AlbumView>,
     album_search_signal: Signal<String>,
     media_search_signal: Signal<String>,
@@ -32,7 +31,6 @@ struct AlbumNavBarProps {
 
 #[component]
 fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
-    let mut modal_stack_signal = props.modal_stack_signal;
     let mut album_view_signal = props.album_view_signal;
     let mut album_search_signal = props.album_search_signal;
     let mut media_search_signal = props.media_search_signal;
@@ -91,7 +89,7 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
                         span { "Search History" },
                         span { "{album_status}"}
                         button {
-                            onclick: move |_| modal_stack_signal.push(Modal::CreateAlbum),
+                            //onclick: move |_| modal_stack_signal.push(Modal::CreateAlbum),
                             "Create Album"
                         },
                     },
@@ -128,7 +126,7 @@ fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
                                 span { "Search History" }
                                 span { "Searching {album_name}: {media_status}" }
                                 button {
-                                    onclick: move |_| modal_stack_signal.push(Modal::ShowAlbum(album_uuid)),
+                                    //onclick: move |_| modal_stack_signal.push(Modal::ShowAlbum(album_uuid)),
                                     "View Album"
                                 },
                                 button {
@@ -212,13 +210,11 @@ pub fn Albums() -> Element {
 
     rsx! {
         AlbumNavBar {
-            modal_stack_signal: modal_stack_signal,
             album_view_signal: album_view_signal,
             album_search_signal: album_search_signal,
             media_search_signal: media_search_signal,
             status: (album_status, media_status),
         }
-        ModalBox { stack_signal: modal_stack_signal }
 
         match album_view_signal() {
             AlbumView::AlbumList => match albums {
@@ -231,7 +227,7 @@ pub fn Albums() -> Element {
             },
             AlbumView::MediaList(_) => match media {
                 Ok(media) => rsx! {
-                    MediaGrid { modal_stack_signal: modal_stack_signal, media: media}
+                    MediaGrid { media: media}
                 },
                 Err(err) => rsx! {
                     span { "{err}" }
