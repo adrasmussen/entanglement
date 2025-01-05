@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 
-use api::media::MediaUuid;
+use common::api::media::MediaUuid;
 
 use crate::service::*;
 

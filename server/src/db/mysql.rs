@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
+use common::api::{album::*, comment::*, library::*, media::*};
 
 pub struct MySQLState {
     auth_svc_sender: ESMSender,
@@ -1139,7 +1139,7 @@ impl ESInner for MySQLState {
                 }
 
                 // album messages
-                DbMsg::CreateAlbum { resp, album } => {
+                DbMsg::AddAlbum { resp, album } => {
                     self.respond(resp, self.create_album(album)).await
                 }
                 DbMsg::GetAlbum { resp, album_uuid } => {
@@ -1264,7 +1264,7 @@ impl EntanglementService for MySQLService {
     type Inner = MySQLState;
 
     fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
         (
             tx,

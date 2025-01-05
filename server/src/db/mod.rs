@@ -5,7 +5,7 @@ use anyhow;
 use async_trait::async_trait;
 
 use crate::service::ESInner;
-use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
+use common::api::{album::*, comment::*, library::*, media::*};
 
 pub mod msg;
 pub mod mysql;

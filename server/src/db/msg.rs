@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, group::*, library::*, media::*, ticket::*, user::*};
+use common::api::{album::*, comment::*, library::*, media::*};
 
 use crate::service::*;
 
@@ -12,53 +12,13 @@ pub enum DbMsg {
         media_uuid: MediaUuid,
     },
 
-    // user messages
-    CreateUser {
-        resp: ESMResp<()>,
-        uid: String,
-        metadata: UserMetadata,
-    },
-    GetUser {
-        resp: ESMResp<Option<User>>,
-        uid: String,
-    },
-    DeleteUser {
-        resp: ESMResp<()>,
-        uid: String,
-    },
-
-    // group messages
-    CreateGroup {
-        resp: ESMResp<()>,
-        gid: String,
-        metadata: GroupMetadata,
-    },
-    GetGroup {
-        resp: ESMResp<Option<Group>>,
-        gid: String,
-    },
-    DeleteGroup {
-        resp: ESMResp<()>,
-        gid: String,
-    },
-    AddUserToGroup {
-        resp: ESMResp<()>,
-        uid: String,
-        gid: String,
-    },
-    RmUserFromGroup {
-        resp: ESMResp<()>,
-        uid: String,
-        gid: String,
-    },
-
     // media messages
     AddMedia {
         resp: ESMResp<MediaUuid>,
         media: Media,
     },
     GetMedia {
-        resp: ESMResp<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>>,
+        resp: ESMResp<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>,
         media_uuid: MediaUuid,
     },
     GetMediaUuidByPath {
@@ -68,12 +28,8 @@ pub enum DbMsg {
     UpdateMedia {
         resp: ESMResp<()>,
         media_uuid: MediaUuid,
-        change: MediaMetadata,
-    },
-    SetMediaHidden {
-        resp: ESMResp<()>,
-        media_uuid: MediaUuid,
-        hidden: bool,
+        hidden: Option<bool>,
+        attention: Option<bool>,
     },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
@@ -81,8 +37,24 @@ pub enum DbMsg {
         filter: String,
     },
 
+    // comment messages
+    AddComment {
+        resp: ESMResp<CommentUuid>,
+        media_uuid: MediaUuid,
+        text: String,
+    },
+    GetComment {
+        resp: ESMResp<Option<Comment>>,
+        comment_uuid: CommentUuid,
+    },
+    UpdateComment {
+        resp: ESMResp<()>,
+        comment_uuid: CommentUuid,
+        text: Option<String>,
+    },
+
     // album messages
-    CreateAlbum {
+    AddAlbum {
         resp: ESMResp<AlbumUuid>,
         album: Album,
     },
@@ -97,7 +69,8 @@ pub enum DbMsg {
     UpdateAlbum {
         resp: ESMResp<()>,
         album_uuid: AlbumUuid,
-        change: AlbumMetadata,
+        name: Option<String>,
+        description: Option<String>,
     },
     AddMediaToAlbum {
         resp: ESMResp<()>,
@@ -133,7 +106,8 @@ pub enum DbMsg {
     UpdateLibrary {
         resp: ESMResp<()>,
         library_uuid: LibraryUuid,
-        change: LibraryMetadata,
+        count: i64,
+        mtime: i64,
     },
     SearchLibraries {
         resp: ESMResp<Vec<LibraryUuid>>,
@@ -146,35 +120,6 @@ pub enum DbMsg {
         library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
-    },
-
-    // ticket messages
-    CreateTicket {
-        resp: ESMResp<TicketUuid>,
-        ticket: Ticket,
-    },
-    CreateComment {
-        resp: ESMResp<CommentUuid>,
-        comment: TicketComment,
-    },
-    GetTicket {
-        resp: ESMResp<Option<(Ticket, Vec<CommentUuid>)>>,
-        ticket_uuid: TicketUuid,
-    },
-    GetComment {
-        resp: ESMResp<Option<TicketComment>>,
-        comment_uuid: CommentUuid,
-    },
-    SetTicketResolved {
-        resp: ESMResp<()>,
-        ticket_uuid: TicketUuid,
-        resolved: bool,
-    },
-    SearchTickets {
-        resp: ESMResp<Vec<TicketUuid>>,
-        uid: String,
-        filter: String,
-        resolved: bool,
     },
 }
 

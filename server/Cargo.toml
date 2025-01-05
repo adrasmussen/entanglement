@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-api = { path = "../api" }
+common = { path = "../common" }
 anyhow = "1.0.86"
 async_cell = "0.2.2"
 async-recursion = "1.1.1"

@@ -593,6 +593,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gloo-net 0.6.0",
+ "paste",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2963,13 +2974,13 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "api",
  "async-recursion",
  "async-trait",
  "async_cell",
  "axum",
  "axum-macros",
  "chrono",
+ "common",
  "futures",
  "futures-util",
  "http 1.1.0",
