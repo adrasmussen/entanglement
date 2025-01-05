@@ -329,7 +329,7 @@ async fn serve_http(socket: SocketAddr, state: Arc<HttpEndpoint>) -> Result<(), 
     let state = Arc::clone(&state);
 
     let app_url_root = "/entanglement";
-    let app_web_dir = "/tmp/entanglement/dist";
+    let app_web_dir = "/srv/home/alex/workspace/entanglement/webapp/dist";
 
     let app_router = Router::new().nest_service(
         "/",
