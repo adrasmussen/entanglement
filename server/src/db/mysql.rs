@@ -52,551 +52,50 @@ impl MySQLState {
 impl ESDbService for MySQLState {
     // auth queries
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
-        // for a given media_uuid, find all gids that match either:
-        //  * if the media is not hidden, any album that contains the media
-        //  * the library that contains that media
-        let result = r"
-            SELECT
-                gid
-            FROM
-                (
-                SELECT
-                    album_uuid
-                FROM
-                    media
-                INNER JOIN album_contents ON media.media_uuid = album_contents.media_uuid
-                WHERE
-                    media.media_uuid = :media_uuid AND media.hidden = FALSE
-            ) AS t1
-            INNER JOIN albums ON t1.album_uuid = albums.album_uuid
-            UNION
-            SELECT
-                gid
-            FROM
-                (
-                    libraries
-                INNER JOIN media ON libraries.library_uuid = media.media_uuid
-                )
-            WHERE
-                media_uuid = :media_uuid"
-            .with(params! {
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()?;
-
-        Ok(data)
-    }
-
-    // user queries
-    async fn create_user(&self, uid: String, _metadata: UserMetadata) -> anyhow::Result<()> {
-        r"
-            INSERT INTO users (uid)
-            VALUES (:uid)"
-            .with(params! {"uid" => uid.clone()})
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-            INSERT INTO groups (gid)
-            VALUES (:uid)"
-            .with(params! {"uid" => uid.clone()})
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-            INSERT INTO group_membership (uid, gid)
-            VALUES (:uid, :uid)"
-            .with(params! {"uid" => uid.clone()})
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>> {
-        let mut user_result = r"
-            SELECT uid FROM users WHERE uid = :uid"
-            .with(params! {"uid" => uid.clone()})
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let user_row = match user_result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let user_data = from_row_opt::<String>(user_row)?;
-
-        let group_result = r"
-            SELECT gid FROM group_membership WHERE uid = :uid"
-            .with(params! {"uid" => uid})
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let group_data = group_result
-            .into_iter()
-            .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()?;
-
-        Ok(Some(User {
-            uid: user_data,
-            metadata: UserMetadata {},
-            groups: group_data,
-        }))
-    }
-
-    async fn delete_user(&self, uid: String) -> anyhow::Result<()> {
-        r"
-            DELETE FROM users WHERE uid = :uid"
-            .with(params! {
-                "uid" => uid.clone(),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-            DELETE FROM group_membership WHERE uid = :uid"
-            .with(params! {
-                "uid" => uid.clone(),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        self.clear_user_cache(Vec::from([uid])).await?;
-
-        Ok(())
-    }
-
-    // group queries
-    async fn create_group(&self, gid: String, _metadata: GroupMetadata) -> anyhow::Result<()> {
-        r"
-            INSERT INTO groups (gid)
-            VALUES (:gid)"
-            .with(params! {
-                "gid" => gid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>> {
-        let mut group_rows = r"
-            SELECT gid FROM groups WHERE gid = :gid"
-            .with(params! {"gid" => gid.clone()})
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let group_row = match group_rows.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let group_data = from_row_opt::<String>(group_row)?;
-
-        let user_rows = r"
-            SELECT uid FROM group_membership WHERE gid = :gid"
-            .with(params! {"gid" => gid})
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let user_data = user_rows
-            .into_iter()
-            .map(|row| from_row_opt::<String>(row))
-            .collect::<Result<HashSet<_>, FromRowError>>()?;
-
-        Ok(Some(Group {
-            gid: group_data,
-            metadata: GroupMetadata {},
-            members: user_data,
-        }))
-    }
-
-    async fn delete_group(&self, gid: String) -> anyhow::Result<()> {
-        r"
-            DELETE FROM users WHERE gid = :gid"
-            .with(params! {
-                "gid" => gid.clone(),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-            DELETE FROM group_membership WHERE gid = :gid"
-            .with(params! {
-                "gid" => gid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        self.clear_user_cache(Vec::new()).await?;
-
-        Ok(())
-    }
-
-    async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
-        r"
-            INSERT INTO group_membership (uid, gid)
-            VALUES (:uid, :gid)"
-            .with(params! {
-                "uid" => uid.clone(),
-                "gid" => gid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        self.clear_user_cache(Vec::from([uid])).await?;
-
-        Ok(())
-    }
-
-    async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()> {
-        r"
-            DELETE FROM group_membership WHERE (uid = :uid AND gid = :gid)
-            VALUES (:uid, :gid)"
-            .with(params! {
-                "uid" => uid.clone(),
-                "gid" => gid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        self.clear_user_cache(Vec::from([uid])).await?;
-
-        Ok(())
+        common::db::mysql::media_access_groups(self.pool.clone(), media_uuid).await
     }
 
     // media queries
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
-        let mut result = r"
-            INSERT INTO media (media_uuid, library_uuid, path, hidden, date, note)
-            VALUES (UUID_SHORT(), :library_uuid, :path, :hidden, :date, :note)
-            RETURNING media_uuid"
-            .with(params! {
-                "library_uuid" => media.library_uuid,
-                "path" => media.path,
-                "hidden" => media.hidden,
-                "date" => media.metadata.date,
-                "note" => media.metadata.note,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_media"))?;
-
-        let data = from_row_opt::<MediaUuid>(row)?;
-
-        Ok(data)
+        common::db::mysql::add_media(self.pool.clone(), media).await
     }
 
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
-    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>> {
-        let mut media_result = r"
-            SELECT library_uuid, path, hidden, date, note FROM media WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let media_data = match media_result.pop() {
-            Some(row) => from_row_opt::<(LibraryUuid, String, bool, String, String)>(row)?,
-            None => return Ok(None),
-        };
-
-        let album_result = r"
-            SELECT album_uuid FROM album_contents WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let album_data = album_result
-            .into_iter()
-            .map(|row| from_row_opt::<AlbumUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        let ticket_result = r"
-            SELECT ticket_uuid FROM tickets WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let ticket_data = ticket_result
-            .into_iter()
-            .map(|row| from_row_opt::<TicketUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(Some((
-            Media {
-                library_uuid: media_data.0,
-                path: media_data.1,
-                hidden: media_data.2,
-                metadata: MediaMetadata {
-                    date: media_data.3,
-                    note: media_data.4,
-                },
-            },
-            album_data,
-            ticket_data,
-        )))
+    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
+        common::db::mysql::get_media(self.pool.clone(), media_uuid).await
     }
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
-        let mut result = r"
-            SELECT media_uuid FROM media WHERE path = :path"
-            .with(params! {
-                "path" => path,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = match result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let data = from_row_opt::<MediaUuid>(row)?;
-
-        Ok(Some(data))
+        common::db::mysql::get_media_uuid_by_path(self.pool.clone(), path).await
     }
 
-    async fn update_media(
-        &self,
-        media_uuid: MediaUuid,
-        change: MediaMetadata,
-    ) -> anyhow::Result<()> {
-        r"
-            UPDATE media SET date = :date, note = :note WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "date" => change.date,
-                "note" => change.note,
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()> {
-        r"
-            UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "hidden" => hidden,
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        self.clear_access_cache(Vec::from([media_uuid.clone()]))
-            .await?;
-
-        Ok(())
+    async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()> {
+        common::db::mysql::update_media(self.pool.clone(), media_uuid, update).await
     }
 
     async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
-        // for a given uid and filter, find all media that match either:
-        //  * is in a library owned by a group containing the uid
-        //  * if the media is not hidden, is in an album owned
-        //    by a group containing the uid
-        let result = r"
-            SELECT
-                media.media_uuid
-            FROM
-                (
-                SELECT
-                    media_uuid
-                FROM
-                    (
-                    SELECT
-                        album_uuid
-                    FROM
-                        (
-                        SELECT
-                            gid
-                        FROM
-                            group_membership
-                        WHERE
-                            uid = :uid
-                    ) AS t1
-                INNER JOIN albums ON t1.gid = albums.gid
-                ) AS t2
-            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
-            UNION
-            SELECT
-                media_uuid
-            FROM
-                (
-                SELECT
-                    library_uuid
-                FROM
-                    (
-                    SELECT
-                        gid
-                    FROM
-                        group_membership
-                    WHERE
-                        uid = :uid
-                ) AS t1
-            INNER JOIN libraries ON t1.gid = libraries.gid
-            ) AS t2
-            INNER JOIN media ON t2.library_uuid = media.library_uuid
-            ) AS t3
-            INNER JOIN media ON t3.media_uuid = media.media_uuid
-            WHERE
-                hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
-            .with(params! {
-                "uid" => uid,
-                "filter" => format!("%{}%", filter),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(data)
+        common::db::mysql::search_media(self.pool.clone(), uid, filter).await
     }
 
     // album queries
-    async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
-        let mut result = r"
-            INSERT INTO albums (album_uuid, uid, gid, name, note)
-            VALUES (UUID_SHORT(), :uid, :gid, :name, :note)
-            RETURNING album_uuid"
-            .with(params! {
-                "uid" => album.uid,
-                "gid" => album.gid,
-                "name" => album.metadata.name,
-                "note" => album.metadata.note,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_album"))?;
-
-        let data = from_row_opt::<AlbumUuid>(row)?;
-
-        Ok(data)
+    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
+        common::db::mysql::add_album(self.pool.clone(), album).await
     }
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
-        let mut result = r"
-            SELECT uid, gid, name, note FROM albums WHERE album_uuid = :album_uuid"
-            .with(params! {
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = match result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let data = from_row_opt::<(String, String, String, String)>(row)?;
-
-        Ok(Some(Album {
-            uid: data.0,
-            gid: data.1,
-            metadata: AlbumMetadata {
-                name: data.2,
-                note: data.3,
-            },
-        }))
+        common::db::mysql::get_album(self.pool.clone(), album_uuid).await
     }
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
-        let result = r"
-            DELETE FROM album_contents WHERE album_uuid = :album_uuid;
-            RETURNING media_uuid"
-            .with(params! {
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
+        common::db::mysql::delete_album(self.pool.clone(), album_uuid).await
 
-        r"
-            DELETE FROM albums WHERE album_uuid = :album_uuid;"
-            .with(params! {
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        let deleted_media_data = result
-            .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        self.clear_access_cache(deleted_media_data).await?;
-
-        Ok(())
+        // should the function return a list of affected media to clear the cache?
     }
 
-    async fn update_album(
-        &self,
-        album_uuid: AlbumUuid,
-        change: AlbumMetadata,
-    ) -> anyhow::Result<()> {
-        r"
-            UPDATE albums SET name = :name, note = :note WHERE album_uuid = :album_uuid"
-            .with(params! {
-                "name" => change.name,
-                "note" => change.note,
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
+    async fn update_album(&self, album_uuid: AlbumUuid, update: AlbumUpdate) -> anyhow::Result<()> {
+        common::db::mysql::update_album(self.pool.clone(), album_uuid, update).await
     }
 
     async fn add_media_to_album(
@@ -604,15 +103,7 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        r"
-            INSERT INTO album_contents (media_uuid, album_uuid)
-            VALUES (:media_uuid, :album_uuid)"
-            .with(params! {
-                "media_uuid" => media_uuid,
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
+        common::db::mysql::add_media_to_album(self.pool.clone(), media_uuid, album_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -625,14 +116,7 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        r"
-            DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
-            .with(params!{
-                "media_uuid" => media_uuid,
-                "album_uuid" => album_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
+        common::db::mysql::rm_media_from_album(self.pool.clone(), media_uuid, album_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -641,37 +125,7 @@ impl ESDbService for MySQLState {
     }
 
     async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
-        // for a given uid and filter, find all albums owned by groups that contain the uid
-        let result = r"
-            SELECT
-                album_uuid
-            FROM
-                (
-                SELECT
-                    gid
-                FROM
-                    group_membership
-                WHERE
-                    uid = :uid
-            ) AS t1
-            INNER JOIN albums ON t1.gid = albums.gid
-            WHERE
-                CONCAT_WS(' ', name, note) LIKE :filter"
-            .with(params! {
-                "uid" => uid,
-                "filter" => format!("%{}%", filter),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<AlbumUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(data)
+        common::db::mysql::search_albums(self.pool.clone(), uid, filter).await
     }
 
     async fn search_media_in_album(
@@ -680,123 +134,24 @@ impl ESDbService for MySQLState {
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        // for a given uid, filter, and album_uuid, find all non-hidden media in that album
-        // provided that the album is owned by a group containing the uid
-        let result = r"
-            SELECT
-                media.media_uuid
-            FROM
-                (
-                SELECT
-                    media_uuid
-                FROM
-                    (
-                    SELECT
-                        album_uuid
-                    FROM
-                        (
-                        SELECT
-                            gid
-                        FROM
-                            group_membership
-                        WHERE
-                            uid = :uid
-                    ) AS t1
-                INNER JOIN albums ON t1.gid = albums.gid
-                WHERE
-                    album_uuid = :album_uuid
-                ) AS t2
-            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
-            ) AS t3
-            INNER JOIN media ON t3.media_uuid = media.media_uuid
-            WHERE
-                hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter
-            "
-        .with(params! {
-            "uid" => uid,
-            "album_uuid" => album_uuid,
-            "filter" => format!("%{}%", filter),
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(data)
+        common::db::mysql::search_media_in_album(self.pool.clone(), uid, album_uuid, filter).await
     }
 
     // library queries
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
-        let mut result = r"
-            INSERT INTO libraries (library_uuid, path, gid, file_count, last_scan)
-            VALUES (UUID_SHORT(), :path, :gid, :file_count, :last_scan)
-            RETURNING library_uuid"
-            .with(params! {
-                "path" => library.path,
-                "gid" => library.gid,
-                "file_count" => library.metadata.file_count,
-                "last_scan" => library.metadata.last_scan
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_library"))?;
-
-        let data = from_row_opt::<LibraryUuid>(row)?;
-
-        Ok(data)
+        common::db::mysql::add_library(self.pool.clone(), library).await
     }
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
-        let mut result = r"
-            SELECT path, gid, file_count, last_scan FROM libraries WHERE library_uuid = :library_uuid"
-            .with(params! {
-                "library_uuid" => library_uuid,
-            }).run(self.pool.get_conn().await?)
-            .await?.collect::<Row>()
-            .await?;
-
-        let row = match result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let data = from_row_opt::<(String, String, i64, i64)>(row)?;
-
-        Ok(Some(Library {
-            path: data.0,
-            gid: data.1,
-            metadata: LibraryMetadata {
-                file_count: data.2,
-                last_scan: data.3,
-            },
-        }))
+        common::db::mysql::get_library(self.pool.clone(), library_uuid).await
     }
 
     async fn update_library(
         &self,
         library_uuid: LibraryUuid,
-        change: LibraryMetadata,
+        update: LibraryUpdate,
     ) -> anyhow::Result<()> {
-        r"
-            UPDATE libraries SET file_count = :file_count, last_scan = :last_scan WHERE library_uuid = :library_uuid"
-            .with(params! {
-                "file_count" => change.file_count,
-                "last_scan" => change.last_scan,
-                "library_uuid" => library_uuid,
-            }).run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
+        common::db::mysql::update_library(self.pool.clone(), library_uuid, update).await
     }
 
     async fn search_libraries(
@@ -804,7 +159,7 @@ impl ESDbService for MySQLState {
         uid: String,
         filter: String,
     ) -> anyhow::Result<Vec<LibraryUuid>> {
-        Err(anyhow::Error::msg("not implemented"))
+        common::db::mysql::search_libraries(self.pool.clone(), uid, filter).await
     }
 
     async fn search_media_in_library(
@@ -814,256 +169,7 @@ impl ESDbService for MySQLState {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        // for a given uid, filter, hidden state and library_uuid, find all media in that album
-        // provided that the library is owned by a group containing the uid
-        //
-        // note that this is the only search query where media with "hidden = true" can be found
-        let result = r"
-            SELECT
-                media_uuid
-            FROM
-                (
-                SELECT
-                    library_uuid
-                FROM
-                    (
-                    SELECT
-                        gid
-                    FROM
-                        group_membership
-                    WHERE
-                        uid = :uid
-                ) AS t1
-            INNER JOIN libraries ON t1.gid = libraries.gid
-            WHERE
-                library_uuid = :library_uuid
-            ) AS t2
-            INNER JOIN media ON t2.library_uuid = media.library_uuid
-            WHERE
-                (
-                    hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
-                )"
-        .with(params! {
-            "uid" => uid,
-            "library_uuid" => library_uuid,
-            "hidden" => hidden,
-            "filter" => format!("%{}%", filter),
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(data)
-    }
-
-    // ticket queries
-    async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid> {
-        let mut result = r"
-            INSERT INTO tickets (ticket_uuid, media_uuid, uid, title, timestamp, resolved)
-            VALUES (UUID_SHORT(), :media_uuid, :uid, :title, :timestamp, :resolved)
-            RETURNING ticket_uuid"
-            .with(params! {
-                "media_uuid" => ticket.media_uuid,
-                "uid" => ticket.uid,
-                "title" => ticket.title,
-                "timestamp" => ticket.timestamp,
-                "resolved" => ticket.resolved,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_ticket"))?;
-
-        let data = from_row_opt::<TicketUuid>(row)?;
-
-        Ok(data)
-    }
-
-    async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid> {
-        let mut result = r"
-            INSERT INTO comments (comment_uuid, ticket_uuid, uid, text, timestamp)
-            VALUES (UUID_SHORT(), :ticket_uuid, :uid, :text, :timestamp)
-            RETURNING comment_uuid"
-            .with(params! {
-                "ticket_uuid" => comment.ticket_uuid,
-                "uid" => comment.uid,
-                "text" => comment.text,
-                "timestamp" => comment.timestamp,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_comment"))?;
-
-        let data = from_row_opt::<CommentUuid>(row)?;
-
-        Ok(data)
-    }
-
-    async fn get_ticket(
-        &self,
-        ticket_uuid: TicketUuid,
-    ) -> anyhow::Result<Option<(Ticket, Vec<CommentUuid>)>> {
-        let mut ticket_result = r"
-            SELECT media_uuid, uid, title, timestamp, resolved FROM tickets WHERE ticket_uuid = :ticket_uuid"
-            .with(params! {"ticket_uuid" => ticket_uuid}).run(self.pool.get_conn().await?)
-            .await?.collect::<Row>().await?;
-
-        let ticket_data = match ticket_result.pop() {
-            Some(row) => from_row_opt::<(MediaUuid, String, String, i64, bool)>(row)?,
-            None => return Ok(None),
-        };
-
-        let comment_result = r"
-            SELECT comment_uuid FROM comments WHERE ticket_uuid = :ticket_uuid"
-            .with(params! {"ticket_uuid" => ticket_uuid})
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let comment_data = comment_result
-            .into_iter()
-            .map(|row| from_row_opt::<CommentUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(Some((
-            Ticket {
-                media_uuid: ticket_data.0,
-                uid: ticket_data.1,
-                title: ticket_data.2,
-                timestamp: ticket_data.3,
-                resolved: ticket_data.4,
-            },
-            comment_data,
-        )))
-    }
-
-    async fn get_comment(
-        &self,
-        comment_uuid: CommentUuid,
-    ) -> anyhow::Result<Option<TicketComment>> {
-        let mut comment_result = r"
-            SELECT ticket_uuid, uid, text, timestamp FROM comments WHERE comment_uuid = :commment_uuid"
-            .with(params! {"comment_uuid" => comment_uuid}).run(self.pool.get_conn().await?)
-            .await?.collect::<Row>()
-            .await?;
-
-        let comment_row = match comment_result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let comment_data = from_row_opt::<(TicketUuid, String, String, i64)>(comment_row)?;
-
-        Ok(Some(TicketComment {
-            ticket_uuid: comment_data.0,
-            uid: comment_data.1,
-            text: comment_data.2,
-            timestamp: comment_data.3,
-        }))
-    }
-
-    async fn set_ticket_resolved(
-        &self,
-        ticket_uuid: TicketUuid,
-        resolved: bool,
-    ) -> anyhow::Result<()> {
-        r"
-            UPDATE tickets SET resolved = :resolved WHERE ticket_uuid = :ticket_uuid"
-            .with(params! {
-                "resolved" => resolved,
-                "ticket_uuid" => ticket_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn search_tickets(
-        &self,
-        uid: String,
-        filter: String,
-        resolved: bool,
-    ) -> anyhow::Result<Vec<TicketUuid>> {
-        // for a given uid and filter, find all tickets associated with media that
-        let result = r"
-            SELECT
-                ticket_uuid
-            FROM
-                (
-                SELECT
-                    media_uuid
-                FROM
-                    (
-                    SELECT
-                        album_uuid
-                    FROM
-                        (
-                        SELECT
-                            gid
-                        FROM
-                            group_membership
-                        WHERE
-                            uid = :uid
-                    ) AS t1
-                INNER JOIN albums ON t1.gid = albums.gid
-                ) AS t2
-            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
-            UNION
-            SELECT
-                media_uuid
-            FROM
-                (
-                SELECT
-                    library_uuid
-                FROM
-                    (
-                    SELECT
-                        gid
-                    FROM
-                        group_membership
-                    WHERE
-                        uid = :uid
-                ) AS t1
-            INNER JOIN libraries ON t1.gid = libraries.gid
-            ) AS t2
-            INNER JOIN media ON t2.library_uuid = media.library_uuid
-            ) AS t3
-            INNER JOIN tickets ON t3.media_uuid = tickets.media_uuid
-            WHERE
-                resolved = :resolved AND title LIKE :filter"
-            .with(params! {
-                "uid" => uid,
-                "resolved" => resolved,
-                "filter" => format!("%{}%", filter),
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let data = result
-            .into_iter()
-            .map(|row| from_row_opt::<TicketUuid>(row))
-            .collect::<Result<Vec<_>, FromRowError>>()?;
-
-        Ok(data)
+        common::db::mysql::search_media_in_library(self.pool.clone(), uid, library_uuid, filter, hidden).await
     }
 }
 
@@ -1087,28 +193,6 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.media_access_groups(media_uuid))
                         .await
                 }
-                DbMsg::CreateUser {
-                    resp,
-                    uid,
-                    metadata,
-                } => self.respond(resp, self.create_user(uid, metadata)).await,
-                DbMsg::GetUser { resp, uid } => self.respond(resp, self.get_user(uid)).await,
-                DbMsg::DeleteUser { resp, uid } => self.respond(resp, self.delete_user(uid)).await,
-                DbMsg::CreateGroup {
-                    resp,
-                    gid,
-                    metadata,
-                } => self.respond(resp, self.create_group(gid, metadata)).await,
-                DbMsg::GetGroup { resp, gid } => self.respond(resp, self.get_group(gid)).await,
-                DbMsg::DeleteGroup { resp, gid } => {
-                    self.respond(resp, self.delete_group(gid)).await
-                }
-                DbMsg::AddUserToGroup { resp, uid, gid } => {
-                    self.respond(resp, self.add_user_to_group(uid, gid)).await
-                }
-                DbMsg::RmUserFromGroup { resp, uid, gid } => {
-                    self.respond(resp, self.rm_user_from_group(uid, gid)).await
-                }
 
                 // media messages
                 DbMsg::AddMedia { resp, media } => self.respond(resp, self.add_media(media)).await,
@@ -1121,17 +205,9 @@ impl ESInner for MySQLState {
                 DbMsg::UpdateMedia {
                     resp,
                     media_uuid,
-                    change,
+                    update,
                 } => {
-                    self.respond(resp, self.update_media(media_uuid, change))
-                        .await
-                }
-                DbMsg::SetMediaHidden {
-                    resp,
-                    media_uuid,
-                    hidden,
-                } => {
-                    self.respond(resp, self.set_media_hidden(media_uuid, hidden))
+                    self.respond(resp, self.update_media(media_uuid, update))
                         .await
                 }
                 DbMsg::SearchMedia { resp, uid, filter } => {
@@ -1139,9 +215,7 @@ impl ESInner for MySQLState {
                 }
 
                 // album messages
-                DbMsg::AddAlbum { resp, album } => {
-                    self.respond(resp, self.create_album(album)).await
-                }
+                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
                 DbMsg::GetAlbum { resp, album_uuid } => {
                     self.respond(resp, self.get_album(album_uuid)).await
                 }
@@ -1151,9 +225,9 @@ impl ESInner for MySQLState {
                 DbMsg::UpdateAlbum {
                     resp,
                     album_uuid,
-                    change,
+                    update,
                 } => {
-                    self.respond(resp, self.update_album(album_uuid, change))
+                    self.respond(resp, self.update_album(album_uuid, update))
                         .await
                 }
                 DbMsg::AddMediaToAlbum {
@@ -1195,9 +269,9 @@ impl ESInner for MySQLState {
                 DbMsg::UpdateLibrary {
                     resp,
                     library_uuid,
-                    change,
+                    update,
                 } => {
-                    self.respond(resp, self.update_library(library_uuid, change))
+                    self.respond(resp, self.update_library(library_uuid, update))
                         .await
                 }
                 DbMsg::SearchLibraries { resp, uid, filter } => {
@@ -1215,37 +289,6 @@ impl ESInner for MySQLState {
                         self.search_media_in_library(uid, library_uuid, filter, hidden),
                     )
                     .await
-                }
-
-                // ticket messages
-                DbMsg::CreateTicket { resp, ticket } => {
-                    self.respond(resp, self.create_ticket(ticket)).await
-                }
-                DbMsg::CreateComment { resp, comment } => {
-                    self.respond(resp, self.create_comment(comment)).await
-                }
-                DbMsg::GetTicket { resp, ticket_uuid } => {
-                    self.respond(resp, self.get_ticket(ticket_uuid)).await
-                }
-                DbMsg::GetComment { resp, comment_uuid } => {
-                    self.respond(resp, self.get_comment(comment_uuid)).await
-                }
-                DbMsg::SetTicketResolved {
-                    resp,
-                    ticket_uuid,
-                    resolved,
-                } => {
-                    self.respond(resp, self.set_ticket_resolved(ticket_uuid, resolved))
-                        .await
-                }
-                DbMsg::SearchTickets {
-                    resp,
-                    uid,
-                    filter,
-                    resolved,
-                } => {
-                    self.respond(resp, self.search_tickets(uid, filter, resolved))
-                        .await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),

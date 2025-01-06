@@ -13,7 +13,13 @@ pub struct Album {
     pub gid: String,
     pub mtime: i64,
     pub name: String,
-    pub description: String,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AlbumUpdate {
+    pub name: Option<String>,
+    pub note: Option<String>,
 }
 
 // messages
@@ -66,8 +72,7 @@ endpoint!(UpdateAlbum);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateAlbumReq {
     pub album_uuid: AlbumUuid,
-    pub name: Option<String>,
-    pub description: Option<String>,
+    pub update: AlbumUpdate,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

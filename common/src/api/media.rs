@@ -9,18 +9,9 @@ pub type MediaUuid = i64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MediaMetadata {
-    Image {
-        date: String,
-    },
-    Video {
-        length: i64,
-        date: String,
-    },
-    VideoSlice{
-        start: i64,
-        end: i64,
-        date: String,
-    },
+    Image,
+    Video,
+    VideoSlice,
     Audio,
 }
 
@@ -29,10 +20,20 @@ pub struct Media {
     pub library_uuid: LibraryUuid,
     pub path: String,
     pub hash: String,
+    pub mtime: i64,
     pub hidden: bool,
     pub attention: bool,
-    pub mtime: i64,
+    pub date: String,
+    pub note: String,
     pub metadata: MediaMetadata,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MediaUpdate {
+    pub hidden: Option<bool>,
+    pub attention: Option<bool>,
+    pub date: Option<String>,
+    pub note: Option<String>,
 }
 
 // messages
@@ -58,8 +59,7 @@ endpoint!(UpdateMedia);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateMediaReq {
     pub media_uuid: MediaUuid,
-    pub hidden: Option<bool>,
-    pub attention: Option<bool>,
+    pub update: MediaUpdate,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -10,7 +10,7 @@ pub type CommentUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Comment {
     pub media_uuid: MediaUuid,
-    pub ctime: i64,
+    pub mtime: i64,
     pub uid: String,
     pub text: String,
 }
@@ -22,8 +22,7 @@ endpoint!(AddComment);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddCommentReq {
-    pub media_uuid: MediaUuid,
-    pub text: String,
+    pub comment: Comment,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -44,9 +43,18 @@ pub struct GetCommentResp {
     pub comment: Comment,
 }
 
+// delete a comment
+endpoint!(DeleteComment);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteCommentReq {
+    pub comment_uuid: CommentUuid
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeleteCommentResp {}
+
 // update a comment
-//
-// empty string (instead of None) removes the comment
 endpoint!(UpdateComment);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::endpoint;
 use crate::api::media::MediaUuid;
+use crate::endpoint;
 
 // structs and types
 
@@ -12,8 +12,13 @@ pub struct Library {
     pub path: String,
     pub uid: String,
     pub gid: String,
-    pub count: i64,
     pub mtime: i64,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryUpdate {
+    pub count: Option<i64>,
 }
 
 // messages
@@ -36,7 +41,7 @@ endpoint!(SearchLibraries);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchLibrariesReq {
-    pub filter: String
+    pub filter: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

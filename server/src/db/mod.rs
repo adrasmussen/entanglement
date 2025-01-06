@@ -19,41 +19,23 @@ trait ESDbService: ESInner {
     // get this from checking all albums that contain the media + owning group of the library
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
 
-    async fn create_user(&self, uid: String, metadata: UserMetadata) -> anyhow::Result<()>;
-
-    async fn get_user(&self, uid: String) -> anyhow::Result<Option<User>>;
-
-    async fn delete_user(&self, uid: String) -> anyhow::Result<()>;
-
-    async fn create_group(&self, gid: String, metadata: GroupMetadata) -> anyhow::Result<()>;
-
-    async fn get_group(&self, gid: String) -> anyhow::Result<Option<Group>>;
-
-    async fn delete_group(&self, gid: String) -> anyhow::Result<()>;
-
-    async fn add_user_to_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
-
-    async fn rm_user_from_group(&self, uid: String, gid: String) -> anyhow::Result<()>;
-
     // media functions
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<TicketUuid>)>>;
+    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>;
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>>;
 
     async fn update_media(
         &self,
         media_uuid: MediaUuid,
-        change: MediaMetadata,
+        update: MediaUpdate,
     ) -> anyhow::Result<()>;
-
-    async fn set_media_hidden(&self, media_uuid: MediaUuid, hidden: bool) -> anyhow::Result<()>;
 
     async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
 
     // album functions
-    async fn create_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
+    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>>;
 
@@ -62,7 +44,7 @@ trait ESDbService: ESInner {
     async fn update_album(
         &self,
         album_uuid: AlbumUuid,
-        change: AlbumMetadata,
+        update: AlbumUpdate,
     ) -> anyhow::Result<()>;
 
     async fn add_media_to_album(
@@ -94,7 +76,7 @@ trait ESDbService: ESInner {
     async fn update_library(
         &self,
         library_uuid: LibraryUuid,
-        change: LibraryMetadata,
+        update: LibraryUpdate,
     ) -> anyhow::Result<()>;
 
     async fn search_libraries(&self, uid: String, filter: String) -> anyhow::Result<Vec<LibraryUuid>>;
@@ -106,22 +88,4 @@ trait ESDbService: ESInner {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>>;
-
-    // ticket functions
-    async fn create_ticket(&self, ticket: Ticket) -> anyhow::Result<TicketUuid>;
-
-    async fn create_comment(&self, comment: TicketComment) -> anyhow::Result<CommentUuid>;
-
-    async fn get_ticket(&self, ticket_uuid: TicketUuid) -> anyhow::Result<Option<(Ticket, Vec<CommentUuid>)>>;
-
-    async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<TicketComment>>;
-
-    async fn set_ticket_resolved(&self, ticket_uuid: TicketUuid, resolved: bool) -> anyhow::Result<()>;
-
-    async fn search_tickets(
-        &self,
-        uid: String,
-        filter: String,
-        resolved: bool,
-    ) -> anyhow::Result<Vec<TicketUuid>>;
 }

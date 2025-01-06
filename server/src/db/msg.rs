@@ -28,8 +28,7 @@ pub enum DbMsg {
     UpdateMedia {
         resp: ESMResp<()>,
         media_uuid: MediaUuid,
-        hidden: Option<bool>,
-        attention: Option<bool>,
+        update: MediaUpdate,
     },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
@@ -40,11 +39,14 @@ pub enum DbMsg {
     // comment messages
     AddComment {
         resp: ESMResp<CommentUuid>,
-        media_uuid: MediaUuid,
-        text: String,
+        comment: Comment,
     },
     GetComment {
         resp: ESMResp<Option<Comment>>,
+        comment_uuid: CommentUuid,
+    },
+    DeleteComment {
+        resp: ESMResp<()>,
         comment_uuid: CommentUuid,
     },
     UpdateComment {
@@ -69,8 +71,7 @@ pub enum DbMsg {
     UpdateAlbum {
         resp: ESMResp<()>,
         album_uuid: AlbumUuid,
-        name: Option<String>,
-        description: Option<String>,
+        update: AlbumUpdate,
     },
     AddMediaToAlbum {
         resp: ESMResp<()>,
@@ -106,8 +107,7 @@ pub enum DbMsg {
     UpdateLibrary {
         resp: ESMResp<()>,
         library_uuid: LibraryUuid,
-        count: i64,
-        mtime: i64,
+        update: LibraryUpdate,
     },
     SearchLibraries {
         resp: ESMResp<Vec<LibraryUuid>>,

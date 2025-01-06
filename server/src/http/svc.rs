@@ -568,8 +568,7 @@ async fn update_media(
             DbMsg::UpdateMedia {
                 resp: tx,
                 media_uuid: message.media_uuid,
-                hidden: message.hidden,
-                attention: message.attention,
+                update: message.update,
             }
             .into(),
         )
@@ -617,7 +616,10 @@ async fn add_comment(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.can_access_media(&uid, &message.media_uuid).await? {
+    if !state
+        .can_access_media(&uid, &message.comment.media_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -628,8 +630,12 @@ async fn add_comment(
         .send(
             DbMsg::AddComment {
                 resp: tx,
-                media_uuid: message.media_uuid,
-                text: message.text,
+                comment: Comment {
+                    media_uuid: message.comment.media_uuid,
+                    mtime: Local::now().timestamp(),
+                    uid: uid,
+                    text: message.comment.text,
+                },
             }
             .into(),
         )
@@ -737,7 +743,7 @@ async fn add_album(
                     gid: message.gid,
                     mtime: Local::now().timestamp(),
                     name: message.name,
-                    description: message.description,
+                    note: message.description,
                 },
             }
             .into(),
@@ -831,8 +837,7 @@ async fn update_album(
             DbMsg::UpdateAlbum {
                 resp: tx,
                 album_uuid: message.album_uuid,
-                name: message.name,
-                description: message.description,
+                update: message.update,
             }
             .into(),
         )
