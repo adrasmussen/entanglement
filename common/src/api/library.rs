@@ -10,7 +10,6 @@ pub type LibraryUuid = i64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub path: String,
-    pub uid: String,
     pub gid: String,
     pub mtime: i64,
     pub count: i64,

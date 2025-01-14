@@ -22,17 +22,29 @@ trait ESDbService: ESInner {
     // media functions
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid>;
 
-    async fn get_media(&self, media_uuid: MediaUuid) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>;
+    async fn get_media(
+        &self,
+        media_uuid: MediaUuid,
+    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>;
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>>;
 
-    async fn update_media(
-        &self,
-        media_uuid: MediaUuid,
-        update: MediaUpdate,
-    ) -> anyhow::Result<()>;
+    async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()>;
 
     async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
+
+    // comment functions
+    async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid>;
+
+    async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>>;
+
+    async fn delete_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<()>;
+
+    async fn update_comment(
+        &self,
+        comment_uuid: CommentUuid,
+        text: Option<String>,
+    ) -> anyhow::Result<()>;
 
     // album functions
     async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
@@ -41,11 +53,7 @@ trait ESDbService: ESInner {
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()>;
 
-    async fn update_album(
-        &self,
-        album_uuid: AlbumUuid,
-        update: AlbumUpdate,
-    ) -> anyhow::Result<()>;
+    async fn update_album(&self, album_uuid: AlbumUuid, update: AlbumUpdate) -> anyhow::Result<()>;
 
     async fn add_media_to_album(
         &self,
@@ -79,7 +87,11 @@ trait ESDbService: ESInner {
         update: LibraryUpdate,
     ) -> anyhow::Result<()>;
 
-    async fn search_libraries(&self, uid: String, filter: String) -> anyhow::Result<Vec<LibraryUuid>>;
+    async fn search_libraries(
+        &self,
+        uid: String,
+        filter: String,
+    ) -> anyhow::Result<Vec<LibraryUuid>>;
 
     async fn search_media_in_library(
         &self,

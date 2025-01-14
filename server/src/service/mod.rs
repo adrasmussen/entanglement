@@ -1,23 +1,14 @@
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow;
-
 use async_trait::async_trait;
-
 use tokio;
 
-pub mod msg;
+use common::config::ESConfig;
 
-// config
-pub struct ESConfig {
-    pub http_socket: String,
-    pub mysql_url: String,
-    pub media_srcdir: PathBuf,
-    pub media_linkdir: PathBuf,
-}
+pub mod msg;
 
 // these are the services that make up the entanglment server backend
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

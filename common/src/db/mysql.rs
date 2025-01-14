@@ -742,12 +742,11 @@ pub async fn search_media_in_album(
 
 pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<LibraryUuid> {
     let mut result = r"
-        INSERT INTO libraries (library_uuid, path, uid, gid, mtime, count)
-        VALUES (UUID_SHORT(), :path, :uid, :gid, :mtime, :count)
+        INSERT INTO libraries (library_uuid, path, gid, mtime, count)
+        VALUES (UUID_SHORT(), :path, :gid, :mtime, :count)
         RETURNING library_uuid"
         .with(params! {
             "path" => library.path,
-            "uid" => library.uid,
             "gid" => library.gid,
             "mtime" => library.mtime,
             "count" => library.count,
@@ -768,7 +767,7 @@ pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<Library
 
 pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
     let mut result = r"
-        SELECT path, uid, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
+        SELECT path, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
         .with(params! {
             "library_uuid" => library_uuid,
         })
@@ -782,14 +781,13 @@ pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Resul
         None => return Ok(None),
     };
 
-    let data = from_row_opt::<(String, String, String, i64, i64)>(row)?;
+    let data = from_row_opt::<(String, String, i64, i64)>(row)?;
 
     Ok(Some(Library {
         path: data.0,
-        uid: data.1,
-        gid: data.2,
-        mtime: data.3,
-        count: data.4,
+        gid: data.1,
+        mtime: data.2,
+        count: data.3,
     }))
 }
 
@@ -955,6 +953,33 @@ pub async fn get_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Resul
     }))
 }
 
-pub async fn delete_comment() {}
+pub async fn delete_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Result<()> {
+    r"
+        DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
+        .with(params! {
+            "comment_uuid" => comment_uuid,
+        })
+        .run(pool.get_conn().await?)
+        .await?;
 
-pub async fn update_comment() {}
+    Ok(())
+}
+
+pub async fn update_comment(
+    pool: Pool,
+    comment_uuid: CommentUuid,
+    text: Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(val) = text {
+        r"
+        UPDATE comments SET text = :text WHERE comment_uuid = :comment_uuid"
+            .with(params! {
+                "text" => val.clone(),
+                "comment_uuid" => comment_uuid,
+            })
+            .run(pool.get_conn().await?)
+            .await?;
+    }
+
+    Ok(())
+}

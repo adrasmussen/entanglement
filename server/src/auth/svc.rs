@@ -2,25 +2,28 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Context;
-
 use async_cell::sync::AsyncCell;
-
 use async_trait::async_trait;
-
 use tokio::sync::{Mutex, RwLock};
 
-use common::api::media::MediaUuid;
+use common::{
+    api::media::MediaUuid,
+    auth::{AuthnBackend, AuthzBackend},
+    config::ESConfig,
+};
 
 use crate::auth::ESAuthService;
-use crate::auth::{msg::AuthMsg, AuthType};
+use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::service::*;
 
 pub struct AuthCache {
     db_svc_sender: ESMSender,
+    authn_providers: Vec<Box<dyn AuthnBackend>>,
+    authz_providers: Vec<Box<dyn AuthzBackend>>,
     // uid: set(gid)
     user_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
-    // uuid: set(gid)
+    // media_uuid: set(gid)
     access_cache: Arc<RwLock<HashMap<MediaUuid, HashSet<String>>>>,
 }
 
@@ -38,6 +41,7 @@ pub struct AuthCache {
 // then, after we commit changes to any images, refresh just that image
 #[async_trait]
 impl ESAuthService for AuthCache {
+    // cache management
     async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
         let user_cache = self.user_cache.clone();
 
@@ -78,21 +82,20 @@ impl ESAuthService for AuthCache {
         Ok(())
     }
 
-    async fn is_valid_user(
-        &self,
-        auth_type: AuthType,
-        _user: String,
-        _password: String,
-    ) -> anyhow::Result<bool> {
-        match auth_type {
-            AuthType::_ProxyHeader => Ok(true),
-            AuthType::_LDAP => Err(anyhow::Error::msg("ldap auth not implemented")),
-        }
+    // authz
+    async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
+        self.authz_providers.push(Box::new(provider));
+
+        Ok(())
     }
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
         let user_cache = self.user_cache.clone();
 
+        // check the cache first using a read lock (since this function gets called for practically
+        // every single api call and needs to be fast)
+        //
+        // this cache must be manually cleared
         {
             let user_cache = user_cache.read().await;
 
@@ -102,30 +105,32 @@ impl ESAuthService for AuthCache {
             }
         }
 
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        // on a cache miss, we still want to verify that the user is recognized by someone
+        if !self.is_valid_user(uid).await? {
+            return Err(anyhow::Error::msg("invalid user"));
+        }
 
-        self.db_svc_sender
-            .clone()
-            .send(DbMsg::GetUser { resp: tx, uid: uid }.into())
-            .await
-            .context("Failed to send GetUser from is_group_member")?;
+        // since this is the cache population step, we check all of the known authz providers
+        //
+        // clients may make many more requests while this is running, and would need to refresh
+        // after the cache populates in the current model
+        //
+        // we could try to grab the write() lock sooner and hold it, but we would have to be
+        // really fast... but user-specific locks would keep this from blocking for too long
+        let groups = HashSet::new();
 
-        // this should fail if the user doesn't exist, so we are safe to add the user
-        // to the cache after it returns
-        let user = match rx
-            .await
-            .context("Failed to receive GetUser response at is_group_member")??
-        {
-            Some(result) => result,
-            None => return Ok(false),
-        };
-
-        let groups = user.groups;
+        for provider in self.authz_providers {
+            for group in gid.iter() {
+                if provider.is_group_member(uid, group.to_string()).await? {
+                    groups.insert(group.clone());
+                }
+            }
+        }
 
         {
             let mut user_cache = user_cache.write().await;
 
-            user_cache.insert(user.uid, groups.clone());
+            user_cache.insert(uid, groups);
         }
 
         Ok(groups.intersection(&gid).count() > 0)
@@ -238,6 +243,21 @@ impl ESAuthService for AuthCache {
             .is_group_member(uid, HashSet::from([library.gid]))
             .await?)
     }
+
+    // authn
+    async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
+        self.authn_providers.push(Box::new(provider));
+
+        Ok(())
+    }
+
+    async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    async fn is_valid_user(&self, _user: String) -> anyhow::Result<bool> {
+        Ok(true)
+    }
 }
 
 #[async_trait]
@@ -248,6 +268,8 @@ impl ESInner for AuthCache {
     ) -> anyhow::Result<Self> {
         Ok(AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
+            authn_providers: Vec::new(),
+            authz_providers: Vec::new(),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
             access_cache: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -267,10 +289,7 @@ impl ESInner for AuthCache {
                     auth_type,
                     uid,
                     password,
-                } => {
-                    self.respond(resp, self.is_valid_user(auth_type, uid, password))
-                        .await
-                }
+                } => self.respond(resp, self.is_valid_user(uid)).await,
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }

@@ -8,7 +8,8 @@ mod fs;
 mod http;
 mod service;
 
-use service::{ESConfig, EntanglementService, ServiceType};
+use common::config::ESConfig;
+use service::{EntanglementService, ServiceType};
 // the outermost caller should definitely have a loop that periodically calls
 // Status for each service to ensure that the threads haven't stopped, and then
 // gracefully stop the server after logging whatever the error was
@@ -21,10 +22,11 @@ async fn main() -> anyhow::Result<()> {
 
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
+        group_yaml: Some(String::from("/srv/home/alex/workspace/entanglement/dev")),
         http_socket: String::from("[::]:8080"),
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
-        media_srcdir: PathBuf::from("/tmp/entanglement/src"),
-        media_linkdir: PathBuf::from("/tmp/entanglement/srv"),
+        media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
+        media_linkdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
     });
 
     let (db_sender, db_svc) = db::mysql::MySQLService::create(config.clone());

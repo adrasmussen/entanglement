@@ -2,17 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
-
 use async_trait::async_trait;
-
-use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
-
+use mysql_async::Pool;
 use tokio::sync::Mutex;
 
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use common::api::{album::*, comment::*, library::*, media::*};
+use common::{config::ESConfig, api::{album::*, comment::*, library::*, media::*}};
 
 pub struct MySQLState {
     auth_svc_sender: ESMSender,
@@ -77,6 +74,27 @@ impl ESDbService for MySQLState {
 
     async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
         common::db::mysql::search_media(self.pool.clone(), uid, filter).await
+    }
+
+    // comment queries
+    async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid> {
+        common::db::mysql::add_comment(self.pool.clone(), comment).await
+    }
+
+    async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>> {
+        common::db::mysql::get_comment(self.pool.clone(), comment_uuid).await
+    }
+
+    async fn delete_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<()> {
+        common::db::mysql::delete_comment(self.pool.clone(), comment_uuid).await
+    }
+
+    async fn update_comment(
+        &self,
+        comment_uuid: CommentUuid,
+        text: Option<String>,
+    ) -> anyhow::Result<()> {
+        common::db::mysql::update_comment(self.pool.clone(), comment_uuid, text).await
     }
 
     // album queries
@@ -169,7 +187,14 @@ impl ESDbService for MySQLState {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media_in_library(self.pool.clone(), uid, library_uuid, filter, hidden).await
+        common::db::mysql::search_media_in_library(
+            self.pool.clone(),
+            uid,
+            library_uuid,
+            filter,
+            hidden,
+        )
+        .await
     }
 }
 
@@ -212,6 +237,25 @@ impl ESInner for MySQLState {
                 }
                 DbMsg::SearchMedia { resp, uid, filter } => {
                     self.respond(resp, self.search_media(uid, filter)).await
+                }
+
+                // comment messages
+                DbMsg::AddComment { resp, comment } => {
+                    self.respond(resp, self.add_comment(comment)).await
+                }
+                DbMsg::GetComment { resp, comment_uuid } => {
+                    self.respond(resp, self.get_comment(comment_uuid)).await
+                }
+                DbMsg::DeleteComment { resp, comment_uuid } => {
+                    self.respond(resp, self.delete_comment(comment_uuid)).await
+                }
+                DbMsg::UpdateComment {
+                    resp,
+                    comment_uuid,
+                    text,
+                } => {
+                    self.respond(resp, self.update_comment(comment_uuid, text))
+                        .await
                 }
 
                 // album messages
