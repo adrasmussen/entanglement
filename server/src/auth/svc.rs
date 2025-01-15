@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use anyhow::Context;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use tokio::sync::{Mutex, RwLock};
@@ -12,8 +11,8 @@ use common::{
     config::ESConfig,
 };
 
-use crate::auth::ESAuthService;
 use crate::auth::msg::AuthMsg;
+use crate::auth::ESAuthService;
 use crate::db::msg::DbMsg;
 use crate::service::*;
 
@@ -92,15 +91,33 @@ impl ESAuthService for AuthCache {
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
         let user_cache = self.user_cache.clone();
 
-        // check the cache first using a read lock (since this function gets called for practically
-        // every single api call and needs to be fast)
+        // if there is an entry in the user cache, assume that it is correct
         //
-        // this cache must be manually cleared
+        // this leads to the somewhat unfortunate effect that we need to manually
+        // clear the user cache when group information changes
+        //
+        // when the groups were part of the db, this was easier -- but we can't
+        // easily subscribe to ldap updates
+
+        // many threads may race through this check initially, at least until one
+        // grabs the write() lock below.  then they will all pile up waiting for
+        // a read(), at which point the HashSet should exist
+        //
+        // in the event that the thread with the write lock panics, all the threads
+        // stopped at the second read will get an Error; threads stopped at the
+        // first read will race to the second and try again
+        //
+        // TODO -- in the event of an authz failure, each of the waiting messages
+        // will attempt to populate the cache.  ideally, we detect this somehow
+        // and either fail quickly or tell the http service to reject those requests
         {
             let user_cache = user_cache.read().await;
 
             match user_cache.get(&uid) {
-                Some(groups) => return Ok(groups.intersection(&gid).count() > 0),
+                Some(groups) => {
+                    // this is the fast path
+                    return Ok(groups.intersection(&gid).count() > 0);
+                }
                 None => {}
             }
         }
@@ -110,13 +127,24 @@ impl ESAuthService for AuthCache {
             return Err(anyhow::Error::msg("invalid user"));
         }
 
-        // since this is the cache population step, we check all of the known authz providers
-        //
-        // clients may make many more requests while this is running, and would need to refresh
-        // after the cache populates in the current model
-        //
-        // we could try to grab the write() lock sooner and hold it, but we would have to be
-        // really fast... but user-specific locks would keep this from blocking for too long
+        // to ensure that only one thread attempts to populate the cache, we need a second
+        // early return that also awaits the cell
+        let user_cache = match user_cache.try_write() {
+            Err(_) => {
+                let user_cache = user_cache.read().await;
+
+                // this is a somewhat awkward error to handle -- it would fire if the thread
+                // that gets the write() lock fails to actually add the uid to the HashMap
+                let groups = user_cache
+                    .get(&uid)
+                    .ok_or_else(|| anyhow::Error::msg("failed to initialize user_cache"))?;
+
+                return Ok(groups.intersection(&gid).count() > 0);
+            }
+            Ok(lock) => lock,
+        };
+
+        // populate the cache
         let groups = HashSet::new();
 
         for provider in self.authz_providers {
@@ -127,11 +155,7 @@ impl ESAuthService for AuthCache {
             }
         }
 
-        {
-            let mut user_cache = user_cache.write().await;
-
-            user_cache.insert(uid, groups);
-        }
+        user_cache.insert(uid, groups);
 
         Ok(groups.intersection(&gid).count() > 0)
     }
@@ -139,55 +163,44 @@ impl ESAuthService for AuthCache {
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
-        // in order to get the HashSet out of the HashMap, we need to match the outer get()
-        // before cloning out of the block
-        let cached_groups = {
+        {
             let access_cache = access_cache.read().await;
 
-            let cached_groups = match access_cache.get(&media_uuid) {
-                None => None,
-                Some(v) => Some(v.clone()),
-            };
-
-            cached_groups
-        };
-
-        // since we have to compare the sets of groups, we have to handle the cache miss
-        // before we check for an intersection
-        //
-        // this is outside the block with the read() mutex so we don't hold the lock any
-        // longer than is strictly necessary
-        let groups = match cached_groups {
-            Some(v) => v,
-            None => {
-                let (tx, rx) = tokio::sync::oneshot::channel();
-
-                self.db_svc_sender
-                    .clone()
-                    .send(
-                        DbMsg::MediaAccessGroups {
-                            resp: tx,
-                            media_uuid: media_uuid,
-                        }
-                        .into(),
-                    )
-                    .await
-                    .context("Failed to send MediaAccessGroups from can_access_media")?;
-
-                let groups = rx.await.context(
-                    "Failed to receive MediaAccessGroups response at can_access_media",
-                )??;
-
-                // lock and unlock the write mutex with as little work as possible
-                {
-                    let mut access_cache = access_cache.write().await;
-
-                    access_cache.insert(media_uuid, groups.clone());
-                }
-
-                groups
+            match access_cache.get(&media_uuid) {
+                Some(groups) => return Ok(self.is_group_member(uid, groups.clone()).await?),
+                None => {}
             }
+        }
+
+        let access_cache = match access_cache.try_write() {
+            Err(_) => {
+                let access_cache = access_cache.read().await;
+
+                let groups = access_cache
+                    .get(&media_uuid)
+                    .ok_or_else(|| anyhow::Error::msg("failed to initialize access_cache"))?;
+
+                return Ok(self.is_group_member(uid, groups.clone()).await?);
+            }
+            Ok(lock) => lock,
         };
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::MediaAccessGroups {
+                    resp: tx,
+                    media_uuid: media_uuid,
+                }
+                .into(),
+            )
+            .await?;
+
+        let groups = rx.await??;
+
+        access_cache.insert(media_uuid, groups.clone());
 
         Ok(self.is_group_member(uid, groups).await?)
     }
@@ -206,13 +219,9 @@ impl ESAuthService for AuthCache {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetMedia mesaage in owns_media")?;
+            .await?;
 
-        let media = match media_rx
-            .await
-            .context("Failed to receive GetMedia response in owns_media")??
-        {
+        let media = match media_rx.await?? {
             Some(result) => result.0,
             None => return Ok(false),
         };
@@ -228,13 +237,9 @@ impl ESAuthService for AuthCache {
                 }
                 .into(),
             )
-            .await
-            .context("Failed to send GetLibrary mesaage in owns_media")?;
+            .await?;
 
-        let library = match library_rx
-            .await
-            .context("Failed to receive GetLibrary response in owns_media")??
-        {
+        let library = match library_rx.await?? {
             Some(result) => result,
             None => return Ok(false),
         };
@@ -284,7 +289,7 @@ impl ESInner for AuthCache {
                 AuthMsg::ClearAccessCache { resp, uuid } => {
                     self.respond(resp, self.clear_access_cache(uuid)).await
                 }
-                AuthMsg::_IsValidUser {
+                AuthMsg::IsValidUser {
                     resp,
                     auth_type,
                     uid,
@@ -323,7 +328,7 @@ impl EntanglementService for AuthService {
     type Inner = AuthCache;
 
     fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
 
         (
             tx,

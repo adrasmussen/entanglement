@@ -19,7 +19,10 @@ pub struct Group {
     pub members: HashSet<String>,
 }
 
-// probably want some sort of refresh method
+// probably want some sort of refresh method, as well as including exponential backoff
+// on any impls that use network resources (and timeouts!)
+//
+// see notes in server/src/auth/svc.rs about why the is_group_member() can spam messages
 #[async_trait]
 pub trait AuthzBackend: Send + Sync + 'static {
     async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
