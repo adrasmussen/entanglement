@@ -1,4 +1,4 @@
-use api::library::{LibraryScanResult, LibraryUuid};
+use common::api::library::{LibraryScanJob, LibraryUuid};
 
 use crate::service::{ESM, ESMResp};
 
@@ -8,8 +8,11 @@ pub enum FsMsg {
         resp: ESMResp<()>
     },
     ScanLibrary {
-        resp: ESMResp<LibraryScanResult>,
+        resp: ESMResp<()>,
         library_uuid: LibraryUuid,
+    },
+    ScanStatus {
+        resp: ESMResp<Vec<LibraryScanJob>>,
     },
     FixSymlinks {
         resp: ESMResp<()>,

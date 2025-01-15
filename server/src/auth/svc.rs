@@ -123,13 +123,13 @@ impl ESAuthService for AuthCache {
         }
 
         // on a cache miss, we still want to verify that the user is recognized by someone
-        if !self.is_valid_user(uid).await? {
+        if !self.is_valid_user(uid.clone()).await? {
             return Err(anyhow::Error::msg("invalid user"));
         }
 
         // to ensure that only one thread attempts to populate the cache, we need a second
         // early return that also awaits the cell
-        let user_cache = match user_cache.try_write() {
+        let mut user_cache = match user_cache.try_write() {
             Err(_) => {
                 let user_cache = user_cache.read().await;
 
@@ -145,11 +145,11 @@ impl ESAuthService for AuthCache {
         };
 
         // populate the cache
-        let groups = HashSet::new();
+        let mut groups = HashSet::new();
 
         for provider in self.authz_providers {
             for group in gid.iter() {
-                if provider.is_group_member(uid, group.to_string()).await? {
+                if provider.is_group_member(uid.clone(), group.to_string()).await? {
                     groups.insert(group.clone());
                 }
             }
@@ -172,7 +172,7 @@ impl ESAuthService for AuthCache {
             }
         }
 
-        let access_cache = match access_cache.try_write() {
+        let mut access_cache = match access_cache.try_write() {
             Err(_) => {
                 let access_cache = access_cache.read().await;
 

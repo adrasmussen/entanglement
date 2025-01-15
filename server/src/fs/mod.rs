@@ -2,7 +2,7 @@ use anyhow;
 
 use async_trait::async_trait;
 
-use api::library::{LibraryUuid, LibraryScanResult};
+use common::api::library::{LibraryScanJob, LibraryUuid};
 
 use crate::service::*;
 
@@ -12,7 +12,9 @@ pub mod svc;
 
 #[async_trait]
 pub trait ESFileService: ESInner {
-    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<LibraryScanResult>;
+    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<()>;
+
+    async fn scan_status(&self) -> anyhow::Result<Vec<LibraryScanJob>>;
 
     async fn fix_symlinks(&self) -> anyhow::Result<()>;
 }

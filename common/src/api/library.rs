@@ -20,6 +20,13 @@ pub struct LibraryUpdate {
     pub count: Option<i64>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanJob {
+    pub library_uuid: LibraryUuid,
+    pub start_time: i64,
+    pub status: String, // placeholder for a better type
+}
+
 // messages
 
 // get the details for a particular library
@@ -61,4 +68,15 @@ pub struct SearchMediaInLibraryReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
+}
+
+// get status of the library scanner engine
+endpoint!(LibraryScanStatus);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanStatusReq {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanStatusResp {
+    pub jobs: Vec<LibraryScanJob>,
 }
