@@ -38,5 +38,7 @@ pub trait AuthnBackend: Send + Sync + 'static {
     where
         Self: Sized;
 
-    async fn is_valid_user(&self, uid: String, password: String) -> anyhow::Result<bool>;
+    async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool>;
+
+    async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool>;
 }

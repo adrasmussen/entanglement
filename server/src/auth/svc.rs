@@ -18,8 +18,8 @@ use crate::service::*;
 
 pub struct AuthCache {
     db_svc_sender: ESMSender,
-    authn_providers: Vec<Box<dyn AuthnBackend>>,
-    authz_providers: Vec<Box<dyn AuthzBackend>>,
+    authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
+    authz_providers: Arc<Mutex<Vec<Box<dyn AuthzBackend>>>>,
     // uid: set(gid)
     user_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     // media_uuid: set(gid)
@@ -83,7 +83,11 @@ impl ESAuthService for AuthCache {
 
     // authz
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
-        self.authz_providers.push(Box::new(provider));
+        let authz_providers = self.authz_providers.clone();
+
+        let mut authz_providers = authz_providers.lock().await;
+
+        authz_providers.push(Box::new(provider));
 
         Ok(())
     }
@@ -145,17 +149,27 @@ impl ESAuthService for AuthCache {
         };
 
         // populate the cache
-        let mut groups = HashSet::new();
+        let groups = {
+            let mut groups = HashSet::new();
 
-        for provider in self.authz_providers {
-            for group in gid.iter() {
-                if provider.is_group_member(uid.clone(), group.to_string()).await? {
-                    groups.insert(group.clone());
+            let authz_providers = self.authz_providers.clone();
+
+            let authz_providers = authz_providers.lock().await;
+
+            for provider in authz_providers.iter() {
+                for group in gid.iter() {
+                    if provider
+                        .is_group_member(uid.clone(), group.to_string())
+                        .await?
+                    {
+                        groups.insert(group.clone());
+                    }
                 }
             }
-        }
+            groups
+        };
 
-        user_cache.insert(uid, groups);
+        user_cache.insert(uid, groups.clone());
 
         Ok(groups.intersection(&gid).count() > 0)
     }
@@ -251,17 +265,44 @@ impl ESAuthService for AuthCache {
 
     // authn
     async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
-        self.authn_providers.push(Box::new(provider));
+        let authn_providers = self.authn_providers.clone();
+
+        let mut authn_providers = authn_providers.lock().await;
+
+        authn_providers.push(Box::new(provider));
 
         Ok(())
     }
 
     async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool> {
-        Ok(true)
+        let authn_providers = self.authn_providers.clone();
+
+        let authn_providers = authn_providers.lock().await;
+
+        for provider in authn_providers.iter() {
+            if provider
+                .authenticate_user(uid.clone(), password.clone())
+                .await?
+            {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
-    async fn is_valid_user(&self, _user: String) -> anyhow::Result<bool> {
-        Ok(true)
+    async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool> {
+        let authn_providers = self.authn_providers.clone();
+
+        let authn_providers = authn_providers.lock().await;
+
+        for provider in authn_providers.iter() {
+            if provider.is_valid_user(uid.clone()).await? {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 }
 
@@ -273,8 +314,8 @@ impl ESInner for AuthCache {
     ) -> anyhow::Result<Self> {
         Ok(AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
-            authn_providers: Vec::new(),
-            authz_providers: Vec::new(),
+            authn_providers: Arc::new(Mutex::new(Vec::new())),
+            authz_providers: Arc::new(Mutex::new(Vec::new())),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
             access_cache: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -289,12 +330,7 @@ impl ESInner for AuthCache {
                 AuthMsg::ClearAccessCache { resp, uuid } => {
                     self.respond(resp, self.clear_access_cache(uuid)).await
                 }
-                AuthMsg::IsValidUser {
-                    resp,
-                    auth_type,
-                    uid,
-                    password,
-                } => self.respond(resp, self.is_valid_user(uid)).await,
+
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }
@@ -311,6 +347,17 @@ impl ESInner for AuthCache {
                     uid,
                     media_uuid,
                 } => self.respond(resp, self.owns_media(uid, media_uuid)).await,
+                AuthMsg::IsValidUser { resp, uid } => {
+                    self.respond(resp, self.is_valid_user(uid)).await
+                }
+                AuthMsg::AuthenticateUser {
+                    resp,
+                    uid,
+                    password,
+                } => {
+                    self.respond(resp, self.authenticate_user(uid, password))
+                        .await
+                }
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
