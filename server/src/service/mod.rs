@@ -43,9 +43,9 @@ pub enum ESM {
 pub trait EntanglementService: Send + Sync + 'static {
     type Inner: ESInner;
 
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Self);
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self;
 
-    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()>;
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()>;
 }
 
 #[async_trait]

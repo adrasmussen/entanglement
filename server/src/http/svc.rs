@@ -68,23 +68,22 @@ pub struct HttpService {
 impl EntanglementService for HttpService {
     type Inner = HttpEndpoint;
 
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        (
-            tx,
-            HttpService {
-                config: config.clone(),
-                receiver: Arc::new(Mutex::new(rx)),
-                msg_handle: AsyncCell::new(),
-                hyper_handle: AsyncCell::new(),
-            },
-        )
+        sender_map.insert(ServiceType::Http, tx);
+
+        HttpService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            msg_handle: AsyncCell::new(),
+            hyper_handle: AsyncCell::new(),
+        }
     }
 
-    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders)?);
+        let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders.clone())?);
 
         // if we wanted to support more socket types, we could spawn several listeners since they
         // don't have any relevant state and the message handlers are all fully concurrent
@@ -235,7 +234,10 @@ impl HttpEndpoint {
             .route("/GetLibrary", post(get_library))
             .route("/SearchLibraries", post(search_libraries))
             .route("/SearchMediaInLibrary", post(search_media_in_library))
-            .with_state(state);
+            .route("/StartLibraryScan", post(start_library_scan))
+            .route("/GetLibraryScan", post(get_library_scan))
+            .route("/StopLibraryScan", post(stop_library_scan))
+            .with_state(state.clone());
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant
         // middleware from the rest of the http module
@@ -248,7 +250,7 @@ impl HttpEndpoint {
             .nest(&format!("{app_url_root}/api"), api_router)
             .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
-            .route_layer(middleware::from_fn(proxy_auth));
+            .route_layer(middleware::from_fn_with_state(state.clone(), proxy_auth));
 
         // everything from here follows the normal hyper/axum on tokio setup
         let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
@@ -1073,10 +1075,10 @@ async fn search_media_in_library(
     Ok(Json(SearchMediaInLibraryResp { media: result }).into_response())
 }
 
-async fn library_scan_start(
+async fn start_library_scan(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<LibraryScanStartReq>,
+    Json(message): Json<StartLibraryScanReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -1100,5 +1102,65 @@ async fn library_scan_start(
 
     rx.await??;
 
-    Ok(Json(LibraryScanStartResp {}).into_response())
+    Ok(Json(StartLibraryScanResp {}).into_response())
+}
+
+async fn get_library_scan(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(_message): Json<GetLibraryScanReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state
+        .is_group_member(&uid, state.config.auth_admin_groups.clone())
+        .await?
+    {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .fs_svc_sender
+        .send(FsMsg::ScanStatus { resp: tx }.into())
+        .await?;
+
+    let jobs = rx.await??;
+
+    Ok(Json(GetLibraryScanResp { jobs }).into_response())
+}
+
+async fn stop_library_scan(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<StopLibraryScanReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state
+        .is_group_member(&uid, state.config.auth_admin_groups.clone())
+        .await?
+    {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .fs_svc_sender
+        .send(
+            FsMsg::StopScan {
+                resp: tx,
+                library_uuid: message.library_uuid,
+            }
+            .into(),
+        )
+        .await?;
+
+    rx.await??;
+
+    Ok(Json(StopLibraryScanResp {}).into_response())
 }

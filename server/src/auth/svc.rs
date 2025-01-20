@@ -374,22 +374,21 @@ pub struct AuthService {
 impl EntanglementService for AuthService {
     type Inner = AuthCache;
 
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
 
-        (
-            tx,
-            AuthService {
-                config: config.clone(),
-                receiver: Arc::new(Mutex::new(rx)),
-                handle: AsyncCell::new(),
-            },
-        )
+        sender_map.insert(ServiceType::Auth, tx);
+
+        AuthService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            handle: AsyncCell::new(),
+        }
     }
 
-    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(AuthCache::new(self.config.clone(), senders)?);
+        let state = Arc::new(AuthCache::new(self.config.clone(), senders.clone())?);
 
         // for the first pass, we don't need any further machinery for this service
         //

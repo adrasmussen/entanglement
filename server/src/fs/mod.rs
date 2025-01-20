@@ -17,5 +17,7 @@ pub trait ESFileService: ESInner {
 
     async fn scan_status(&self) -> anyhow::Result<HashMap<LibraryUuid, LibraryScanJob>>;
 
+    async fn stop_scan(&self, library_uuid: LibraryUuid) -> anyhow::Result<()>;
+
     async fn fix_symlinks(&self) -> anyhow::Result<()>;
 }

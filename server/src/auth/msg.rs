@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use common::api::media::MediaUuid;
 
-use crate::auth::AuthType;
 use crate::service::*;
 
 #[derive(Debug)]

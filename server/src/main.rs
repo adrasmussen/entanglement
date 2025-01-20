@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -22,7 +22,10 @@ async fn main() -> anyhow::Result<()> {
 
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
-        group_yaml: Some(String::from("/srv/home/alex/workspace/entanglement/dev/groups.yml")),
+        auth_admin_groups: HashSet::from([String::from("admin")]),
+        auth_yaml_groups: Some(String::from(
+            "/srv/home/alex/workspace/entanglement/dev/groups.yml",
+        )),
         http_socket: String::from("[::]:8080"),
         http_url_root: String::from("/entanglement"),
         http_doc_root: String::from("/srv/home/alex/workspace/entanglement/webapp/dist"),
@@ -31,22 +34,17 @@ async fn main() -> anyhow::Result<()> {
         media_linkdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
     });
 
-    let (db_sender, db_svc) = db::mysql::MySQLService::create(config.clone());
-    let (fs_sender, fs_svc) = fs::svc::FileService::create(config.clone());
-    let (auth_sender, auth_svc) = auth::svc::AuthService::create(config.clone());
-    let (http_sender, http_svc) = http::svc::HttpService::create(config.clone());
-
     let mut senders = HashMap::new();
 
-    senders.insert(ServiceType::Db, db_sender);
-    senders.insert(ServiceType::Fs, fs_sender);
-    senders.insert(ServiceType::Auth, auth_sender);
-    senders.insert(ServiceType::Http, http_sender);
+    let auth_svc = auth::svc::AuthService::create(config.clone(), &mut senders);
+    let db_svc = db::mysql::MySQLService::create(config.clone(), &mut senders);
+    let fs_svc = fs::svc::FileService::create(config.clone(), &mut senders);
+    let http_svc = http::svc::HttpService::create(config.clone(), &mut senders);
 
-    db_svc.start(senders.clone()).await?;
-    fs_svc.start(senders.clone()).await?;
-    auth_svc.start(senders.clone()).await?;
-    http_svc.start(senders.clone()).await?;
+    auth_svc.start(&senders).await?;
+    db_svc.start(&senders).await?;
+    fs_svc.start(&senders).await?;
+    http_svc.start(&senders).await?;
 
     loop {}
 }

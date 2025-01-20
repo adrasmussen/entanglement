@@ -29,24 +29,23 @@ pub struct FileService {
 impl EntanglementService for FileService {
     type Inner = FileScanner;
 
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        (
-            tx,
-            FileService {
-                config: config.clone(),
-                receiver: Arc::new(Mutex::new(rx)),
-                handle: AsyncCell::new(),
-            },
-        )
+        sender_map.insert(ServiceType::Fs, tx);
+
+        FileService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            handle: AsyncCell::new(),
+        }
     }
 
-    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(FileScanner::new(self.config.clone(), senders)?);
+        let state = Arc::new(FileScanner::new(self.config.clone(), senders.clone())?);
 
         let serve = {
             async move {
@@ -150,8 +149,12 @@ impl ESFileService for FileScanner {
         Ok(output)
     }
 
+    async fn stop_scan(&self, library_uuid: LibraryUuid) -> anyhow::Result<()> {
+        Err(anyhow::Error::msg("not implemented"))
+    }
+
     async fn fix_symlinks(&self) -> anyhow::Result<()> {
-        todo!()
+        Err(anyhow::Error::msg("not implemented"))
     }
 }
 
@@ -171,11 +174,17 @@ impl ESInner for FileScanner {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Fs(message) => match message {
-                FsMsg::Status { resp } => self.respond(resp, async { Ok(()) }).await,
+                FsMsg::Status { resp } => {
+                    self.respond(resp, async { Err(anyhow::Error::msg("not implemented")) })
+                        .await
+                }
                 FsMsg::ScanLibrary { resp, library_uuid } => {
                     self.respond(resp, self.scan_library(library_uuid)).await
                 }
                 FsMsg::ScanStatus { resp } => self.respond(resp, self.scan_status()).await,
+                FsMsg::StopScan { resp, library_uuid } => {
+                    self.respond(resp, self.stop_scan(library_uuid)).await
+                }
                 FsMsg::FixSymlinks { resp } => self.respond(resp, self.fix_symlinks()).await,
             },
             _ => Err(anyhow::Error::msg("not implemented")),

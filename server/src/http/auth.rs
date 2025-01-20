@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
 };
+
+use crate::http::svc::HttpEndpoint;
 
 // the header set by the reverse proxy that we will implicitly trust
 const PROXY_AUTH_HEADER: &str = "proxy-user";
@@ -14,7 +18,11 @@ pub struct CurrentUser {
     pub uid: String,
 }
 
-pub async fn proxy_auth(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+pub async fn proxy_auth(
+    State(state): State<Arc<HttpEndpoint>>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
     // attempt to unpack the auth header, returning None if we cannot convert to a str
     let auth_header = req
         .headers()
@@ -37,7 +45,11 @@ pub async fn proxy_auth(mut req: Request, next: Next) -> Result<Response, Status
     Ok(next.run(req).await)
 }
 
-async fn _password_auth(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+async fn _password_auth(
+    State(state): State<Arc<HttpEndpoint>>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
     // attempt to unpack the auth header, returning None if we cannot convert to a str
     let auth_header = req
         .headers()

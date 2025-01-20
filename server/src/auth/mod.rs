@@ -50,14 +50,7 @@ trait ESAuthService: ESInner {
     // authn
     async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()>;
 
-    async fn authenticate_user(
-        &self,
-        uid: String,
-        password: String,
-    ) -> anyhow::Result<bool>;
+    async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool>;
 
-    async fn is_valid_user(
-        &self,
-        uid: String,
-    ) -> anyhow::Result<bool>;
+    async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool>;
 }

@@ -9,21 +9,21 @@ use tokio;
 use crate::auth::AuthzBackend;
 use crate::config::ESConfig;
 
-// group: memebers
-pub struct YamlFileAuth {
-    pub filename: PathBuf,
-    pub data: HashMap<String, HashSet<String>>,
+// group: members
+pub struct YamlGroupFile {
+    filename: PathBuf,
+    data: HashMap<String, HashSet<String>>,
 }
 
 #[async_trait]
-impl AuthzBackend for YamlFileAuth {
+impl AuthzBackend for YamlGroupFile {
     async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
         let filename = PathBuf::from(
             config
-                .group_yaml
+                .auth_yaml_groups
                 .clone()
                 .ok_or_else(|| anyhow::Error::msg("invalid group yaml filename"))?,
         );
@@ -72,7 +72,7 @@ impl AuthzBackend for YamlFileAuth {
             data.insert(k, v);
         }
 
-        Ok(YamlFileAuth {
+        Ok(YamlGroupFile {
             filename: filename,
             data: data,
         })

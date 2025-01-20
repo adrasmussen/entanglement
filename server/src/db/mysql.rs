@@ -9,7 +9,10 @@ use tokio::sync::Mutex;
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use common::{config::ESConfig, api::{album::*, comment::*, library::*, media::*}};
+use common::{
+    api::{album::*, comment::*, library::*, media::*},
+    config::ESConfig,
+};
 
 pub struct MySQLState {
     auth_svc_sender: ESMSender,
@@ -350,24 +353,23 @@ pub struct MySQLService {
 impl EntanglementService for MySQLService {
     type Inner = MySQLState;
 
-    fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        (
-            tx,
-            MySQLService {
-                config: config.clone(),
-                receiver: Arc::new(Mutex::new(rx)),
-                handle: AsyncCell::new(),
-            },
-        )
+        sender_map.insert(ServiceType::Db, tx);
+
+        MySQLService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            handle: AsyncCell::new(),
+        }
     }
 
-    async fn start(&self, senders: HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MySQLState::new(self.config.clone(), senders)?);
+        let state = Arc::new(MySQLState::new(self.config.clone(), senders.clone())?);
 
         let serve = {
             async move {

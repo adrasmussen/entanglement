@@ -1,9 +1,12 @@
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct ESConfig {
+    // set of groups with admin powers
+    pub auth_admin_groups: HashSet<String>,
+
     // optional file to define groups
-    pub group_yaml: Option<String>,
+    pub auth_yaml_groups: Option<String>,
 
     // ip and port for http server
     pub http_socket: String,

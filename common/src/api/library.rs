@@ -74,23 +74,34 @@ pub struct SearchMediaInLibraryResp {
 }
 
 // start a scan on a library
-endpoint!(LibraryScanStart);
+endpoint!(StartLibraryScan);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryScanStartReq {
-    pub library_uuid: LibraryUuid
+pub struct StartLibraryScanReq {
+    pub library_uuid: LibraryUuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryScanStartResp {}
+pub struct StartLibraryScanResp {}
 
 // get status of the library scanner engine
-endpoint!(LibraryScanStatus);
+endpoint!(GetLibraryScan);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryScanStatusReq {}
+pub struct GetLibraryScanReq {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LibraryScanStatusResp {
+pub struct GetLibraryScanResp {
     pub jobs: HashMap<LibraryUuid, LibraryScanJob>,
 }
+
+// get status of the library scanner engine
+endpoint!(StopLibraryScan);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StopLibraryScanReq {
+    pub library_uuid: LibraryUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StopLibraryScanResp {}
