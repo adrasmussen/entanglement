@@ -25,6 +25,7 @@ use tower_http::{
 
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
+use crate::fs::msg::FsMsg;
 use crate::http::{
     auth::{proxy_auth, CurrentUser},
     AppError,
@@ -220,6 +221,7 @@ impl HttpEndpoint {
             .route("/SearchMedia", post(search_media))
             .route("/AddComment", post(add_comment))
             .route("/GetComment", post(get_comment))
+            .route("/DeleteComment", post(delete_comment))
             .route("/UpdateComment", post(update_comment))
             .route("/AddAlbum", post(add_album))
             .route("/GetAlbum", post(get_album))
@@ -656,6 +658,36 @@ async fn get_comment(
     Ok(Json(GetCommentResp { comment: comment }).into_response())
 }
 
+async fn delete_comment(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<DeleteCommentReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state.owns_comment(&uid, &message.comment_uuid).await? {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .db_svc_sender
+        .send(
+            DbMsg::DeleteComment {
+                resp: tx,
+                comment_uuid: message.comment_uuid,
+            }
+            .into(),
+        )
+        .await?;
+
+    rx.await??;
+
+    Ok(Json(DeleteCommentResp {}).into_response())
+}
+
 async fn update_comment(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
@@ -1038,4 +1070,34 @@ async fn search_media_in_library(
     let result = rx.await??;
 
     Ok(Json(SearchMediaInLibraryResp { media: result }).into_response())
+}
+
+async fn library_scan_start(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<LibraryScanStartReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state.owns_library(&uid, &message.library_uuid).await? {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .fs_svc_sender
+        .send(
+            FsMsg::ScanLibrary {
+                resp: tx,
+                library_uuid: message.library_uuid,
+            }
+            .into(),
+        )
+        .await?;
+
+    rx.await??;
+
+    Ok(Json(LibraryScanStartResp {}).into_response())
 }

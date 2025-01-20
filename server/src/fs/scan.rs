@@ -10,13 +10,17 @@ use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
 use crate::service::ESMSender;
-use common::api::{
-    library::{LibraryScanJob, LibraryUuid},
-    media::{Media, MediaMetadata, MediaUuid},
+use common::{
+    api::{
+        library::{LibraryScanJob, LibraryUuid},
+        media::{Media, MediaMetadata, MediaUuid},
+    },
+    config::ESConfig,
 };
 
 #[derive(Clone, Debug)]
 pub struct ScanContext {
+    pub config: Arc<ESConfig>,
     pub library_uuid: LibraryUuid,
     pub library_path: PathBuf,
     pub db_svc_sender: ESMSender,
@@ -50,7 +54,9 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                context.error(format!("failed to parse DirEntry {err}")).await;
+                context
+                    .error(format!("failed to parse DirEntry {err}"))
+                    .await;
                 continue;
             }
         };
@@ -58,7 +64,12 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         let path = match canonicalize(entry.path()) {
             Ok(path) => path,
             Err(err) => {
-                context.error(format!("failed to canonicalize for {:?}: {err}", entry.path())).await;
+                context
+                    .error(format!(
+                        "failed to canonicalize for {:?}: {err}",
+                        entry.path()
+                    ))
+                    .await;
                 continue;
             }
         };
@@ -66,7 +77,12 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         let meta = match metadata(&path) {
             Ok(meta) => meta,
             Err(err) => {
-                context.error(format!("failed to parse metadata for {:?}: {err}", entry.path())).await;
+                context
+                    .error(format!(
+                        "failed to parse metadata for {:?}: {err}",
+                        entry.path()
+                    ))
+                    .await;
                 continue;
             }
         };
@@ -79,7 +95,9 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         } else {
             // technically, this should be unreachable, but we want to cover the eventuality
             // that the behavior of is_dir()/is_file() change
-            context.error(format!("{:?} is neither file nor directory", entry.path())).await;
+            context
+                .error(format!("{:?} is neither file nor directory", entry.path()))
+                .await;
             continue;
         };
     }
@@ -90,7 +108,9 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     let pathstr = match path.to_str() {
         Some(pathstr) => pathstr.to_owned(),
         None => {
-            context.error(format!("failed to convert {path:?} to str")).await;
+            context
+                .error(format!("failed to convert {path:?} to str"))
+                .await;
             return;
         }
     };
@@ -122,9 +142,11 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
                 None => {}
             },
             Err(err) => {
-                context.error(format!(
-                    "failure when searching for media_uuia in database: {err}"
-                )).await;
+                context
+                    .error(format!(
+                        "failure when searching for media_uuia in database: {err}"
+                    ))
+                    .await;
                 return;
             }
         },
@@ -139,20 +161,26 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         Some(extstr) => match extstr.to_str() {
             Some(val) => val,
             None => {
-                context.error(format!("failed to convert file extension for {path:?}")).await;
+                context
+                    .error(format!("failed to convert file extension for {path:?}"))
+                    .await;
                 return;
             }
         },
         None => {
-            context.error(format!("failed to find file extension for {path:?}")).await;
+            context
+                .error(format!("failed to find file extension for {path:?}"))
+                .await;
             return;
         }
     };
 
     let media_metadata: Result<(MediaMetadata, Option<String>), anyhow::Error> = match ext {
-        ".jpg" | ".png" | ".tiff" => get_image_metadata(path.clone()).await,
+        ".jpg" | ".png" | ".tiff" => process_image(context.config.clone(), path.clone()).await,
         _ => {
-            context.error(format!("failed to match {ext} to known file types")).await;
+            context
+                .error(format!("failed to match {ext} to known file types"))
+                .await;
             return;
         }
     };
@@ -160,8 +188,12 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     let media_metadata: (MediaMetadata, Option<String>) = match media_metadata {
         Ok(val) => val,
         Err(err) => {
-            context.error(format!("failed to process media metadata for {path:?}: {err}")).await;
-            return
+            context
+                .error(format!(
+                    "failed to process media metadata for {path:?}: {err}"
+                ))
+                .await;
+            return;
         }
     };
 
@@ -176,7 +208,9 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         mtime: Local::now().timestamp(),
         hidden: false,
         attention: false,
-        date: media_metadata.1.unwrap_or_else(|| "get from parser".to_owned()),
+        date: media_metadata
+            .1
+            .unwrap_or_else(|| "get from parser".to_owned()),
         note: "".to_owned(),
         metadata: media_metadata.0,
     };
@@ -206,13 +240,15 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         Ok(resp) => match resp {
             Ok(val) => val,
             Err(err) => {
-                context.error(format!("failure when adding media to database: {err}")).await;
-                return
+                context
+                    .error(format!("failure when adding media to database: {err}"))
+                    .await;
+                return;
             }
-        }
+        },
         Err(err) => {
             context.error(format!("{err}")).await;
-            return
+            return;
         }
     };
 
@@ -225,15 +261,20 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
 
     // TODO -- change to relative by adjusting original path
     match symlink(path.clone(), link) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(err) => {
-            context.error(format!("failed to add symlink for {path:?}: {err}")).await;
-            return
+            context
+                .error(format!("failed to add symlink for {path:?}: {err}"))
+                .await;
+            return;
         }
     }
 }
 
-async fn get_image_metadata(path: PathBuf) -> anyhow::Result<(MediaMetadata, Option<String>)> {
+async fn process_image(
+    config: Arc<ESConfig>,
+    path: PathBuf,
+) -> anyhow::Result<(MediaMetadata, Option<String>)> {
     use exif::{In, Reader, Tag};
 
     // following the exif docs, open the file synchronously and read from the container
@@ -243,8 +284,7 @@ async fn get_image_metadata(path: PathBuf) -> anyhow::Result<(MediaMetadata, Opt
 
     let exifreader = Reader::new();
 
-    let exif = exifreader
-        .read_from_container(&mut bufreader)?;
+    let exif = exifreader.read_from_container(&mut bufreader)?;
 
     // process the exif fields
     let datetime_original = match exif.get_field(Tag::DateTimeOriginal, In::PRIMARY) {

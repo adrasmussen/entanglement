@@ -119,6 +119,7 @@ impl ESFileService for FileScanner {
         }
 
         let context = Arc::new(ScanContext {
+            config: self.config.clone(),
             library_uuid: library_uuid,
             library_path: PathBuf::from(library.path),
             db_svc_sender: self.db_svc_sender.clone(),
@@ -170,7 +171,7 @@ impl ESInner for FileScanner {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Fs(message) => match message {
-                FsMsg::Status { resp } => self.respond(resp, async { todo!() }).await,
+                FsMsg::Status { resp } => self.respond(resp, async { Ok(()) }).await,
                 FsMsg::ScanLibrary { resp, library_uuid } => {
                     self.respond(resp, self.scan_library(library_uuid)).await
                 }

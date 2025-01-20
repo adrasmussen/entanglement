@@ -73,6 +73,17 @@ pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
 }
 
+// start a scan on a library
+endpoint!(LibraryScanStart);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanStartReq {
+    pub library_uuid: LibraryUuid
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LibraryScanStartResp {}
+
 // get status of the library scanner engine
 endpoint!(LibraryScanStatus);
 
