@@ -22,8 +22,10 @@ async fn main() -> anyhow::Result<()> {
 
     // temporary dummy configuration
     let config = Arc::new(ESConfig {
-        group_yaml: Some(String::from("/srv/home/alex/workspace/entanglement/dev")),
+        group_yaml: Some(String::from("/srv/home/alex/workspace/entanglement/dev/groups.yml")),
         http_socket: String::from("[::]:8080"),
+        http_url_root: String::from("/entanglement"),
+        http_doc_root: String::from("/srv/home/alex/workspace/entanglement/webapp/dist"),
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_linkdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),

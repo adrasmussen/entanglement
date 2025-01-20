@@ -127,10 +127,10 @@ impl EntanglementService for HttpService {
 
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
+    config: Arc<ESConfig>,
     auth_svc_sender: ESMSender,
     db_svc_sender: ESMSender,
     fs_svc_sender: ESMSender,
-    media_linkdir: PathBuf,
 }
 
 #[async_trait]
@@ -140,12 +140,12 @@ impl ESInner for HttpEndpoint {
         senders: HashMap<ServiceType, ESMSender>,
     ) -> anyhow::Result<Self> {
         Ok(HttpEndpoint {
+            config: config.clone(),
             // panic if we can't find all of the necessary senders, since this is a
             // compile-time problem and not a runtime problem
             auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             fs_svc_sender: senders.get(&ServiceType::Fs).unwrap().clone(),
-            media_linkdir: config.media_linkdir.clone(),
         })
     }
 
@@ -174,6 +174,7 @@ impl HttpEndpoint {
         self: Arc<Self>,
         socket: SocketAddr,
     ) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+        let config = self.config.clone();
         let state = Arc::clone(&self);
 
         // app -- the WASM webapp
@@ -182,14 +183,14 @@ impl HttpEndpoint {
         //
         // if running behind a reverse proxy, this URL can be configured (as well as the
         // frontend setting in dioxsus.toml)
-        let app_url_root = "/entanglement";
+        let app_url_root = config.http_url_root.clone();
 
         // this is the filesystem location of the /dist folder created by the dioxsus
         // build process
         //
         // it should be baked into a containerized runtime for the server, but does not
         // necessarily have to be so (it can be hosted outside)
-        let app_web_dir = "/srv/home/alex/workspace/entanglement/webapp/dist";
+        let app_web_dir = config.http_doc_root.clone();
 
         // the dioxsus build process creates a /dist folder after compiling the actual
         // app in /target, and we just grab the whole thing and serve it using tower's
@@ -200,8 +201,8 @@ impl HttpEndpoint {
         // the main fallback
         let app_router = Router::new().nest_service(
             "/",
-            ServeDir::new(app_web_dir).fallback(ServeFile::new(
-                PathBuf::from(app_web_dir).join("index.html"),
+            ServeDir::new(&app_web_dir).fallback(ServeFile::new(
+                PathBuf::from(&app_web_dir).join("index.html"),
             )),
         );
 
@@ -472,7 +473,7 @@ async fn stream_media(
     }
 
     // we only ever serve out of the linking directory, since we control its organization
-    let filename = state.media_linkdir.join(dir).join(media_uuid);
+    let filename = state.config.media_linkdir.join(dir).join(media_uuid);
 
     let file_handle = match tokio::fs::File::open(filename).await {
         Ok(f) => f,
