@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::api::media::MediaUuid;
@@ -22,8 +24,9 @@ pub struct LibraryUpdate {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryScanJob {
-    pub library_uuid: LibraryUuid,
     pub start_time: i64,
+    pub file_count: i64,
+    pub error_count: i64,
     pub status: String, // placeholder for a better type
 }
 
@@ -78,5 +81,5 @@ pub struct LibraryScanStatusReq {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LibraryScanStatusResp {
-    pub jobs: Vec<LibraryScanJob>,
+    pub jobs: HashMap<LibraryUuid, LibraryScanJob>,
 }

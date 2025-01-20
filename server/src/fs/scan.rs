@@ -1,119 +1,103 @@
-use std::fs::{canonicalize, metadata, read_dir};
+use std::fmt::Display;
+use std::fs::{canonicalize, metadata};
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_recursion::async_recursion;
+use chrono::Local;
+use tokio::{sync::RwLock, task::JoinSet};
+use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
 use crate::service::ESMSender;
 use common::api::{
-    library::LibraryUuid,
+    library::{LibraryScanJob, LibraryUuid},
     media::{Media, MediaMetadata, MediaUuid},
 };
 
-pub struct ScanContext {
-    pub scan_sender: tokio::sync::mpsc::Sender<Result<(), ScanError>>,
-    pub db_svc_sender: ESMSender,
-    pub library_uuid: LibraryUuid,
-    pub media_linkdir: PathBuf,
-}
-
 #[derive(Clone, Debug)]
-pub struct ScanError {
-    pub path: PathBuf,
-    pub info: String,
+pub struct ScanContext {
+    pub library_uuid: LibraryUuid,
+    pub library_path: PathBuf,
+    pub db_svc_sender: ESMSender,
+    pub media_linkdir: PathBuf,
+    pub job_status: Arc<RwLock<LibraryScanJob>>,
 }
 
-#[async_recursion]
-pub async fn scan_directory(
-    scan_context: Arc<ScanContext>,
-    dir_path: PathBuf,
-) -> Result<(), ScanError> {
-    let mut joinset = tokio::task::JoinSet::new();
+impl ScanContext {
+    async fn error(&self, msg: impl Display) -> () {
+        let mut status = self.job_status.write().await;
 
-    let contents = match read_dir(dir_path.clone()) {
-        Ok(val) => val,
-        Err(err) => {
-            return Err(ScanError {
-                path: dir_path.clone(),
-                info: format!("Failed to read directory contents: {}", err.to_string()),
-            })
+        println!("scan error: {msg}");
+
+        status.error_count += 1;
+    }
+}
+
+pub async fn run_scan(context: Arc<ScanContext>) -> () {
+    let context = context.clone();
+
+    let mut tasks = JoinSet::new();
+
+    for entry in WalkDir::new(context.library_path.clone()).into_iter() {
+        // things to check eventually:
+        //  * too many errors
+        //  * cancel signal
+        if !tasks.len() < 8 {
+            tasks.join_next().await;
         }
-    };
 
-    for entry in contents {
-        let entry = entry.map_err(|err| ScanError {
-            path: dir_path.clone(),
-            info: format!("Failed to entry in directory: {}", err.to_string()),
-        })?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                context.error(format!("failed to parse DirEntry {err}")).await;
+                continue;
+            }
+        };
 
-        let path = canonicalize(entry.path()).map_err(|err| ScanError {
-            path: entry.path().clone(),
-            info: format!("Failed to canonicalize path: {}", err.to_string()),
-        })?;
+        let path = match canonicalize(entry.path()) {
+            Ok(path) => path,
+            Err(err) => {
+                context.error(format!("failed to canonicalize for {:?}: {err}", entry.path())).await;
+                continue;
+            }
+        };
 
-        let meta = metadata(&path).map_err(|err| ScanError {
-            path: path.clone(),
-            info: format!("Failed to get metadata: {}", err.to_string()),
-        })?;
+        let meta = match metadata(&path) {
+            Ok(meta) => meta,
+            Err(err) => {
+                context.error(format!("failed to parse metadata for {:?}: {err}", entry.path())).await;
+                continue;
+            }
+        };
 
         if meta.is_dir() {
-            joinset.spawn(scan_directory(scan_context.clone(), path));
+            // look for starlark files to run, possibly with a specific name
+            continue;
         } else if meta.is_file() {
-            joinset.spawn(register_media(scan_context.clone(), path));
+            tasks.spawn(register_media(context.clone(), path));
         } else {
             // technically, this should be unreachable, but we want to cover the eventuality
             // that the behavior of is_dir()/is_file() change
-            return Err(ScanError {
-                path: path,
-                info: String::from("Failed to determine if path or dir"),
-            });
+            context.error(format!("{:?} is neither file nor directory", entry.path())).await;
+            continue;
         };
     }
-
-    while let Some(join_res) = joinset.join_next().await {
-        match join_res {
-            Err(err) => {
-                // this should also be unreachable, at least until we include logic to cancel
-                // running scans (or accidentally introduce a scan function that can panic)
-                return Err(ScanError {
-                    path: dir_path.clone(),
-                    info: format!("Failed to join process handle: {}", err.to_string()),
-                });
-            }
-            Ok(res) => match scan_context.scan_sender.send(res).await {
-                Ok(()) => continue,
-                // this error is somewhat harder to deal with
-                //
-                // it should probably be replaced with an appropriate error log
-                Err(_) => {
-                    return Err(ScanError {
-                        path: dir_path.clone(),
-                        info: String::from("Failed to send result to scan listener"),
-                    })
-                }
-            },
-        }
-    }
-
-    Ok(())
 }
 
-// errors generated here are handled by scan_directory
-async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result<(), ScanError> {
+async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     // first, check if the media already exists in the database
-    let pathstr = path
-        .to_str()
-        .ok_or_else(|| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to convert path to str"),
-        })?
-        .to_owned();
+    let pathstr = match path.to_str() {
+        Some(pathstr) => pathstr.to_owned(),
+        None => {
+            context.error(format!("failed to convert {path:?} to str")).await;
+            return;
+        }
+    };
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    scan_context
+    match context
         .db_svc_sender
         .send(
             DbMsg::GetMediaUuidByPath {
@@ -123,62 +107,83 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             .into(),
         )
         .await
-        .map_err(|_| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to send GetMediaByPath message from register_media"),
-        })?;
+    {
+        Ok(_) => {}
+        Err(err) => {
+            context.error(format!("{err}")).await;
+            return;
+        }
+    }
 
-    match rx
-        .await
-        .map_err(|_| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to receive GetMediaByPath response at register_media"),
-        })?
-        .map_err(|err| ScanError {
-            path: path.clone(),
-            info: format!(
-                "Failure when searching for media uuid in database: {}",
-                err.to_string()
-            ),
-        })? {
-        Some(_) => return Ok(()),
-        None => {}
+    match rx.await {
+        Ok(resp) => match resp {
+            Ok(exists) => match exists {
+                Some(_) => return,
+                None => {}
+            },
+            Err(err) => {
+                context.error(format!(
+                    "failure when searching for media_uuia in database: {err}"
+                )).await;
+                return;
+            }
+        },
+        Err(err) => {
+            context.error(format!("{err}")).await;
+            return;
+        }
     }
 
     // if the file is new, we need to call the correct metadata collector for its file extension
-    let ext = path
-        .extension()
-        .ok_or_else(|| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to find file extension"),
-        })?
-        .to_str()
-        .ok_or_else(|| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to convert file extension"),
-        })?;
-
-    let media_metadata: MediaMetadata = match ext {
-        ".jpg" | ".png" | ".tiff" => get_image_metadata(path.clone()).await?,
-        _ => {
-            return Err(ScanError {
-                path: path.clone(),
-                info: String::from("Failed to match file extension to known types"),
-            })
+    let ext = match path.extension() {
+        Some(extstr) => match extstr.to_str() {
+            Some(val) => val,
+            None => {
+                context.error(format!("failed to convert file extension for {path:?}")).await;
+                return;
+            }
+        },
+        None => {
+            context.error(format!("failed to find file extension for {path:?}")).await;
+            return;
         }
     };
 
+    let media_metadata: Result<MediaMetadata, anyhow::Error> = match ext {
+        ".jpg" | ".png" | ".tiff" => get_image_metadata(path.clone()).await,
+        _ => {
+            context.error(format!("failed to match {ext} to known file types")).await;
+            return;
+        }
+    };
+
+    let media_metadata: MediaMetadata = match media_metadata {
+        Ok(val) => val,
+        Err(err) => {
+            context.error(format!("failed to process media metadata for {path:?}: {err}")).await;
+            return
+        }
+    };
+
+    // calculate the hash
+    let hash = "OH NO".to_owned();
+
     // once we have the metadata, we assemble the Media struct and send it to the database
     let media = Media {
-        library_uuid: scan_context.library_uuid,
+        library_uuid: context.library_uuid,
         path: pathstr,
+        hash: hash,
+        mtime: Local::now().timestamp(),
         hidden: false,
+        attention: false,
+        date: "get from parser".to_owned(),
+        note: "".to_owned(),
         metadata: media_metadata,
     };
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
-    scan_context
+    match context
         .db_svc_sender
         .send(
             DbMsg::AddMedia {
@@ -188,53 +193,58 @@ async fn register_media(scan_context: Arc<ScanContext>, path: PathBuf) -> Result
             .into(),
         )
         .await
-        .map_err(|_| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to send AddMedia message from register_media"),
-        })?;
+    {
+        Ok(_) => {}
+        Err(err) => {
+            context.error(format!("{err}")).await;
+            return;
+        }
+    };
 
     // finally, if the media registers properly, we can use the uuid to make it accessible
-    let media_uuid: MediaUuid = rx
-        .await
-        .map_err(|_| ScanError {
-            path: path.clone(),
-            info: String::from("Failed to receive AddMedia response at register_media"),
-        })?
-        .map_err(|err| ScanError {
-            path: path.clone(),
-            info: format!("Failure when adding media to database: {}", err.to_string()),
-        })?;
+    let media_uuid: MediaUuid = match rx.await {
+        Ok(resp) => match resp {
+            Ok(val) => val,
+            Err(err) => {
+                context.error(format!("failure when adding media to database: {err}")).await;
+                return
+            }
+        }
+        Err(err) => {
+            context.error(format!("{err}")).await;
+            return
+        }
+    };
 
     // this should probably be another helper function so that the http server can easily
     // map uuid -> path without relying on magic numbers
-    let link = scan_context.media_linkdir.join("full").join(media_uuid.to_string());
+    let link = context
+        .media_linkdir
+        .join("full")
+        .join(media_uuid.to_string());
 
     // TODO -- change to relative by adjusting original path
-    symlink(path.clone(), link).map_err(|err| ScanError {
-        path: path.clone(),
-        info: format!("Failed to create symlink: {}", err.to_string()),
-    })
+    match symlink(path.clone(), link) {
+        Ok(_) => {},
+        Err(err) => {
+            context.error(format!("failed to add symlink for {path:?}: {err}")).await;
+            return
+        }
+    }
 }
 
-async fn get_image_metadata(path: PathBuf) -> Result<MediaMetadata, ScanError> {
+async fn get_image_metadata(path: PathBuf) -> anyhow::Result<MediaMetadata> {
     use exif::{In, Reader, Tag};
 
     // following the exif docs, open the file synchronously and read from the container
-    let file = std::fs::File::open(&path).map_err(|err| ScanError {
-        path: path.clone(),
-        info: format!("Failed to open file: {}", err.to_string()),
-    })?;
+    let file = std::fs::File::open(&path)?;
 
     let mut bufreader = std::io::BufReader::new(file);
 
     let exifreader = Reader::new();
 
     let exif = exifreader
-        .read_from_container(&mut bufreader)
-        .map_err(|err| ScanError {
-            path: path.clone(),
-            info: format!("Failed to read from exif container: {}", err.to_string()),
-        })?;
+        .read_from_container(&mut bufreader)?;
 
     // process the exif fields
     let datetime_original = match exif.get_field(Tag::DateTimeOriginal, In::PRIMARY) {
@@ -242,8 +252,5 @@ async fn get_image_metadata(path: PathBuf) -> Result<MediaMetadata, ScanError> {
         None => String::from(""),
     };
 
-    Ok(MediaMetadata {
-        date: datetime_original,
-        note: String::from(""),
-    })
+    Ok(MediaMetadata::Image)
 }

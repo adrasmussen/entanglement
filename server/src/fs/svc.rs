@@ -2,149 +2,23 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{self, Context};
-
 use async_cell::sync::AsyncCell;
-
 use async_trait::async_trait;
-
-use chrono::offset::Local;
-
-use tokio::sync::Mutex;
+use chrono::Local;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::db::msg::DbMsg;
-use crate::fs::{msg::*, scan::*, *};
-use api::library::LibraryMetadata;
+use crate::fs::{msg::*, scan::*, ESFileService};
+use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use common::{
+    api::library::{LibraryScanJob, LibraryUuid},
+    config::ESConfig,
+};
 
-pub struct FileScanner {
-    db_svc_sender: ESMSender,
-    media_linkdir: PathBuf,
-}
-
-#[async_trait]
-impl ESFileService for FileScanner {
-    // TODO -- overhaul this again, making it so that the library scan is async and possibly stores errors in its own table
-    //
-    // we also need a ScanStatus message to send back to the ui
-    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<LibraryScanResult> {
-        // first, get the library details
-        let (library_tx, library_rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetLibrary {
-                    resp: library_tx,
-                    library_uuid: library_uuid.clone(),
-                }
-                .into(),
-            )
-            .await
-            .context("Failed to send GetLibrary message from scan_library")?;
-
-        let library = library_rx
-            .await
-            .context("Failed to receive GetLibrary response at scan_library")??
-            .ok_or_else(|| {
-                anyhow::Error::msg(format!("Failed to find library {}", library_uuid.clone()))
-            })?;
-
-        // then set up the scanner error collection loop
-        let scan_count = Arc::new(Mutex::new(i64::from(0)));
-        let scan_errors = Arc::new(Mutex::new(Vec::new()));
-        let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel(1024);
-
-        let scan_info = Arc::new(ScanContext {
-            scan_sender: scan_tx,
-            library_uuid: library_uuid,
-            db_svc_sender: self.db_svc_sender.clone(),
-            media_linkdir: self.media_linkdir.clone(),
-        });
-
-        let _ = tokio::spawn({
-            let scan_count = scan_count.clone();
-            let scan_errors = scan_errors.clone();
-
-            async move {
-                while let Some(msg) = scan_rx.recv().await {
-                    match msg {
-                        Ok(()) => {
-                            let mut scan_count = scan_count.lock().await;
-
-                            *scan_count += 1;
-                        }
-                        Err(err) => {
-                            let mut scan_errors = scan_errors.lock().await;
-
-                            scan_errors.push(err);
-                        }
-                    }
-                }
-            }
-        });
-
-        scan_directory(scan_info, library.path.into())
-            .await
-            .map_err(|err| anyhow::Error::msg(err.info))?;
-
-        let scan_count = scan_count.lock().await;
-        let scan_errors = scan_errors.lock().await;
-
-        let (update_tx, update_rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::UpdateLibrary {
-                    resp: update_tx,
-                    library_uuid: library_uuid.clone(),
-                    change: LibraryMetadata {
-                        file_count: scan_count.clone(),
-                        last_scan: Local::now().timestamp(),
-                    },
-                }
-                .into(),
-            )
-            .await
-            .context("Failed to send UpdateLibrary message from scan_library")?;
-
-        update_rx.await.context("Failed to receive UpdateLibrary response at scan_library")??;
-
-        Ok(LibraryScanResult {
-            count: scan_count.clone(),
-            errors: scan_errors.clone().into_iter().map(|err| format!("{:?}: {}", err.path, err.info)).collect(),
-        })
-    }
-
-    async fn fix_symlinks(&self) -> anyhow::Result<()> {
-        todo!()
-    }
-}
-
-#[async_trait]
-impl ESInner for FileScanner {
-    fn new(
-        config: Arc<ESConfig>,
-        senders: HashMap<ServiceType, ESMSender>,
-    ) -> anyhow::Result<Self> {
-        Ok(FileScanner {
-            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
-            media_linkdir: config.media_linkdir.clone(),
-        })
-    }
-
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
-        match esm {
-            ESM::Fs(message) => match message {
-                FsMsg::Status { resp } => self.respond(resp, async { todo!() }).await,
-                FsMsg::ScanLibrary { resp, library_uuid } => {
-                    self.respond(resp, self.scan_library(library_uuid)).await
-                }
-                FsMsg::FixSymlinks { resp } => self.respond(resp, self.fix_symlinks()).await,
-            },
-            _ => Err(anyhow::Error::msg("not implemented")),
-        }
-    }
-}
-
+// file service
+//
+// the file service handles all of the operations invovling finding media, processing
+// files, organizing the media directory, and so on
 pub struct FileService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
@@ -156,7 +30,7 @@ impl EntanglementService for FileService {
     type Inner = FileScanner;
 
     fn create(config: Arc<ESConfig>) -> (ESMSender, Self) {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(32);
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
         (
             tx,
@@ -164,7 +38,7 @@ impl EntanglementService for FileService {
                 config: config.clone(),
                 receiver: Arc::new(Mutex::new(rx)),
                 handle: AsyncCell::new(),
-            }
+            },
         )
     }
 
@@ -195,5 +69,89 @@ impl EntanglementService for FileService {
         self.handle.set(handle);
 
         Ok(())
+    }
+}
+
+pub struct FileScanner {
+    config: Arc<ESConfig>,
+    db_svc_sender: ESMSender,
+    running_scans: Arc<RwLock<HashMap<LibraryUuid, Arc<RwLock<LibraryScanJob>>>>>,
+}
+
+#[async_trait]
+impl ESFileService for FileScanner {
+    async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<()> {
+        let (library_tx, library_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .send(
+                DbMsg::GetLibrary {
+                    resp: library_tx,
+                    library_uuid: library_uuid.clone(),
+                }
+                .into(),
+            )
+            .await?;
+
+        let library = library_rx.await??.ok_or_else(|| {
+            anyhow::Error::msg(format!("Failed to find library {}", library_uuid.clone()))
+        })?;
+
+        let path = PathBuf::from(library.path);
+
+        // then set up the scanner error collection loop
+
+        let context = Arc::new(ScanContext {
+            library_uuid: library_uuid,
+            library_path: path,
+            db_svc_sender: self.db_svc_sender.clone(),
+            media_linkdir: self.config.media_linkdir.clone(),
+            job_status: Arc::new(RwLock::new(LibraryScanJob {
+                start_time: Local::now().timestamp(),
+                file_count: 0,
+                error_count: 0,
+                status: "intializing scan".to_owned(),
+            })),
+        });
+
+        run_scan(context);
+
+        Ok(())
+    }
+
+    async fn scan_status(&self) -> anyhow::Result<HashMap<LibraryUuid, LibraryScanJob>> {
+        todo!()
+    }
+
+    async fn fix_symlinks(&self) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl ESInner for FileScanner {
+    fn new(
+        config: Arc<ESConfig>,
+        senders: HashMap<ServiceType, ESMSender>,
+    ) -> anyhow::Result<Self> {
+        Ok(FileScanner {
+            config: config.clone(),
+            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
+            running_scans: Arc::new(RwLock::new(HashMap::new())),
+        })
+    }
+
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+        match esm {
+            ESM::Fs(message) => match message {
+                FsMsg::Status { resp } => self.respond(resp, async { todo!() }).await,
+                FsMsg::ScanLibrary { resp, library_uuid } => {
+                    self.respond(resp, self.scan_library(library_uuid)).await
+                }
+                FsMsg::ScanStatus { resp } => self.respond(resp, self.scan_status()).await,
+                FsMsg::FixSymlinks { resp } => self.respond(resp, self.fix_symlinks()).await,
+            },
+            _ => Err(anyhow::Error::msg("not implemented")),
+        }
     }
 }

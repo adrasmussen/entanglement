@@ -1,5 +1,6 @@
-use common::api::library::{LibraryScanJob, LibraryUuid};
+use std::collections::HashMap;
 
+use common::api::library::{LibraryScanJob, LibraryUuid};
 use crate::service::{ESM, ESMResp};
 
 #[derive(Debug)]
@@ -12,7 +13,7 @@ pub enum FsMsg {
         library_uuid: LibraryUuid,
     },
     ScanStatus {
-        resp: ESMResp<Vec<LibraryScanJob>>,
+        resp: ESMResp<HashMap<LibraryUuid, LibraryScanJob>>,
     },
     FixSymlinks {
         resp: ESMResp<()>,

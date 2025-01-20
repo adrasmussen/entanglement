@@ -32,3 +32,5 @@ where
         Self(err.into())
     }
 }
+
+// TODO -- define an HTTP endpoint trait, possibly auto-generated from the endpoint!() macros in common::api
