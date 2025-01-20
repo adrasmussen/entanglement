@@ -97,30 +97,56 @@ impl ESFileService for FileScanner {
             anyhow::Error::msg(format!("Failed to find library {}", library_uuid.clone()))
         })?;
 
-        let path = PathBuf::from(library.path);
+        let job = Arc::new(RwLock::new(LibraryScanJob {
+            start_time: Local::now().timestamp(),
+            file_count: 0,
+            error_count: 0,
+            status: "intializing scan".to_owned(),
+        }));
 
-        // then set up the scanner error collection loop
+        {
+            let mut running_scans = self.running_scans.write().await;
+
+            match running_scans.insert(library_uuid, job.clone()) {
+                None => {}
+                Some(v) => {
+                    running_scans.insert(library_uuid, v);
+                    return Err(anyhow::Error::msg(format!(
+                        "library scan for {library_uuid} already in progress"
+                    )));
+                }
+            }
+        }
 
         let context = Arc::new(ScanContext {
             library_uuid: library_uuid,
-            library_path: path,
+            library_path: PathBuf::from(library.path),
             db_svc_sender: self.db_svc_sender.clone(),
             media_linkdir: self.config.media_linkdir.clone(),
-            job_status: Arc::new(RwLock::new(LibraryScanJob {
-                start_time: Local::now().timestamp(),
-                file_count: 0,
-                error_count: 0,
-                status: "intializing scan".to_owned(),
-            })),
+            job_status: job,
         });
 
-        run_scan(context);
+        run_scan(context).await;
+
+        {
+            let mut running_scans = self.running_scans.write().await;
+
+            running_scans.remove(&library_uuid);
+        }
 
         Ok(())
     }
 
     async fn scan_status(&self) -> anyhow::Result<HashMap<LibraryUuid, LibraryScanJob>> {
-        todo!()
+        let running_scans = self.running_scans.read().await.clone();
+
+        let mut output = HashMap::new();
+
+        for (k, v) in running_scans.iter() {
+            output.insert(k.clone(), v.read().await.clone());
+        }
+
+        Ok(output)
     }
 
     async fn fix_symlinks(&self) -> anyhow::Result<()> {

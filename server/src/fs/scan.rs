@@ -149,7 +149,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    let media_metadata: Result<MediaMetadata, anyhow::Error> = match ext {
+    let media_metadata: Result<(MediaMetadata, Option<String>), anyhow::Error> = match ext {
         ".jpg" | ".png" | ".tiff" => get_image_metadata(path.clone()).await,
         _ => {
             context.error(format!("failed to match {ext} to known file types")).await;
@@ -157,7 +157,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    let media_metadata: MediaMetadata = match media_metadata {
+    let media_metadata: (MediaMetadata, Option<String>) = match media_metadata {
         Ok(val) => val,
         Err(err) => {
             context.error(format!("failed to process media metadata for {path:?}: {err}")).await;
@@ -176,9 +176,9 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         mtime: Local::now().timestamp(),
         hidden: false,
         attention: false,
-        date: "get from parser".to_owned(),
+        date: media_metadata.1.unwrap_or_else(|| "get from parser".to_owned()),
         note: "".to_owned(),
-        metadata: media_metadata,
+        metadata: media_metadata.0,
     };
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -233,7 +233,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     }
 }
 
-async fn get_image_metadata(path: PathBuf) -> anyhow::Result<MediaMetadata> {
+async fn get_image_metadata(path: PathBuf) -> anyhow::Result<(MediaMetadata, Option<String>)> {
     use exif::{In, Reader, Tag};
 
     // following the exif docs, open the file synchronously and read from the container
@@ -252,5 +252,5 @@ async fn get_image_metadata(path: PathBuf) -> anyhow::Result<MediaMetadata> {
         None => String::from(""),
     };
 
-    Ok(MediaMetadata::Image)
+    Ok((MediaMetadata::Image, Some(datetime_original)))
 }
