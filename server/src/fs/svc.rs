@@ -72,6 +72,13 @@ impl EntanglementService for FileService {
     }
 }
 
+// filescanner
+//
+// this is the inner service that knows how to dispatch and eventually monitor scans,
+// although the first implementation is pretty basic
+//
+// it is missing, at minimum, a way to stop a scan (and all scans), ways to check that
+// the handles haven't expired, and so on
 pub struct FileScanner {
     config: Arc<ESConfig>,
     db_svc_sender: ESMSender,

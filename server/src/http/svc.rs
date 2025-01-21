@@ -123,7 +123,6 @@ impl EntanglementService for HttpService {
 // http endpoint
 //
 // this struct is the actual responder that binds to the socket and serves http
-
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
     config: Arc<ESConfig>,

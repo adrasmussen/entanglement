@@ -18,6 +18,93 @@ use crate::auth::ESAuthService;
 use crate::db::msg::DbMsg;
 use crate::service::*;
 
+// auth service
+//
+// the auth service is really two services in one -- a way to query several authentication (authn)
+// and authorization (authz) providers, and a cache so we don't have to query them often
+//
+// the cache semantics are not ideal (need to be flushed manually when the group information
+// changes), but the database service will flush individual media files when their albums change
+//
+// there are almost certainly several better ways of doing this, which will likely matter when we
+// switch to using ldap instead of a fixed file, but the services should roughly stay the same
+pub struct AuthService {
+    config: Arc<ESConfig>,
+    receiver: Arc<Mutex<ESMReceiver>>,
+    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+}
+
+#[async_trait]
+impl EntanglementService for AuthService {
+    type Inner = AuthCache;
+
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
+
+        sender_map.insert(ServiceType::Auth, tx);
+
+        AuthService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            handle: AsyncCell::new(),
+        }
+    }
+
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+        let config = self.config.clone();
+        let receiver = self.receiver.clone();
+        let state = Arc::new(AuthCache::new(config.clone(), senders.clone())?);
+
+        // determine authn/authz providers from the global config file
+        //
+        // each provider is tied to a particular field that, if set, means that we should try
+        // to connect to that provider.  connect() may use other parts of the config struct
+        match config.authn_proxy_header {
+            None => {}
+            Some(_) => {
+                state.add_authn_provider(ProxyAuth::connect(config.clone()).await?).await?;
+            }
+        }
+
+        match config.authz_yaml_groups {
+            None => {}
+            Some(_) => {
+                state.add_authz_provider(YamlGroupFile::connect(config.clone()).await?).await?;
+            }
+        }
+
+        // for the first pass, we don't need any further machinery for this service
+        //
+        // however, if we want things like timers, batching updates, or other optimizations,
+        // they would all go here with corresponding handles in the AuthService struct
+        //
+        // example would use StreamExt's ready_chunks() method
+
+        let serve = {
+            async move {
+                while let Some(msg) = receiver.lock().await.recv().await {
+                    let state = Arc::clone(&state);
+                    tokio::task::spawn(async move {
+                        match state.message_handler(msg).await {
+                            Ok(()) => (),
+                            Err(_) => println!("cache service failed to reply to message"),
+                        }
+                    });
+                }
+
+                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+            }
+        };
+
+        let handle = tokio::task::spawn(serve);
+
+        self.handle.set(handle);
+
+        Ok(())
+    }
+}
+
+
 pub struct AuthCache {
     db_svc_sender: ESMSender,
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
@@ -363,81 +450,5 @@ impl ESInner for AuthCache {
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
-    }
-}
-
-pub struct AuthService {
-    config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
-    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-}
-
-#[async_trait]
-impl EntanglementService for AuthService {
-    type Inner = AuthCache;
-
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
-
-        sender_map.insert(ServiceType::Auth, tx);
-
-        AuthService {
-            config: config.clone(),
-            receiver: Arc::new(Mutex::new(rx)),
-            handle: AsyncCell::new(),
-        }
-    }
-
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
-        let config = self.config.clone();
-        let receiver = self.receiver.clone();
-        let state = Arc::new(AuthCache::new(config.clone(), senders.clone())?);
-
-        // determine authn/authz providers from the config file
-        //
-        // each provider is tied to a particular field that, if set, means that we should try
-        // to connect to that provider.  connect() may use other parts of the config struct
-        match config.authn_proxy_header {
-            None => {}
-            Some(_) => {
-                state.add_authn_provider(ProxyAuth::connect(config.clone()).await?).await?;
-            }
-        }
-
-        match config.authz_yaml_groups {
-            None => {}
-            Some(_) => {
-                state.add_authz_provider(YamlGroupFile::connect(config.clone()).await?).await?;
-            }
-        }
-
-        // for the first pass, we don't need any further machinery for this service
-        //
-        // however, if we want things like timers, batching updates, or other optimizations,
-        // they would all go here with corresponding handles in the AuthService struct
-        //
-        // example would use StreamExt's ready_chunks() method
-
-        let serve = {
-            async move {
-                while let Some(msg) = receiver.lock().await.recv().await {
-                    let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
-                        match state.message_handler(msg).await {
-                            Ok(()) => (),
-                            Err(_) => println!("cache service failed to reply to message"),
-                        }
-                    });
-                }
-
-                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
-            }
-        };
-
-        let handle = tokio::task::spawn(serve);
-
-        self.handle.set(handle);
-
-        Ok(())
     }
 }
