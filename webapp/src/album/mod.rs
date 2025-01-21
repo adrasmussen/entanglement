@@ -1,161 +1,77 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
-use crate::common::{
-    modal::{Modal, ModalBox},
-    storage::*,
-    style,
+use crate::{
+    common::{storage::*, style},
+    Route,
 };
-use crate::gallery::grid::MediaGrid;
-use api::album::*;
 
-mod list;
-use list::AlbumList;
+use common::api::album::*;
+
+mod table;
+use table::AlbumTable;
+
+mod grid;
+use grid::MediaGrid;
 
 const ALBUM_SEARCH_KEY: &str = "album_search";
 const MEDIA_SEARCH_KEY: &str = "media_in_album_search";
 
-// states of the album page
-#[derive(Clone)]
-enum AlbumView {
-    AlbumList,
-    MediaList(AlbumUuid),
-}
-
+// AlbumList elements
+//
+// this is the album search page
+//
+// clicking on an album focuses on the media in that album via AlbumDetail
 #[derive(Clone, PartialEq, Props)]
-struct AlbumNavBarProps {
-    album_view_signal: Signal<AlbumView>,
+struct AlbumListBarProps {
     album_search_signal: Signal<String>,
-    media_search_signal: Signal<String>,
-    status: (String, String),
+    status: String,
 }
 
 #[component]
-fn AlbumNavBar(props: AlbumNavBarProps) -> Element {
-    let mut album_view_signal = props.album_view_signal;
+fn AlbumListBar(props: AlbumListBarProps) -> Element {
     let mut album_search_signal = props.album_search_signal;
-    let mut media_search_signal = props.media_search_signal;
-
-    let (album_status, media_status) = props.status;
-
-    // somewhat unfortunate hack because dioxus requires us to always call the hook,
-    // even if we don't end up using the output
-    //
-    // TODO -- better logging for the Error
-    let album = use_resource(move || async move {
-        let album_uuid = match album_view_signal() {
-            AlbumView::MediaList(val) => val,
-            AlbumView::AlbumList => return None,
-        };
-
-        match get_album(&GetAlbumReq {
-            album_uuid: album_uuid,
-        })
-        .await
-        {
-            Ok(resp) => return Some(resp.album),
-            Err(_) => return None,
-        }
-    });
+    let status = props.status;
 
     rsx! {
         div {
             style { "{style::SUBNAV}" }
-            div {
-                class: "subnav",
-                match album_view_signal() {
-                    AlbumView::AlbumList => rsx! {
-                        form {
-                            onsubmit: move |event| async move {
-                                let filter = match event.values().get("search_filter") {
-                                    Some(val) => val.as_value(),
-                                    None => String::from(""),
-                                };
-
-                                album_search_signal.set(filter.clone());
-
-                                set_local_storage(ALBUM_SEARCH_KEY, filter);
-                            },
-                            input {
-                                name: "search_filter",
-                                r#type: "text",
-                                value: "{album_search_signal()}",
-
-                            },
-                            input {
-                                r#type: "submit",
-                                value: "Search",
-                            },
-                        },
-                        span { "Search History" },
-                        span { "{album_status}"}
-                        button {
-                            //onclick: move |_| modal_stack_signal.push(Modal::CreateAlbum),
-                            "Create Album"
-                        },
-                    },
-                    AlbumView::MediaList(album_uuid) => {
-                        let album = &*album.read();
-
-                        let album_name = match album.clone().flatten() {
-                            Some(val) => val.metadata.name,
-                            None => String::from("still waiting on get_album future...")
+            div { class: "subnav",
+                form {
+                    onsubmit: move |event| async move {
+                        let filter = match event.values().get("search_filter") {
+                            Some(val) => val.as_value(),
+                            None => String::from(""),
                         };
-
-                        rsx! {
-                            form {
-                                onsubmit: move |event| async move {
-                                    let filter = match event.values().get("media_search_filter") {
-                                        Some(val) => val.as_value(),
-                                        None => String::from(""),
-                                    };
-
-                                    media_search_signal.set(filter.clone());
-
-                                    set_local_storage(MEDIA_SEARCH_KEY, filter);
-                                },
-                                input {
-                                    name: "media_search_filter",
-                                    r#type: "text",
-                                    value: "{media_search_signal()}",
-
-                                },
-                                input {
-                                    r#type: "submit",
-                                    value: "Search",
-                                },
-                                span { "Search History" }
-                                span { "Searching {album_name}: {media_status}" }
-                                button {
-                                    //onclick: move |_| modal_stack_signal.push(Modal::ShowAlbum(album_uuid)),
-                                    "View Album"
-                                },
-                                button {
-                                    onclick: move |_| album_view_signal.set(AlbumView::AlbumList),
-                                    "Reset album search"
-                                },
-                            },
-                        }
+                        album_search_signal.set(filter.clone());
+                        set_local_storage(ALBUM_SEARCH_KEY, filter);
+                    },
+                    input {
+                        name: "search_filter",
+                        r#type: "text",
+                        value: "{album_search_signal()}"
                     }
+                    input { r#type: "submit", value: "Search" }
                 }
+                span { "Search History" }
+                span { "{status}" }
+                span { "MISSING: create album modal" }
             }
         }
     }
 }
 
 #[component]
-pub fn Albums() -> Element {
-    let modal_stack_signal = use_signal::<Vec<Modal>>(|| Vec::new());
-    let album_view_signal = use_signal(|| AlbumView::AlbumList);
+pub fn AlbumList() -> Element {
+    let album_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
-    // album search logic
-    let album_search_signal = use_signal::<String>(|| try_local_storage(ALBUM_SEARCH_KEY));
     let album_future = use_resource(move || async move {
         let filter = album_search_signal();
 
         search_albums(&SearchAlbumsReq { filter: filter }).await
     });
 
-    let (albums, album_status) = match &*album_future.read() {
+    let (albums, status) = match &*album_future.read() {
         Some(Ok(resp)) => (
             Ok(resp.albums.clone()),
             format!("Found {} results", resp.albums.len()),
@@ -170,18 +86,116 @@ pub fn Albums() -> Element {
         ),
     };
 
-    // media search logic
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
-    let media_future = use_resource(move || async move {
-        let album_uuid = match album_view_signal() {
-            AlbumView::MediaList(album_uuid) => album_uuid,
-            AlbumView::AlbumList => {
-                return Err(anyhow::Error::msg(
-                    "album_uuid not specified in media_future",
-                ))
-            }
-        };
+    rsx! {
+        AlbumListBar { album_search_signal, status }
 
+        match albums {
+            Ok(albums) => rsx! {
+                AlbumTable { albums: albums }
+            },
+            Err(err) => rsx! {
+                span { "{err}" }
+            },
+        }
+    }
+}
+
+// AlbumDetail elements
+//
+// these are almost exactly the same as GalleryList, except that they call
+// a different api call so as to restrict the results to a particular album
+//
+// the bar pulls double duty as both a search and status bar, but the body
+// calls the same fundamental structure (even though the internals differ)
+#[derive(Clone, PartialEq, Props)]
+struct AlbumDetailBarProps {
+    media_search_signal: Signal<String>,
+    album_uuid: AlbumUuid,
+    status: String,
+}
+
+#[component]
+fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
+    let mut media_search_signal = props.media_search_signal;
+    let album_uuid = props.album_uuid;
+    let status = props.status;
+
+    let album_future = use_resource(move || async move {
+        get_album(&GetAlbumReq {
+            album_uuid: album_uuid,
+        })
+        .await
+    });
+
+    let album = &*album_future.read();
+
+    let album_result = match album {
+        Some(Ok(result)) => result.album.clone(),
+        _ => {
+            return rsx! {
+                div { class: "subnav",
+                    span { "error fetching {album_uuid}" }
+                }
+            }
+        }
+    };
+
+    rsx! {
+        div {
+            style { "{style::SUBNAV}" }
+            div { class: "subnav",
+                span { "Album: {album_result.name}" }
+                span { "Owner: {album_result.uid}" }
+                span { "Group: {album_result.gid}" }
+                span { "MISSING: delete album modal, update album modal" }
+            }
+        }
+        div {
+            style { "{style::SUBNAV}" }
+            div { class: "subnav",
+                form {
+                    onsubmit: move |event| async move {
+                        let filter = match event.values().get("search_filter") {
+                            Some(val) => val.as_value(),
+                            None => String::from(""),
+                        };
+                        media_search_signal.set(filter.clone());
+                        set_local_storage(MEDIA_SEARCH_KEY, filter);
+                    },
+                    input {
+                        name: "search_filter",
+                        r#type: "text",
+                        value: "{media_search_signal()}"
+                    }
+                    input { r#type: "submit", value: "Search" }
+                }
+                span { "Search History" }
+                span { "{status}" }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct AlbumDetailProps {
+    // this is a String because we get it from the Router
+    album_uuid: String,
+}
+
+#[component]
+pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
+    let album_uuid = match props.album_uuid.parse::<AlbumUuid>() {
+        Ok(uuid) => uuid,
+        Err(_) => {
+            return rsx! {
+                span { "failed to convert album_uuid" }
+            }
+        }
+    };
+
+    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+
+    let media_future = use_resource(move || async move {
         let filter = media_search_signal();
 
         search_media_in_album(&SearchMediaInAlbumReq {
@@ -191,48 +205,38 @@ pub fn Albums() -> Element {
         .await
     });
 
-    let (media, media_status) = match &*media_future.read() {
+    let (media, status) = match &*media_future.read() {
         Some(Ok(resp)) => (
             Ok(resp.media.clone()),
             format!("Found {} results", resp.media.len()),
         ),
         Some(Err(err)) => (
             Err(err.to_string()),
-            String::from("Error from search_media_in_album"),
+            String::from("Error from search_media"),
         ),
         None => (
-            Err(String::from(
-                "Still waiting on search_media_in_album future...",
-            )),
+            Err(String::from("Still waiting on search_media future...")),
             String::from(""),
         ),
     };
 
-    rsx! {
-        AlbumNavBar {
-            album_view_signal: album_view_signal,
-            album_search_signal: album_search_signal,
-            media_search_signal: media_search_signal,
-            status: (album_status, media_status),
-        }
+    rsx!(
+        AlbumDetailBar { media_search_signal, album_uuid, status }
 
-        match album_view_signal() {
-            AlbumView::AlbumList => match albums {
-                Ok(albums) => rsx! {
-                    AlbumList { album_view_signal: album_view_signal, albums: albums }
-                },
-                Err(err) => rsx! {
-                    span { "{err}" }
-                },
+        match media {
+            Ok(media) => rsx! {
+                MediaGrid {media: media }
             },
-            AlbumView::MediaList(_) => match media {
-                Ok(media) => rsx! {
-                    MediaGrid { media: media}
-                },
-                Err(err) => rsx! {
-                    span { "{err}" }
-                },
+            Err(err) => rsx! {
+                span { "{err}" }
             },
         }
+    )
+}
+
+#[component]
+pub fn Albums() -> Element {
+    rsx! {
+        Outlet::<Route> {}
     }
 }

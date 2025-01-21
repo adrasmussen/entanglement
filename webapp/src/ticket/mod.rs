@@ -34,56 +34,46 @@ fn TicketNavBar(props: TicketNavBarProps) -> Element {
     rsx! {
         div {
             style { "{style::SUBNAV}" }
-            div {
-                class: "subnav",
+            div { class: "subnav",
                 form {
                     onsubmit: move |event| {
                         let filter = match event.values().get("search_filter") {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-
                         let resolved = match event.values().get("resolved") {
-                            Some(val) => match val.as_value().as_str() {
-                                "true" => true,
-                                _ => false,
-                            },
+                            Some(val) => {
+                                match val.as_value().as_str() {
+                                    "true" => true,
+                                    _ => false,
+                                }
+                            }
                             None => false,
                         };
-
                         let search = StoredTicketSearch {
                             filter: filter,
                             resolved: resolved,
                         };
-
                         ticket_search_signal.set(search.clone());
-
                         set_local_storage(TICKET_SEARCH_KEY, search)
                     },
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{ticket_search_signal().filter}",
-
-                    },
-                    label {
-                        r#for: "resolved",
-                        "Resolved"
-                    },
+                        value: "{ticket_search_signal().filter}"
+                    }
+                    label { r#for: "resolved", "Resolved" }
                     input {
                         id: "resolved",
                         name: "resolved",
                         r#type: "checkbox",
                         checked: ticket_search_signal().resolved,
-                        value: "true",
-                    },
-                    input {
-                        r#type: "submit",
-                        value: "Search",
-                    },
-                },
-                span { "Search History" },
-                span { "{status}" },
+                        value: "true"
+                    }
+                    input { r#type: "submit", value: "Search" }
+                }
+                span { "Search History" }
+                span { "{status}" }
             }
         }
     }
@@ -121,7 +111,7 @@ pub fn Tickets() -> Element {
     };
 
     rsx! {
-        TicketNavBar { ticket_search_signal: ticket_search_signal, status: status}
+        TicketNavBar { ticket_search_signal, status }
         ModalBox { stack_signal: modal_stack_signal }
 
         match tickets {

@@ -16,7 +16,7 @@ pub fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
 
     let media_uuid = match view_media_signal() {
         Some(val) => val,
-        None => return rsx! {},
+        None => return rsx! {  },
     };
 
     let media = use_resource(move || async move {
@@ -36,8 +36,7 @@ pub fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
 
     rsx! {
         style { "{style::SIDEPANEL}" }
-        div {
-            class: "sidepanel",
+        div { class: "sidepanel",
 
             match result {
                 Some(result) => rsx!{
@@ -53,7 +52,7 @@ pub fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
                     }
                 },
                 None => rsx! {}
-        }
+            }
         }
     }
 }

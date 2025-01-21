@@ -34,15 +34,14 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
     rsx! {
         div {
             style { "{style::MODAL}" }
-            div {
-                class: "modal",
-                div {
-                    class: "modal-content",
-                    div {
-                        class: "modal-header",
+            div { class: "modal",
+                div { class: "modal-content",
+                    div { class: "modal-header",
                         span {
                             class: "close",
-                            onclick: move |_| {stack_signal.pop();},
+                            onclick: move |_| {
+                                stack_signal.pop();
+                            },
                             "X"
                         }
                     }
@@ -72,8 +71,7 @@ struct ModalErrProps {
 #[component]
 fn ModalErr(props: ModalErrProps) -> Element {
     rsx! {
-        div {
-            class: "modal-body",
+        div { class: "modal-body",
             span { "{props.err}" }
         }
     }

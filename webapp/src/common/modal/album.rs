@@ -30,17 +30,15 @@ pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
     };
 
     rsx! {
-        div {
-            class: "modal-body",
+        div { class: "modal-body",
             div {
-                form {
-                    class: "modal-info",
+                form { class: "modal-info",
 
                     label { "Creator" }
                     span { "{album.uid}" }
 
                     label { "Group" }
-                    span { "{album.gid}"}
+                    span { "{album.gid}" }
 
                     label { "Name" }
                     span { "{album.metadata.name}" }
@@ -49,16 +47,12 @@ pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
                     span { "{album.metadata.note}" }
                 }
             }
-            div {
-                grid_column: "2",
+            div { grid_column: "2",
 
-                button {
-                    "Delete album"
-                }
+                button { "Delete album" }
             }
         }
-        div {
-            class: "modal-footer",
+        div { class: "modal-footer",
             span { "{status_signal()}" }
         }
     }
@@ -76,78 +70,62 @@ pub fn CreateAlbumBox(props: CreateAlbumBoxProps) -> Element {
     let status_signal = use_signal(|| String::from(""));
 
     rsx! {
-        div {
-            class: "modal-body",
+        div { class: "modal-body",
             div {
                 form {
                     class: "modal-info",
 
                     onsubmit: move |event| async move {
                         let mut status_signal = status_signal;
-
                         let gid = match event.values().get("gid") {
                             Some(val) => val.as_value(),
                             None => {
-                                status_signal.set(String::from("Error creating album: group is required"));
-                                return
+                                status_signal
+                                    .set(String::from("Error creating album: group is required"));
+                                return;
                             }
                         };
-
                         let name = match event.values().get("name") {
                             Some(val) => val.as_value(),
                             None => {
-                                status_signal.set(String::from("Error creating album: name is required"));
-                                return
+                                status_signal
+                                    .set(String::from("Error creating album: name is required"));
+                                return;
                             }
                         };
-
                         let note = match event.values().get("note") {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-
-                        let result = match create_album(&CreateAlbumReq {
-                            gid: gid,
-                            name: name,
-                            note: note,
-                        }).await {
+                        let result = match create_album(
+                                &CreateAlbumReq {
+                                    gid: gid,
+                                    name: name,
+                                    note: note,
+                                },
+                            )
+                            .await
+                        {
                             Ok(_) => String::from("Album created successfully"),
                             Err(err) => format!("Error creating album: {}", err.to_string()),
                         };
-
                         status_signal.set(result)
                     },
 
                     label { "Group" }
-                    input {
-                        name: "gid",
-                        r#type: "text",
-                        value: "",
-                    }
+                    input { name: "gid", r#type: "text", value: "" }
 
                     label { "Name" }
-                    input {
-                        name: "name",
-                        r#type: "text",
-                        value: "",
-                    }
+                    input { name: "name", r#type: "text", value: "" }
 
                     label { "Note" }
-                    textarea {
-                        name: "note",
-                        rows: "8",
-                        value: ""
-                    },
+                    textarea { name: "note", rows: "8", value: "" }
 
-                    input {
-                        r#type: "submit",
-                        value: "Create album",
-                    }
+                    input { r#type: "submit", value: "Create album" }
                 }
             }
         }
-        div {
-            class: "modal-footer",
+        div { class: "modal-footer",
             span { "{status_signal()}" }
         }
     }

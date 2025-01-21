@@ -7,12 +7,8 @@ use crate::{
 };
 use common::api::media::*;
 
-// MediaTile and MediaGrid
-//
-// used by the GalleryList element as the output of its search result
-//
-// this is very closely copied elsewhere, but it is not obvious how
-// to properly abstract the tiles when their internals are changing
+// we can probably eliminate this with a prop for album_callback
+
 #[derive(Clone, PartialEq, Props)]
 struct MediaTileProps {
     media_uuid: MediaUuid,

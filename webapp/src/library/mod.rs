@@ -68,8 +68,7 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
     rsx! {
         div {
             style { "{style::SUBNAV}" }
-            div {
-                class: "subnav",
+            div { class: "subnav",
                 match library_view_signal() {
                     LibraryView::LibraryList => rsx! {
                         form {
@@ -78,16 +77,16 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
                                     Some(val) => val.as_value(),
                                     None => String::from(""),
                                 };
-
+                
                                 library_search_signal.set(filter.clone());
-
+                
                                 set_local_storage(LIBRARY_SEARCH_KEY, filter);
                             },
                             input {
                                 name: "search_filter",
                                 r#type: "text",
                                 value: "{library_search_signal()}",
-
+                
                             },
                             input {
                                 r#type: "submit",
@@ -100,12 +99,12 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
                     },
                     LibraryView::MediaList(_) => {
                         let library = &*library.read();
-
+                
                         let library_path = match library.clone().flatten() {
                             Some(val) => val.path,
                             None => String::from("still waiting on get_library future...")
                         };
-
+                
                         rsx! {
                             form {
                                 onsubmit: move |event| async move {
@@ -113,7 +112,7 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
                                         Some(val) => val.as_value(),
                                         None => String::from(""),
                                     };
-
+                
                                     let hidden = match event.values().get("hideen") {
                                         Some(val) => match val.as_value().as_str() {
                                             "true" => true,
@@ -121,21 +120,21 @@ fn LibraryNavBar(props: LibraryNavBarProps) -> Element {
                                         },
                                         None => false,
                                     };
-
+                
                                     let search = StoredLibraryMediaSearch {
                                         filter: filter,
                                         hidden: hidden,
                                     };
-
+                
                                     media_search_signal.set(search.clone());
-
+                
                                     set_local_storage(MEDIA_SEARCH_KEY, search);
                                 },
                                 input {
                                     name: "media_search_filter",
                                     r#type: "text",
                                     value: "{media_search_signal().filter}",
-
+                
                                 },
                                 label {
                                     r#for: "hidden",
@@ -236,10 +235,10 @@ pub fn Libraries() -> Element {
 
     rsx! {
         LibraryNavBar {
-            library_view_signal: library_view_signal,
-            library_search_signal: library_search_signal,
-            media_search_signal: media_search_signal,
-            status: (library_status, media_status),
+            library_view_signal,
+            library_search_signal,
+            media_search_signal,
+            status: (library_status, media_status)
         }
 
         match library_view_signal() {

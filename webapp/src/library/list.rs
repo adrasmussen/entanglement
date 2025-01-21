@@ -27,16 +27,15 @@ fn LibraryListEntry(props: LibraryListEntryProps) -> Element {
     // this should throw a more informative error
     let result = match library {
         Some(Ok(result)) => result.library.clone(),
-        _ => return rsx! {}
+        _ => return rsx! {  }
     };
 
     rsx! {
-            tr {
-                onclick: move |_| { library_view_signal.set(LibraryView::MediaList(library_uuid)) },
-                td { "{result.path}" }
-                td { "{result.gid}" }
-                td { "{result.metadata.file_count} files, last scan {result.metadata.last_scan}" }
-            }
+        tr { onclick: move |_| { library_view_signal.set(LibraryView::MediaList(library_uuid)) },
+            td { "{result.path}" }
+            td { "{result.gid}" }
+            td { "{result.metadata.file_count} files, last scan {result.metadata.last_scan}" }
+        }
     }
 }
 
@@ -51,17 +50,17 @@ pub fn LibraryList(props: LibaryListProps) -> Element {
     rsx! {
         div {
             style { "{style::TABLE}" }
-                table {
-                    tr {
-                        th { "Path" }
-                        th { "Group" }
-                        th { "Scan status" }
-                    }
-
-                    for library_uuid in props.libraries.iter() {
-                        LibraryListEntry { library_view_signal: props.library_view_signal, library_uuid: *library_uuid }
-                    }
+            table {
+                tr {
+                    th { "Path" }
+                    th { "Group" }
+                    th { "Scan status" }
                 }
+
+                for library_uuid in props.libraries.iter() {
+                    LibraryListEntry { library_view_signal: props.library_view_signal, library_uuid: *library_uuid }
+                }
+            }
         }
     }
 }

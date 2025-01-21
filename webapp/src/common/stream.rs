@@ -1,9 +1,11 @@
-use api::media::MediaUuid;
+use common::api::{THUMBNAIL_PATH, media::MediaUuid};
 
+// note -- find a way to pull the build data in here,
+// since these technically need to match the api server
 pub fn full_link(media_uuid: MediaUuid) -> String {
-    format!("/entanglement/media/full/{media_uuid}")
+    format!("/entanglement/media/{media_uuid}")
 }
 
 pub fn thumbnail_link(media_uuid: MediaUuid) -> String {
-    format!("/entanglement/media/thumbnails/{media_uuid}")
+    format!("/entanglement/media/{THUMBNAIL_PATH}/{media_uuid}")
 }

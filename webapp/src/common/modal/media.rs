@@ -35,112 +35,100 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
     };
 
     rsx! {
-        div {
-            class: "modal-body",
+        div { class: "modal-body",
             div {
-                img {
-                    src: full_link(media_uuid),
-                }
+                img { src: full_link(media_uuid) }
             }
             div {
                 form {
                     class: "modal-info",
                     onsubmit: move |event| async move {
                         let mut status_signal = status_signal;
-
                         let date = match event.values().get("date") {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-
                         let note = match event.values().get("note") {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-
-                        let result = match update_media(&UpdateMediaReq {
-                            media_uuid: media_uuid.clone(),
-                            change: MediaMetadata {
-                                date: date,
-                                note: note,
-                            }
-                        }).await {
+                        let result = match update_media(
+                                &UpdateMediaReq {
+                                    media_uuid: media_uuid.clone(),
+                                    change: MediaMetadata {
+                                        date: date,
+                                        note: note,
+                                    },
+                                },
+                            )
+                            .await
+                        {
                             Ok(_) => String::from("Metadata updated successfully"),
                             Err(err) => format!("Error updating metadata: {}", err.to_string()),
                         };
-
                         status_signal.set(result)
                     },
 
-                    label { "Library" },
-                    span { "{media.library_uuid}" },
+                    label { "Library" }
+                    span { "{media.library_uuid}" }
 
-                    label { "Path" },
-                    span { "{media.path}" },
+                    label { "Path" }
+                    span { "{media.path}" }
 
-                    label { "Hidden" },
-                    span { "{media.hidden}" },
+                    label { "Hidden" }
+                    span { "{media.hidden}" }
 
-                    label { "Date" },
+                    label { "Date" }
                     input {
                         name: "date",
                         r#type: "text",
                         value: "{media.metadata.date}"
-                    },
+                    }
 
-                    label { "Note" },
+                    label { "Note" }
                     textarea {
                         name: "note",
                         rows: "8",
                         value: "{media.metadata.note}"
-                    },
-
-                    input {
-                        r#type: "submit",
-                        value: "Update metadata",
                     }
 
-                    div {
-                        grid_column: "2",
+                    input { r#type: "submit", value: "Update metadata" }
+
+                    div { grid_column: "2",
 
                         button {
                             onclick: move |_| {
                                 let mut stack_signal = stack_signal;
-
                                 stack_signal.push(Modal::CreateTicket(media_uuid))
                             },
                             r#type: "button",
                             "Create ticket"
                         }
-                        button {
-                            onclick: move |_| {},
-                            r#type: "button",
-                            "Albums"
-                        }
+                        button { onclick: move |_| {}, r#type: "button", "Albums" }
                         button {
                             onclick: move |_| async move {
                                 let mut status_signal = status_signal;
-
-                                let result = match set_media_hidden(&SetMediaHiddenReq {
-                                    media_uuid: media_uuid,
-                                    hidden: !media.hidden,
-                                }).await {
+                                let result = match set_media_hidden(
+                                        &SetMediaHiddenReq {
+                                            media_uuid: media_uuid,
+                                            hidden: !media.hidden,
+                                        },
+                                    )
+                                    .await
+                                {
                                     Ok(_) => String::from("Hidden state updated successfully"),
                                     Err(err) => format!("Error updating hidden state: {}", err.to_string()),
-
                                 };
-
                                 status_signal.set(result);
                             },
                             r#type: "button",
                             "Toggle Hidden"
                         }
                     }
-                },
+                }
             }
         }
-        div {
-            class: "modal-footer",
+        div { class: "modal-footer",
             span { "{status_signal()}" }
         }
     }

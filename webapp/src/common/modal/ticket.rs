@@ -33,41 +33,37 @@ pub fn ShowTicketBox(props: ShowTicketBoxProps) -> Element {
     let media_uuid = ticket.media_uuid.clone();
 
     rsx! {
-        div {
-            class: "modal-body",
+        div { class: "modal-body",
             div {
                 img {
                     onclick: move |_| { stack_signal.push(Modal::ShowMedia(media_uuid)) },
 
-                    src: full_link(media_uuid),
+                    src: full_link(media_uuid)
                 }
             }
             div {
-                form {
-                    class: "modal-info",
+                form { class: "modal-info",
 
-                    label { "Media" },
-                    span { "{ticket.media_uuid}" },
+                    label { "Media" }
+                    span { "{ticket.media_uuid}" }
 
-                    label { "Creator" },
-                    span { "{ticket.uid}" },
+                    label { "Creator" }
+                    span { "{ticket.uid}" }
 
-                    label { "title" },
-                    span { "{ticket.title}" },
+                    label { "title" }
+                    span { "{ticket.title}" }
 
-                    label { "Timestamp" },
-                    span { "{ticket.timestamp}"}
+                    label { "Timestamp" }
+                    span { "{ticket.timestamp}" }
 
-                    label { "Resolved" },
-                    span { "{ticket.resolved}"}
-                },
+                    label { "Resolved" }
+                    span { "{ticket.resolved}" }
+                }
             }
-            div {
-                float: "bottom",
+            div { float: "bottom",
                 span { "Comments" }
 
-                div {
-                    class: "modal-info",
+                div { class: "modal-info",
 
                     for comment_uuid in comments.iter() {
                         span { "{comment_uuid}" }

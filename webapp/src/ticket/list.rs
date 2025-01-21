@@ -24,19 +24,18 @@ fn TicketListEntry(props: TicketListEntryProps) -> Element {
     // this should throw a more informative error
     let (ticket, comments) = match  &*ticket_future.read() {
         Some(Ok(resp)) => (resp.ticket.clone(), resp.comments.clone()),
-        _ => return rsx! {},
+        _ => return rsx! {  },
     };
 
     rsx! {
-            tr {
-                onclick: move |_| { modal_stack_signal.push(Modal::ShowTicket(ticket_uuid)) },
-                td { "{ticket.media_uuid}" }
-                td { "{ticket.uid}" }
-                td { "{ticket.title}" }
-                td { "{ticket.timestamp}" }
-                td { "{ticket.resolved}" }
-                td { "{comments.len()}" }
-            }
+        tr { onclick: move |_| { modal_stack_signal.push(Modal::ShowTicket(ticket_uuid)) },
+            td { "{ticket.media_uuid}" }
+            td { "{ticket.uid}" }
+            td { "{ticket.title}" }
+            td { "{ticket.timestamp}" }
+            td { "{ticket.resolved}" }
+            td { "{comments.len()}" }
+        }
     }
 }
 
