@@ -23,7 +23,10 @@ pub async fn proxy_auth(
     // attempt to unpack the auth header, returning None if we cannot convert to a str
     let auth_header = req
         .headers()
-        .get(http::header::HeaderName::from_lowercase(state.to_lowercase().as_bytes()).unwrap())
+        .get(
+            http::header::HeaderName::from_lowercase(state.to_lowercase().as_bytes())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        )
         .and_then(|header| header.to_str().ok());
 
     let auth_header = match auth_header {
