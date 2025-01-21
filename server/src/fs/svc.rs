@@ -5,6 +5,8 @@ use std::sync::Arc;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
+use common::api::library::LibraryUpdate;
+use futures::channel;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::db::msg::DbMsg;
@@ -122,19 +124,44 @@ impl ESFileService for FileScanner {
             library_uuid: library_uuid,
             library_path: PathBuf::from(library.path),
             db_svc_sender: self.db_svc_sender.clone(),
-            media_linkdir: self.config.media_linkdir.clone(),
+            media_linkdir: self.config.media_srvdir.clone(),
             job_status: job,
         });
 
         run_scan(context).await;
 
-        {
+        // TODO -- figure out how to have the post-processing steps identify if the scan stopped due to error
+        // or signal, and report appropriately
+        let count = {
             let mut running_scans = self.running_scans.write().await;
 
-            running_scans.remove(&library_uuid);
-        }
+            let count = running_scans
+                .get(&library_uuid)
+                .ok_or_else(|| anyhow::Error::msg("scan completed but job missing from manager"))?
+                .read()
+                .await
+                .file_count
+                .clone();
 
-        Ok(())
+            running_scans.remove(&library_uuid);
+
+            count
+        };
+
+        let (update_tx, update_rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .send(
+                DbMsg::UpdateLibrary {
+                    resp: update_tx,
+                    library_uuid: library_uuid,
+                    update: LibraryUpdate { count: Some(count) },
+                }
+                .into(),
+            )
+            .await?;
+
+        update_rx.await?
     }
 
     async fn scan_status(&self) -> anyhow::Result<HashMap<LibraryUuid, LibraryScanJob>> {
@@ -150,7 +177,9 @@ impl ESFileService for FileScanner {
     }
 
     async fn stop_scan(&self, library_uuid: LibraryUuid) -> anyhow::Result<()> {
-        Err(anyhow::Error::msg("not implemented"))
+        Err(anyhow::Error::msg(format!(
+            "not implemented for {library_uuid}"
+        )))
     }
 
     async fn fix_symlinks(&self) -> anyhow::Result<()> {
@@ -174,7 +203,7 @@ impl ESInner for FileScanner {
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
         match esm {
             ESM::Fs(message) => match message {
-                FsMsg::Status { resp } => {
+                FsMsg::_Status { resp } => {
                     self.respond(resp, async { Err(anyhow::Error::msg("not implemented")) })
                         .await
                 }

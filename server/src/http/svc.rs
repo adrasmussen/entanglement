@@ -475,7 +475,7 @@ async fn stream_media(
     }
 
     // we only ever serve out of the linking directory, since we control its organization
-    let filename = state.config.media_linkdir.join(dir).join(media_uuid);
+    let filename = state.config.media_srvdir.join(dir).join(media_uuid);
 
     let file_handle = match tokio::fs::File::open(filename).await {
         Ok(f) => f,

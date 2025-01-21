@@ -3,6 +3,9 @@ pub mod comment;
 pub mod library;
 pub mod media;
 
+pub const THUMBNAIL_PATH: &str = "thumbnails";
+pub const SLICE_PATH: &str = "slices";
+
 #[macro_export]
 macro_rules! endpoint {
     ($name:ident) => {

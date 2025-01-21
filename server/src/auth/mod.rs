@@ -12,16 +12,6 @@ use crate::service::*;
 pub mod msg;
 pub mod svc;
 
-pub fn get_admin_groups() -> HashSet<String> {
-    HashSet::from([String::from("admins")])
-}
-
-#[derive(Debug)]
-pub enum AuthType {
-    _ProxyHeader,
-    _LDAP,
-}
-
 #[async_trait]
 trait ESAuthService: ESInner {
     // cache management

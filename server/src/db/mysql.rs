@@ -35,16 +35,6 @@ impl MySQLState {
 
         rx.await?
     }
-
-    async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.auth_svc_sender
-            .send(AuthMsg::ClearUserCache { resp: tx, uid: uid }.into())
-            .await?;
-
-        rx.await?
-    }
 }
 
 // database RPC handler functions

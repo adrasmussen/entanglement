@@ -19,7 +19,7 @@ pub struct CurrentUser {
 }
 
 pub async fn proxy_auth(
-    State(state): State<Arc<HttpEndpoint>>,
+    State(_state): State<Arc<HttpEndpoint>>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
@@ -46,7 +46,7 @@ pub async fn proxy_auth(
 }
 
 async fn _password_auth(
-    State(state): State<Arc<HttpEndpoint>>,
+    State(_state): State<Arc<HttpEndpoint>>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {

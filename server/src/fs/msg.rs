@@ -5,7 +5,7 @@ use common::api::library::{LibraryScanJob, LibraryUuid};
 
 #[derive(Debug)]
 pub enum FsMsg {
-    Status {
+    _Status {
         resp: ESMResp<()>,
     },
     ScanLibrary {

@@ -20,5 +20,5 @@ pub struct ESConfig {
     // user, password, host, port, and database
     pub mysql_url: String,
     pub media_srcdir: PathBuf,
-    pub media_linkdir: PathBuf,
+    pub media_srvdir: PathBuf,
 }
