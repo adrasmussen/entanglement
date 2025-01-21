@@ -24,8 +24,9 @@ async fn main() -> anyhow::Result<()> {
 
     // temporary dummy configuration -- this will eventually come from a parser
     let config = Arc::new(ESConfig {
-        auth_admin_groups: HashSet::from([String::from("admin")]),
-        auth_yaml_groups: Some(String::from(
+        authn_proxy_header: Some(String::from("proxy-user")),
+        authz_admin_groups: HashSet::from([String::from("admin")]),
+        authz_yaml_groups: Some(String::from(
             "/srv/home/alex/workspace/entanglement/dev/groups.yml",
         )),
         http_socket: String::from("[::]:8080"),

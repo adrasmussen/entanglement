@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
+use common::auth::yamlfile::YamlGroupFile;
 use tokio::sync::{Mutex, RwLock};
 
 use common::{
@@ -387,8 +388,21 @@ impl EntanglementService for AuthService {
     }
 
     async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
-        let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(AuthCache::new(self.config.clone(), senders.clone())?);
+        let config = self.config.clone();
+        let receiver = self.receiver.clone();
+        let state = Arc::new(AuthCache::new(config.clone(), senders.clone())?);
+
+        // determine authn/authz providers from the config file
+        //
+        // each provider is tied to a particular field that, if set, means that we should try
+        // to connect to that provider.  connect() may use other parts of the config struct
+        match config.authz_yaml_groups {
+            None => {}
+            Some(_) => {
+                state.add_authz_provider(YamlGroupFile::connect(config.clone()).await?).await?;
+            }
+        }
+
 
         // for the first pass, we don't need any further machinery for this service
         //

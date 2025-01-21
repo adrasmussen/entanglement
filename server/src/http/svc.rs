@@ -244,13 +244,15 @@ impl HttpEndpoint {
         //
         // the fallback here is a bit weird, we need to be careful that it redirects properly with
         // the app router's own fallback
+        //
+        // TODO -- generalize the auth middleware correctly
         let router = Router::new()
             .nest(&format!("{app_url_root}/app"), app_router)
             .nest(&format!("{app_url_root}/media"), media_router)
             .nest(&format!("{app_url_root}/api"), api_router)
             .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
-            .route_layer(middleware::from_fn_with_state(state.clone(), proxy_auth));
+            .route_layer(middleware::from_fn_with_state(config.authn_proxy_header.clone().unwrap(), proxy_auth));
 
         // everything from here follows the normal hyper/axum on tokio setup
         let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
@@ -1114,7 +1116,7 @@ async fn get_library_scan(
     let uid = current_user.uid.clone();
 
     if !state
-        .is_group_member(&uid, state.config.auth_admin_groups.clone())
+        .is_group_member(&uid, state.config.authz_admin_groups.clone())
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -1141,7 +1143,7 @@ async fn stop_library_scan(
     let uid = current_user.uid.clone();
 
     if !state
-        .is_group_member(&uid, state.config.auth_admin_groups.clone())
+        .is_group_member(&uid, state.config.authz_admin_groups.clone())
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());

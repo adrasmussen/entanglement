@@ -54,19 +54,19 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
 }
 
 pub fn subdir_exists(config: Arc<ESConfig>, subdir: &str) -> anyhow::Result<()> {
-    let thumbnail_path = PathBuf::from(subdir);
+    let subdir = PathBuf::from(subdir);
 
-    if thumbnail_path.is_absolute() {
+    if subdir.is_absolute() {
         return Err(anyhow::Error::msg(format!(
-            "INTERNAL ERROR: constant {subdir} is an absolute path",
+            "INTERNAL ERROR: constant {subdir:?} is an absolute path",
         )));
     }
 
-    let thumbnail_path = PathBuf::from(&config.media_srvdir).join(thumbnail_path);
+    let full_subdir = config.media_srvdir.join(subdir);
 
-    if !exists(&thumbnail_path)? {
-        create_dir(&thumbnail_path)?;
+    if !exists(&full_subdir)? {
+        create_dir(&full_subdir)?;
     }
 
-    Ok(())
+    create_temp_file(&full_subdir)
 }

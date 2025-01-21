@@ -23,7 +23,7 @@ impl AuthzBackend for YamlGroupFile {
     {
         let filename = PathBuf::from(
             config
-                .auth_yaml_groups
+                .authz_yaml_groups
                 .clone()
                 .ok_or_else(|| anyhow::Error::msg("invalid group yaml filename"))?,
         );

@@ -6,7 +6,6 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use common::api::library::LibraryUpdate;
-use futures::channel;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::db::msg::DbMsg;

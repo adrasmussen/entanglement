@@ -9,9 +9,6 @@ use axum::{
 
 use crate::http::svc::HttpEndpoint;
 
-// the header set by the reverse proxy that we will implicitly trust
-const PROXY_AUTH_HEADER: &str = "proxy-user";
-
 // user auth information passed in from middleware to the axum extractors
 #[derive(Clone)]
 pub struct CurrentUser {
@@ -19,14 +16,14 @@ pub struct CurrentUser {
 }
 
 pub async fn proxy_auth(
-    State(_state): State<Arc<HttpEndpoint>>,
+    State(state): State<String>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     // attempt to unpack the auth header, returning None if we cannot convert to a str
     let auth_header = req
         .headers()
-        .get(http::header::HeaderName::from_static(PROXY_AUTH_HEADER))
+        .get(http::header::HeaderName::from_lowercase(state.to_lowercase().as_bytes()).unwrap())
         .and_then(|header| header.to_str().ok());
 
     let auth_header = match auth_header {
@@ -83,14 +80,3 @@ async fn _password_auth(
 async fn _authorize(_auth_token: &str) -> anyhow::Result<CurrentUser> {
     Err(anyhow::Error::msg("not implemented"))
 }
-
-// async fn handler(
-//     // extract the current user, set by the middleware
-//     Extension(current_user): Extension<CurrentUser>,
-// ) {
-//     // ...
-// }
-
-// let app = Router::new()
-//     .route("/", get(handler))
-//     .route_layer(middleware::from_fn(auth));

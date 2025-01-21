@@ -2,11 +2,14 @@ use std::{collections::HashSet, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub struct ESConfig {
-    // set of groups with admin powers
-    pub auth_admin_groups: HashSet<String>,
+    // header set by reverse proxy
+    pub authn_proxy_header: Option<String>,
 
-    // optional file to define groups
-    pub auth_yaml_groups: Option<String>,
+    // set of groups with admin powers
+    pub authz_admin_groups: HashSet<String>,
+
+    // file to define group membership, but not passwords
+    pub authz_yaml_groups: Option<String>,
 
     // ip and port for http server
     pub http_socket: String,
@@ -19,6 +22,13 @@ pub struct ESConfig {
 
     // user, password, host, port, and database
     pub mysql_url: String,
+
+    // read-only source path where media can be located
+    //
+    // libraries should be subfolders of this path
     pub media_srcdir: PathBuf,
+
+    // read-write path where symlinks are created, as
+    // well as subfolders for thumbnails and slices
     pub media_srvdir: PathBuf,
 }
