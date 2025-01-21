@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
+use common::auth::proxy::ProxyAuth;
 use common::auth::yamlfile::YamlGroupFile;
 use tokio::sync::{Mutex, RwLock};
 
@@ -396,13 +397,19 @@ impl EntanglementService for AuthService {
         //
         // each provider is tied to a particular field that, if set, means that we should try
         // to connect to that provider.  connect() may use other parts of the config struct
+        match config.authn_proxy_header {
+            None => {}
+            Some(_) => {
+                state.add_authn_provider(ProxyAuth::connect(config.clone()).await?).await?;
+            }
+        }
+
         match config.authz_yaml_groups {
             None => {}
             Some(_) => {
                 state.add_authz_provider(YamlGroupFile::connect(config.clone()).await?).await?;
             }
         }
-
 
         // for the first pass, we don't need any further machinery for this service
         //

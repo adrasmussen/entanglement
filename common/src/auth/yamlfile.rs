@@ -11,7 +11,6 @@ use crate::config::ESConfig;
 
 // group: members
 pub struct YamlGroupFile {
-    filename: PathBuf,
     data: HashMap<String, HashSet<String>>,
 }
 
@@ -73,7 +72,6 @@ impl AuthzBackend for YamlGroupFile {
         }
 
         Ok(YamlGroupFile {
-            filename: filename,
             data: data,
         })
     }
