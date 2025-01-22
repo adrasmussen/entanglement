@@ -16,20 +16,8 @@ use gallery::{Gallery, GalleryList, GalleryDetail};
 mod album;
 use album::{Albums, AlbumList, AlbumDetail};
 
-mod ticket;
-use ticket::Tickets;
-
 mod library;
 use library::Libraries;
-
-mod settings;
-use settings::Settings;
-
-mod status;
-use status::Status;
-
-mod admin;
-use admin::Admin;
 
 fn main() {
     // Init logger
@@ -68,14 +56,6 @@ enum Route {
         #[end_nest]
         #[route("/library")]
         Libraries {},
-        #[route("/tickets")]
-        Tickets {},
-        #[route("/settings")]
-        Settings {},
-        #[route("/status")]
-        Status {},
-        #[route("/admin")]
-        Admin {},
 }
 
 #[component]
@@ -110,10 +90,6 @@ fn NavBar() -> Element {
                 NavBarButton { target: Route::GalleryList {}, text: "Gallery" }
                 NavBarButton { target: Route::AlbumList {}, text: "Albums" }
                 NavBarButton { target: Route::Libraries {}, text: "Libraries" }
-                NavBarButton { target: Route::Tickets {}, text: "Tickets" }
-                NavBarButton { target: Route::Settings {}, text: "Settings" }
-                NavBarButton { target: Route::Status {}, text: "Status" }
-                NavBarButton { target: Route::Admin {}, text: "Admin" }
             }
         }
         Outlet::<Route> {}
