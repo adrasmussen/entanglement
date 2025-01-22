@@ -14,6 +14,66 @@ use common::{
     config::ESConfig,
 };
 
+// mysql database backend
+//
+// initially, the choice to roll a manual ORM was due to diesel async having spotty support
+// and a desire to see what is going on under the hood
+//
+// needless to say, everything about this is terrible
+pub struct MySQLService {
+    config: Arc<ESConfig>,
+    receiver: Arc<Mutex<ESMReceiver>>,
+    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+}
+
+#[async_trait]
+impl EntanglementService for MySQLService {
+    type Inner = MySQLState;
+
+    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+
+        sender_map.insert(ServiceType::Db, tx);
+
+        MySQLService {
+            config: config.clone(),
+            receiver: Arc::new(Mutex::new(rx)),
+            handle: AsyncCell::new(),
+        }
+    }
+
+    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+        // falliable stuff can happen here
+
+        let receiver = Arc::clone(&self.receiver);
+        let state = Arc::new(MySQLState::new(self.config.clone(), senders.clone())?);
+
+        let serve = {
+            async move {
+                let mut receiver = receiver.lock().await;
+
+                while let Some(msg) = receiver.recv().await {
+                    let state = Arc::clone(&state);
+                    tokio::task::spawn(async move {
+                        match state.message_handler(msg).await {
+                            Ok(()) => (),
+                            Err(_) => println!("mysql_service failed to reply to message"),
+                        }
+                    });
+                }
+
+                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+            }
+        };
+
+        let handle = tokio::task::spawn(serve);
+
+        self.handle.set(handle);
+
+        Ok(())
+    }
+}
+
 pub struct MySQLState {
     auth_svc_sender: ESMSender,
     pool: Pool,
@@ -330,57 +390,5 @@ impl ESInner for MySQLState {
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
-    }
-}
-
-pub struct MySQLService {
-    config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
-    handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-}
-
-#[async_trait]
-impl EntanglementService for MySQLService {
-    type Inner = MySQLState;
-
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
-
-        sender_map.insert(ServiceType::Db, tx);
-
-        MySQLService {
-            config: config.clone(),
-            receiver: Arc::new(Mutex::new(rx)),
-            handle: AsyncCell::new(),
-        }
-    }
-
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
-        // falliable stuff can happen here
-
-        let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MySQLState::new(self.config.clone(), senders.clone())?);
-
-        let serve = {
-            async move {
-                while let Some(msg) = receiver.lock().await.recv().await {
-                    let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
-                        match state.message_handler(msg).await {
-                            Ok(()) => (),
-                            Err(_) => println!("mysql_service failed to reply to message"),
-                        }
-                    });
-                }
-
-                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
-            }
-        };
-
-        let handle = tokio::task::spawn(serve);
-
-        self.handle.set(handle);
-
-        Ok(())
     }
 }

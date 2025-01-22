@@ -20,6 +20,8 @@ impl AuthnBackend for ProxyAuth {
         Ok(true)
     }
 
+    // in reality, this should somehow communicate with the proxy layer to check if a user has
+    // previously logged on
     async fn is_valid_user(&self, _uid: String) -> anyhow::Result<bool> {
         Ok(true)
     }

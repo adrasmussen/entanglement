@@ -99,7 +99,9 @@ impl EntanglementService for HttpService {
 
         let msg_serve = {
             async move {
-                while let Some(msg) = receiver.lock().await.recv().await {
+                let mut receiver = receiver.lock().await;
+
+                while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
@@ -251,7 +253,10 @@ impl HttpEndpoint {
             .nest(&format!("{app_url_root}/api"), api_router)
             .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
-            .route_layer(middleware::from_fn_with_state(config.authn_proxy_header.clone().unwrap(), proxy_auth));
+            .route_layer(middleware::from_fn_with_state(
+                config.authn_proxy_header.clone().unwrap(),
+                proxy_auth,
+            ));
 
         // everything from here follows the normal hyper/axum on tokio setup
         let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {

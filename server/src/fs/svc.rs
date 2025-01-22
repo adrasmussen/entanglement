@@ -50,7 +50,9 @@ impl EntanglementService for FileService {
 
         let serve = {
             async move {
-                while let Some(msg) = receiver.lock().await.recv().await {
+                let mut receiver = receiver.lock().await;
+
+                while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
@@ -60,7 +62,7 @@ impl EntanglementService for FileService {
                     });
                 }
 
-                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+                Err(anyhow::Error::msg(format!("channel disconnected")))
             }
         };
 
