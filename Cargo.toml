@@ -1,6 +1,6 @@
 [workspace]
 
-members = [ "api", "common",
+members = [ "common",
     "server",
     "webapp",
 ]
