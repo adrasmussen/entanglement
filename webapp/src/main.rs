@@ -11,7 +11,7 @@ mod home;
 use home::Home;
 
 mod gallery;
-use gallery::{Gallery, GalleryList, GalleryDetail};
+use gallery::{Gallery, GallerySearch, GalleryDetail};
 
 mod album;
 use album::{Albums, AlbumList, AlbumDetail};
@@ -41,7 +41,7 @@ enum Route {
         #[nest("/gallery")]
             #[layout(Gallery)]
                 #[route("/")]
-                GalleryList {},
+                GallerySearch {},
                 #[route("/:media_uuid")]
                 GalleryDetail { media_uuid: String },
             #[end_layout]
@@ -87,7 +87,7 @@ fn NavBar() -> Element {
             style { "{style::TOPNAV}" }
             div { class: "topnav",
                 Link { active_class: "active", to: Route::Home {}, "Home" }
-                NavBarButton { target: Route::GalleryList {}, text: "Gallery" }
+                NavBarButton { target: Route::GallerySearch {}, text: "Gallery" }
                 NavBarButton { target: Route::AlbumList {}, text: "Albums" }
                 NavBarButton { target: Route::Libraries {}, text: "Libraries" }
             }
