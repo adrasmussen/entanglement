@@ -1,11 +1,10 @@
 use dioxus::prelude::*;
 
-use crate::common::{storage::*, style};
+use crate::{
+    common::{storage::*, style},
+    gallery::{grid::MediaGrid, MEDIA_SEARCH_KEY},
+};
 use common::api::media::*;
-
-use super::grid::MediaGrid;
-
-const MEDIA_SEARCH_KEY: &str = "media_search";
 
 // GalleryList elements
 //

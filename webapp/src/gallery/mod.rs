@@ -11,6 +11,8 @@ pub use detail::GalleryDetail;
 mod search;
 pub use search::GallerySearch;
 
+const MEDIA_SEARCH_KEY: &str = "media_search";
+
 #[component]
 pub fn Gallery() -> Element {
     rsx! {

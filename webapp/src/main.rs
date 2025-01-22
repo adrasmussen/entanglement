@@ -14,10 +14,10 @@ mod gallery;
 use gallery::{Gallery, GallerySearch, GalleryDetail};
 
 mod album;
-use album::{Albums, AlbumList, AlbumDetail};
+use album::{Albums, AlbumSearch, AlbumDetail};
 
 mod library;
-use library::Libraries;
+use library::{Libraries, LibrarySearch, LibraryDetail};
 
 fn main() {
     // Init logger
@@ -49,13 +49,17 @@ enum Route {
         #[nest("/albums")]
             #[layout(Albums)]
                 #[route("/")]
-                AlbumList {},
+                AlbumSearch {},
                 #[route("/:album_uuid")]
                 AlbumDetail { album_uuid: String },
             #[end_layout]
         #[end_nest]
-        #[route("/library")]
-        Libraries {},
+        #[nest("/library")]
+            #[layout(Libraries)]
+                #[route("/")]
+                LibrarySearch {},
+                #[route("/:library_uuid")]
+                LibraryDetail { library_uuid: String },
 }
 
 #[component]
@@ -88,8 +92,8 @@ fn NavBar() -> Element {
             div { class: "topnav",
                 Link { active_class: "active", to: Route::Home {}, "Home" }
                 NavBarButton { target: Route::GallerySearch {}, text: "Gallery" }
-                NavBarButton { target: Route::AlbumList {}, text: "Albums" }
-                NavBarButton { target: Route::Libraries {}, text: "Libraries" }
+                NavBarButton { target: Route::AlbumSearch {}, text: "Albums" }
+                NavBarButton { target: Route::LibrarySearch {}, text: "Libraries" }
             }
         }
         Outlet::<Route> {}
