@@ -5,7 +5,7 @@ use crate::{
     common::{stream::*, style},
     Route,
 };
-use common::api::media::*;
+use api::media::*;
 
 // MediaTile and MediaGrid
 //

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use common::api::media::MediaUuid;
+use api::media::MediaUuid;
 
 use crate::service::*;
 

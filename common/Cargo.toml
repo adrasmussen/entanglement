@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+api = { path = "../api" }
 anyhow = "1.0.86"
 async-trait = "0.1.85"
 async_cell = "0.2.2"
@@ -14,4 +15,3 @@ paste = "1.0.11"
 saphyr = "0.0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.117"
-tokio = { version = "1.43.0", features = ["fs", "sync"] }

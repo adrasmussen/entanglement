@@ -4,7 +4,7 @@ use crate::{
     album::{grid::MediaGrid, MEDIA_SEARCH_KEY},
     common::{storage::*, style},
 };
-use common::api::album::*;
+use api::album::*;
 
 // AlbumDetail elements
 //

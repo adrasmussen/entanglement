@@ -2,10 +2,8 @@ use std::collections::HashSet;
 
 use async_trait::async_trait;
 
-use common::{
-    api::media::MediaUuid,
-    auth::{AuthnBackend, AuthzBackend},
-};
+use api::media::MediaUuid;
+use common::auth::{AuthnBackend, AuthzBackend};
 
 use crate::service::*;
 

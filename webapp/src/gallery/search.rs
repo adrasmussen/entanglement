@@ -4,7 +4,7 @@ use crate::{
     common::{storage::*, style},
     gallery::{grid::MediaGrid, MEDIA_SEARCH_KEY},
 };
-use common::api::media::*;
+use api::media::*;
 
 // GalleryList elements
 //

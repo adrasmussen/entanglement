@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{common::style, Route};
-use common::api::album::*;
+use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumTableRowProps {

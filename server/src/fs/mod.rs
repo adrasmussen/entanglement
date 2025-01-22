@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow;
 use async_trait::async_trait;
 
-use common::api::library::{LibraryScanJob, LibraryUuid};
+use api::library::{LibraryScanJob, LibraryUuid};
 
 use crate::service::*;
 

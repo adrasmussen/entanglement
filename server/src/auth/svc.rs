@@ -3,13 +3,11 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
-use common::auth::proxy::ProxyAuth;
-use common::auth::yamlfile::YamlGroupFile;
 use tokio::sync::{Mutex, RwLock};
 
+use api::media::MediaUuid;
 use common::{
-    api::media::MediaUuid,
-    auth::{AuthnBackend, AuthzBackend},
+    auth::{proxy::ProxyAuth, yamlfile::YamlGroupFile, AuthnBackend, AuthzBackend},
     config::ESConfig,
 };
 
@@ -62,14 +60,18 @@ impl EntanglementService for AuthService {
         match config.authn_proxy_header {
             None => {}
             Some(_) => {
-                state.add_authn_provider(ProxyAuth::connect(config.clone()).await?).await?;
+                state
+                    .add_authn_provider(ProxyAuth::connect(config.clone()).await?)
+                    .await?;
             }
         }
 
         match config.authz_yaml_groups {
             None => {}
             Some(_) => {
-                state.add_authz_provider(YamlGroupFile::connect(config.clone()).await?).await?;
+                state
+                    .add_authz_provider(YamlGroupFile::connect(config.clone()).await?)
+                    .await?;
             }
         }
 
@@ -105,7 +107,6 @@ impl EntanglementService for AuthService {
         Ok(())
     }
 }
-
 
 pub struct AuthCache {
     db_svc_sender: ESMSender,

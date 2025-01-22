@@ -65,7 +65,7 @@ enum Route {
 #[component]
 pub fn App() -> Element {
     rsx! {
-        Router::<Route> { config: move || RouterConfig::default().history(WebHistory::default()) }
+        Router::<Route> { config: move || RouterConfig::default() }
     }
 }
 

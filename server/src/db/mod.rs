@@ -5,7 +5,7 @@ use anyhow;
 use async_trait::async_trait;
 
 use crate::service::ESInner;
-use common::api::{album::*, comment::*, library::*, media::*};
+use api::{album::*, comment::*, library::*, media::*};
 
 // instead of service files, we have one per db connection type
 pub mod msg;

@@ -9,10 +9,8 @@ use tokio::sync::Mutex;
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
-use common::{
-    api::{album::*, comment::*, library::*, media::*},
-    config::ESConfig,
-};
+use api::{album::*, comment::*, library::*, media::*};
+use common::config::ESConfig;
 
 // mysql database backend
 //

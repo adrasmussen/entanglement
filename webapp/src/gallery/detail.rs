@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::common::{stream::*, style};
-use common::api::media::*;
+use api::media::*;
 
 // GalleryDetail elements
 //

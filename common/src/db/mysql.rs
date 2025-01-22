@@ -4,10 +4,10 @@ use chrono::Local;
 
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
 
-use crate::api::album::{Album, AlbumUpdate, AlbumUuid};
-use crate::api::comment::{Comment, CommentUuid};
-use crate::api::library::{Library, LibraryUpdate, LibraryUuid};
-use crate::api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
+use api::album::{Album, AlbumUpdate, AlbumUuid};
+use api::comment::{Comment, CommentUuid};
+use api::library::{Library, LibraryUpdate, LibraryUuid};
+use api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
 use crate::auth::{Group, User};
 
 pub async fn media_access_groups(

@@ -1,4 +1,4 @@
-use common::api::{THUMBNAIL_PATH, media::MediaUuid};
+use api::{THUMBNAIL_PATH, media::MediaUuid};
 
 // note -- find a way to pull the build data in here,
 // since these technically need to match the api server

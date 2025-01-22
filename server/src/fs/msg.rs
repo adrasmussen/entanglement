@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::service::{ESMResp, ESM};
-use common::api::library::{LibraryScanJob, LibraryUuid};
+use api::library::{LibraryScanJob, LibraryUuid};
 
 #[derive(Debug)]
 pub enum FsMsg {

@@ -4,7 +4,7 @@ use crate::{
     album::{table::AlbumTable, ALBUM_SEARCH_KEY},
     common::{storage::*, style},
 };
-use common::api::album::*;
+use api::album::*;
 
 // AlbumList elements
 //

@@ -10,13 +10,11 @@ use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
 use crate::service::ESMSender;
-use common::{
-    api::{
-        library::{LibraryScanJob, LibraryUuid},
-        media::{Media, MediaMetadata, MediaUuid},
-    },
-    config::ESConfig,
+use api::{
+    library::{LibraryScanJob, LibraryUuid},
+    media::{Media, MediaMetadata, MediaUuid},
 };
+use common::config::ESConfig;
 
 #[derive(Clone, Debug)]
 pub struct ScanContext {

@@ -5,16 +5,13 @@ use std::sync::Arc;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
-use common::api::library::LibraryUpdate;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
 use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
-use common::{
-    api::library::{LibraryScanJob, LibraryUuid},
-    config::ESConfig,
-};
+use api::library::{LibraryScanJob, LibraryUuid, LibraryUpdate};
+use common::config::ESConfig;
 
 // file service
 //

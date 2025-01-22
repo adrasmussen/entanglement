@@ -4,7 +4,7 @@ use crate::{
     library::{grid::MediaGrid, MEDIA_SEARCH_KEY},
     common::{storage::*, style},
 };
-use common::api::library::*;
+use api::library::*;
 
 #[derive(Clone, PartialEq, Props)]
 struct LibraryDetailBarProps {

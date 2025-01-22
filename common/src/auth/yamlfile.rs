@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use saphyr::Yaml;
-use tokio;
 
 use crate::auth::AuthzBackend;
 use crate::config::ESConfig;
@@ -27,7 +26,7 @@ impl AuthzBackend for YamlGroupFile {
                 .ok_or_else(|| anyhow::Error::msg("invalid group yaml filename"))?,
         );
 
-        let yaml_string = tokio::fs::read_to_string(filename.clone()).await?;
+        let yaml_string = std::fs::read_to_string(filename.clone())?;
 
         let yaml_docs = Yaml::load_from_str(&yaml_string)?;
 

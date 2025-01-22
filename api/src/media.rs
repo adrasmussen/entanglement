@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::api::{album::AlbumUuid, library::LibraryUuid, comment::CommentUuid};
+use crate::{album::AlbumUuid, library::LibraryUuid, comment::CommentUuid};
 use crate::endpoint;
 
 // structs and types

@@ -31,10 +31,8 @@ use crate::http::{
     AppError,
 };
 use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
-use common::{
-    api::{album::*, comment::*, library::*, media::*},
-    config::ESConfig,
-};
+use api::{album::*, comment::*, library::*, media::*};
+use common::config::ESConfig;
 
 // http service
 //
