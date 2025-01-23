@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         )),
         http_socket: String::from("[::]:8080"),
         http_url_root: String::from("/entanglement"),
-        http_doc_root: String::from("/srv/home/alex/workspace/entanglement/webapp/dist"),
+        http_doc_root: String::from("/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public"),
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),

@@ -25,7 +25,7 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
     let mut filename = dir.join(random::<i64>().to_string());
     let mut count = 0;
 
-    while !exists(&filename)? {
+    while exists(&filename)? {
         filename = dir.join(random::<i64>().to_string());
 
         if count < 10 {

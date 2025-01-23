@@ -197,18 +197,14 @@ impl HttpEndpoint {
         // using the fallback here is a bit tricky -- any file that can't be found will
         // instead go back to the root index, so be careful not to get into a loop with
         // the main fallback
-        let app_router = Router::new().nest_service(
-            "/",
-            ServeDir::new(&app_web_dir).fallback(ServeFile::new(
-                PathBuf::from(&app_web_dir).join("index.html"),
-            )),
-        );
+        let app_router = Router::new().fallback_service(ServeDir::new(&app_web_dir).fallback(ServeFile::new(
+                PathBuf::from(&app_web_dir).join("index.html"))));
 
         // media -- streaming files to clients
 
         // we will likely need more routes here once we do more complicated things with videos
         let media_router = Router::new()
-            .route("/:dir/:media_uuid", get(stream_media))
+            .route("/{dir}/{media_uuid}", get(stream_media))
             .with_state(state.clone());
 
         // api -- the server's remote method calls
