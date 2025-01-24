@@ -20,7 +20,12 @@ trait ESAuthService: ESInner {
     // authz
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()>;
 
-    // checks if the user is a member of any of the specified groups
+    // for a given user, find their groups
+    async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>>;
+
+    // for a given group, find its members
+    async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>>;
+
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool>;
 
     // a user can access media if they either are a member of a group that either owns a library

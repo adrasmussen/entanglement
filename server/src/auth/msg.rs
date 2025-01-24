@@ -14,6 +14,14 @@ pub enum AuthMsg {
         resp: ESMResp<()>,
         uuid: Vec<MediaUuid>,
     },
+    GroupsForUser {
+        resp: ESMResp<HashSet<String>>,
+        uid: String,
+    },
+    UsersInGroup {
+        resp: ESMResp<HashSet<String>>,
+        gid: String,
+    },
     IsGroupMember {
         resp: ESMResp<bool>,
         uid: String,

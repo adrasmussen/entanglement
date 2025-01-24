@@ -184,7 +184,7 @@ impl ESAuthService for AuthCache {
         Ok(())
     }
 
-    async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
+    async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let user_cache = self.user_cache.clone();
 
         // if there is an entry in the user cache, assume that it is correct
@@ -209,12 +209,8 @@ impl ESAuthService for AuthCache {
         {
             let user_cache = user_cache.read().await;
 
-            match user_cache.get(&uid) {
-                Some(groups) => {
-                    // this is the fast path
-                    return Ok(groups.intersection(&gid).count() > 0);
-                }
-                None => {}
+            if let Some(groups) = user_cache.get(&uid) {
+                return Ok(groups.clone());
             }
         }
 
@@ -235,35 +231,38 @@ impl ESAuthService for AuthCache {
                     .get(&uid)
                     .ok_or_else(|| anyhow::Error::msg("failed to initialize user_cache"))?;
 
-                return Ok(groups.intersection(&gid).count() > 0);
+                return Ok(groups.clone());
             }
             Ok(lock) => lock,
         };
 
         // populate the cache
-        let groups = {
+        let groups: HashSet<String> = {
             let mut groups = HashSet::new();
 
             let authz_providers = self.authz_providers.clone();
 
             let authz_providers = authz_providers.lock().await;
 
+            // TODO -- skip on error?
             for provider in authz_providers.iter() {
-                for group in gid.iter() {
-                    if provider
-                        .is_group_member(uid.clone(), group.to_string())
-                        .await?
-                    {
-                        groups.insert(group.clone());
-                    }
-                }
+                groups.extend(provider.groups_for_user(uid.clone()).await?);
             }
+
             groups
         };
 
         user_cache.insert(uid, groups.clone());
 
-        Ok(groups.intersection(&gid).count() > 0)
+        Ok(groups.clone())
+    }
+
+    async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
+        Ok(HashSet::new())
+    }
+
+    async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
+        Ok(gid.intersection(&self.groups_for_user(uid).await?).count() > 0)
     }
 
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
@@ -423,6 +422,12 @@ impl ESInner for AuthCache {
                     self.respond(resp, self.clear_access_cache(uuid)).await
                 }
 
+                AuthMsg::GroupsForUser { resp, uid } => {
+                    self.respond(resp, self.groups_for_user(uid)).await
+                }
+                AuthMsg::UsersInGroup { resp, gid } => {
+                    self.respond(resp, self.users_in_group(gid)).await
+                }
                 AuthMsg::IsGroupMember { resp, uid, gid } => {
                     self.respond(resp, self.is_group_member(uid, gid)).await
                 }

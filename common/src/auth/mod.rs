@@ -30,7 +30,9 @@ pub trait AuthzBackend: Send + Sync + 'static {
     where
         Self: Sized;
 
-    async fn is_group_member(&self, uid: String, gid: String) -> anyhow::Result<bool>;
+    async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>>;
+
+    async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>>;
 }
 
 #[async_trait]
