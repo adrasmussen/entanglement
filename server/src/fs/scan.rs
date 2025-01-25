@@ -35,6 +35,12 @@ impl ScanContext {
 
         status.error_count += 1;
     }
+
+    async fn count_inc(&self) -> () {
+        let mut status = self.job_status.write().await;
+
+        status.file_count += 1;
+    }
 }
 
 pub async fn run_scan(context: Arc<ScanContext>) -> () {
@@ -130,7 +136,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         )
         .await
     {
-        Ok(_) => {}
+        Ok(_) => context.count_inc().await,
         Err(err) => {
             context.error(format!("{err}")).await;
             return;
@@ -271,6 +277,8 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
             return;
         }
     }
+
+    context.count_inc().await;
 }
 
 async fn process_image(

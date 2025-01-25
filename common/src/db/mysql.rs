@@ -775,8 +775,9 @@ pub async fn update_library(
 ) -> anyhow::Result<()> {
     if let Some(val) = update.count {
         r"
-        UPDATE libraries SET count = :count WHERE library_uuid = :library_uuid"
+        UPDATE libraries SET mtime = :mtime, count = :count WHERE library_uuid = :library_uuid"
             .with(params! {
+                "mtime" => Local::now().timestamp(),
                 "count" => val.clone(),
                 "library_uuid" => library_uuid,
             })
