@@ -4,11 +4,11 @@ use chrono::Local;
 
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
 
+use crate::auth::{Group, User};
 use api::album::{Album, AlbumUpdate, AlbumUuid};
 use api::comment::{Comment, CommentUuid};
 use api::library::{Library, LibraryUpdate, LibraryUuid};
 use api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
-use crate::auth::{Group, User};
 
 pub async fn media_access_groups(
     pool: Pool,
@@ -438,6 +438,7 @@ pub async fn update_media(
 pub async fn search_media(
     pool: Pool,
     uid: String,
+    gid: HashSet<String>,
     filter: String,
 ) -> anyhow::Result<Vec<MediaUuid>> {
     // for a given uid and filter, find all media that match either:
@@ -456,17 +457,11 @@ pub async fn search_media(
                 SELECT
                     album_uuid
                 FROM
-                    (
-                    SELECT
-                        gid
-                    FROM
-                        group_membership
-                    WHERE
-                        uid = :uid
-                ) AS t1
-            INNER JOIN albums ON t1.gid = albums.gid
-            ) AS t2
-        INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+                    albums
+                WHERE
+                    INSTR(:gid, gid) > 0
+            ) AS t1
+        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
         UNION
         SELECT
             media_uuid
@@ -475,23 +470,18 @@ pub async fn search_media(
             SELECT
                 library_uuid
             FROM
-                (
-                SELECT
-                    gid
-                FROM
-                    group_membership
-                WHERE
-                    uid = :uid
-            ) AS t1
-        INNER JOIN libraries ON t1.gid = libraries.gid
+                libraries
+            WHERE
+                INSTR(:gid, gid) > 0
         ) AS t2
         INNER JOIN media ON t2.library_uuid = media.library_uuid
         ) AS t3
         INNER JOIN media ON t3.media_uuid = media.media_uuid
         WHERE
-            hidden = FALSE AND CONCAT(' ', DATE, note) LIKE :filter;"
+            hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -571,7 +561,7 @@ pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<(
         .await?;
 
     r"
-        DELETE FROM albums WHERE album_uuid = :album_uuid;"
+        DELETE FROM albums WHERE album_uuid = :album_uuid"
         .with(params! {
             "album_uuid" => album_uuid,
         })
@@ -649,6 +639,7 @@ pub async fn rm_media_from_album(
 pub async fn search_albums(
     pool: Pool,
     uid: String,
+    gid: HashSet<String>,
     filter: String,
 ) -> anyhow::Result<Vec<AlbumUuid>> {
     // for a given uid and filter, find all albums owned by groups that contain that uid
@@ -656,19 +647,12 @@ pub async fn search_albums(
         SELECT
             album_uuid
         FROM
-            (
-            SELECT
-                gid
-            FROM
-                group_membership
-            WHERE
-                uid = :uid
-        ) AS t1
-        INNER JOIN albums ON t1.gid = albums.gid
+            albums
         WHERE
-            CONCAT_WS(' ', name, note) LIKE :filter"
+            INSTR(:gid, gid) > 0 AND CONCAT_WS(' ', name, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -687,6 +671,7 @@ pub async fn search_albums(
 pub async fn search_media_in_album(
     pool: Pool,
     uid: String,
+    gid: HashSet<String>,
     album_uuid: AlbumUuid,
     filter: String,
 ) -> anyhow::Result<Vec<MediaUuid>> {
@@ -704,33 +689,25 @@ pub async fn search_media_in_album(
                 SELECT
                     album_uuid
                 FROM
-                    (
-                    SELECT
-                        gid
-                    FROM
-                        group_membership
-                    WHERE
-                        uid = :uid
-                ) AS t1
-            INNER JOIN albums ON t1.gid = albums.gid
+                    albums
+                WHERE
+                    INSTR(:gid, gid) > 0 AND album_uuid = :album_uuid
+                ) AS t2
+            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            ) AS t3
+            INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                album_uuid = :album_uuid
-            ) AS t2
-        INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
-        ) AS t3
-        INNER JOIN media ON t3.media_uuid = media.media_uuid
-        WHERE
-            hidden = FALSE AND CONCAT_WS(' ', DATE, note) LIKE :filter
-        "
-    .with(params! {
-        "uid" => uid,
-        "album_uuid" => album_uuid,
-        "filter" => format!("%{}%", filter),
-    })
-    .run(pool.get_conn().await?)
-    .await?
-    .collect::<Row>()
-    .await?;
+                hidden = FALSE AND CONCAT_WS(' ', DATE, note) LIKE :filter"
+        .with(params! {
+            "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "album_uuid" => album_uuid,
+            "filter" => format!("%{}%", filter),
+        })
+        .run(pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
 
     let data = result
         .into_iter()
@@ -813,25 +790,19 @@ pub async fn update_library(
 pub async fn search_libraries(
     pool: Pool,
     uid: String,
+    gid: HashSet<String>,
     filter: String,
 ) -> anyhow::Result<Vec<LibraryUuid>> {
     let result = r"
-    SELECT
-        library_uuid
-    FROM
-        (
         SELECT
-            gid
+            library_uuid
         FROM
-            group_membership
+            libraries
         WHERE
-            uid = :uid
-    ) AS t1
-    INNER JOIN libraries ON t1.gid = libraries.gid
-    WHERE
-        CONCAT_WS(' ', name, note) LIKE :filter"
+            INSTR(:gid, gid) > 0 AND path LIKE :filter"
         .with(params! {
             "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -850,6 +821,7 @@ pub async fn search_libraries(
 pub async fn search_media_in_library(
     pool: Pool,
     uid: String,
+    gid: HashSet<String>,
     library_uuid: LibraryUuid,
     filter: String,
     hidden: bool,
@@ -860,39 +832,36 @@ pub async fn search_media_in_library(
     // note that this is the only search query where media with "hidden = true" can be found
     let result = r"
         SELECT
-            media_uuid
+            media.media_uuid
         FROM
             (
             SELECT
-                library_uuid
+                media_uuid
             FROM
                 (
                 SELECT
-                    gid
+                    album_uuid
                 FROM
-                    group_membership
+                    albums
                 WHERE
-                    uid = :uid
+                    INSTR(:gid, gid) > 0 AND album_uuid = :album_uuid
             ) AS t1
-        INNER JOIN libraries ON t1.gid = libraries.gid
-        WHERE
-            library_uuid = :library_uuid
+        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
         ) AS t2
-        INNER JOIN media ON t2.library_uuid = media.library_uuid
+        INNER JOIN media ON t2.media_uuid = media.media_uuid
         WHERE
-            (
-                hidden = :hidden AND CONCAT_WS(' ', DATE, note) LIKE :filter
-            )"
-    .with(params! {
-        "uid" => uid,
-        "library_uuid" => library_uuid,
-        "hidden" => hidden,
-        "filter" => format!("%{}%", filter),
-    })
-    .run(pool.get_conn().await?)
-    .await?
-    .collect::<Row>()
-    .await?;
+            hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter"
+        .with(params! {
+            "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "library_uuid" => library_uuid,
+            "hidden" => hidden,
+            "filter" => format!("%{}%", filter),
+        })
+        .run(pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
 
     let data = result
         .into_iter()

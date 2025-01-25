@@ -197,8 +197,9 @@ impl HttpEndpoint {
         // using the fallback here is a bit tricky -- any file that can't be found will
         // instead go back to the root index, so be careful not to get into a loop with
         // the main fallback
-        let app_router = Router::new().fallback_service(ServeDir::new(&app_web_dir).fallback(ServeFile::new(
-                PathBuf::from(&app_web_dir).join("index.html"))));
+        let app_router = Router::new().fallback_service(ServeDir::new(&app_web_dir).fallback(
+            ServeFile::new(PathBuf::from(&app_web_dir).join("index.html")),
+        ));
 
         // media -- streaming files to clients
 
@@ -284,6 +285,22 @@ impl HttpEndpoint {
 
             Err(anyhow::Error::msg("http channel disconnected"))
         })
+    }
+
+    async fn groups_for_user(&self, uid: &String) -> anyhow::Result<HashSet<String>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.auth_svc_sender
+            .send(
+                AuthMsg::GroupsForUser {
+                    resp: tx,
+                    uid: uid.clone(),
+                }
+                .into(),
+            )
+            .await?;
+
+        rx.await?
     }
 
     async fn is_group_member(&self, uid: &String, gid: HashSet<String>) -> anyhow::Result<bool> {
@@ -566,6 +583,8 @@ async fn search_media(
 
     // auth handled as part of the db search
 
+    let gid = state.groups_for_user(&uid).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -573,7 +592,8 @@ async fn search_media(
         .send(
             DbMsg::SearchMedia {
                 resp: tx,
-                uid: uid.clone(),
+                uid: uid,
+                gid: gid,
                 filter: message.filter,
             }
             .into(),
@@ -934,6 +954,8 @@ async fn search_albums(
 
     // auth handled in db search
 
+    let gid = state.groups_for_user(&uid).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -942,6 +964,7 @@ async fn search_albums(
             DbMsg::SearchAlbums {
                 resp: tx,
                 uid: uid,
+                gid: gid,
                 filter: message.filter,
             }
             .into(),
@@ -963,6 +986,8 @@ async fn search_media_in_album(
 
     // auth handled in db search
 
+    let gid = state.groups_for_user(&uid).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -971,6 +996,7 @@ async fn search_media_in_album(
             DbMsg::SearchMediaInAlbum {
                 resp: tx,
                 uid: uid,
+                gid: gid,
                 album_uuid: message.album_uuid,
                 filter: message.filter,
             }
@@ -1025,6 +1051,8 @@ async fn search_libraries(
 
     // auth handled as part of the db search
 
+    let gid = state.groups_for_user(&uid).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -1032,7 +1060,8 @@ async fn search_libraries(
         .send(
             DbMsg::SearchLibraries {
                 resp: tx,
-                uid: uid.clone(),
+                uid: uid,
+                gid: gid,
                 filter: message.filter,
             }
             .into(),
@@ -1054,6 +1083,8 @@ async fn search_media_in_library(
 
     // auth handled as part of the db search
 
+    let gid = state.groups_for_user(&uid).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -1061,7 +1092,8 @@ async fn search_media_in_library(
         .send(
             DbMsg::SearchMediaInLibrary {
                 resp: tx,
-                uid: uid.clone(),
+                uid: uid,
+                gid: gid,
                 library_uuid: message.library_uuid,
                 filter: message.filter,
                 hidden: message.hidden,

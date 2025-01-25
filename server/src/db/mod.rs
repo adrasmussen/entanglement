@@ -31,7 +31,12 @@ trait ESDbService: ESInner {
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()>;
 
-    async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>>;
+    async fn search_media(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        filter: String,
+    ) -> anyhow::Result<Vec<MediaUuid>>;
 
     // comment functions
     async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid>;
@@ -67,11 +72,17 @@ trait ESDbService: ESInner {
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()>;
 
-    async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>>;
+    async fn search_albums(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        filter: String,
+    ) -> anyhow::Result<Vec<AlbumUuid>>;
 
     async fn search_media_in_album(
         &self,
         uid: String,
+        gid: HashSet<String>,
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>>;
@@ -90,12 +101,14 @@ trait ESDbService: ESInner {
     async fn search_libraries(
         &self,
         uid: String,
+        gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<LibraryUuid>>;
 
     async fn search_media_in_library(
         &self,
         uid: String,
+        gid: HashSet<String>,
         uuid: LibraryUuid,
         filter: String,
         hidden: bool,

@@ -123,8 +123,13 @@ impl ESDbService for MySQLState {
         common::db::mysql::update_media(self.pool.clone(), media_uuid, update).await
     }
 
-    async fn search_media(&self, uid: String, filter: String) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media(self.pool.clone(), uid, filter).await
+    async fn search_media(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        filter: String,
+    ) -> anyhow::Result<Vec<MediaUuid>> {
+        common::db::mysql::search_media(self.pool.clone(), uid, gid, filter).await
     }
 
     // comment queries
@@ -193,17 +198,24 @@ impl ESDbService for MySQLState {
         Ok(())
     }
 
-    async fn search_albums(&self, uid: String, filter: String) -> anyhow::Result<Vec<AlbumUuid>> {
-        common::db::mysql::search_albums(self.pool.clone(), uid, filter).await
+    async fn search_albums(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        filter: String,
+    ) -> anyhow::Result<Vec<AlbumUuid>> {
+        common::db::mysql::search_albums(self.pool.clone(), uid, gid, filter).await
     }
 
     async fn search_media_in_album(
         &self,
         uid: String,
+        gid: HashSet<String>,
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media_in_album(self.pool.clone(), uid, album_uuid, filter).await
+        common::db::mysql::search_media_in_album(self.pool.clone(), uid, gid, album_uuid, filter)
+            .await
     }
 
     // library queries
@@ -226,14 +238,16 @@ impl ESDbService for MySQLState {
     async fn search_libraries(
         &self,
         uid: String,
+        gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<LibraryUuid>> {
-        common::db::mysql::search_libraries(self.pool.clone(), uid, filter).await
+        common::db::mysql::search_libraries(self.pool.clone(), uid, gid, filter).await
     }
 
     async fn search_media_in_library(
         &self,
         uid: String,
+        gid: HashSet<String>,
         library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
@@ -241,6 +255,7 @@ impl ESDbService for MySQLState {
         common::db::mysql::search_media_in_library(
             self.pool.clone(),
             uid,
+            gid,
             library_uuid,
             filter,
             hidden,
@@ -286,8 +301,14 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.update_media(media_uuid, update))
                         .await
                 }
-                DbMsg::SearchMedia { resp, uid, filter } => {
-                    self.respond(resp, self.search_media(uid, filter)).await
+                DbMsg::SearchMedia {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_media(uid, gid, filter))
+                        .await
                 }
 
                 // comment messages
@@ -341,17 +362,27 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
                         .await
                 }
-                DbMsg::SearchAlbums { resp, uid, filter } => {
-                    self.respond(resp, self.search_albums(uid, filter)).await
+                DbMsg::SearchAlbums {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_albums(uid, gid, filter))
+                        .await
                 }
                 DbMsg::SearchMediaInAlbum {
                     resp,
                     uid,
+                    gid,
                     album_uuid,
                     filter,
                 } => {
-                    self.respond(resp, self.search_media_in_album(uid, album_uuid, filter))
-                        .await
+                    self.respond(
+                        resp,
+                        self.search_media_in_album(uid, gid, album_uuid, filter),
+                    )
+                    .await
                 }
 
                 // library messages
@@ -369,19 +400,26 @@ impl ESInner for MySQLState {
                     self.respond(resp, self.update_library(library_uuid, update))
                         .await
                 }
-                DbMsg::SearchLibraries { resp, uid, filter } => {
-                    self.respond(resp, self.search_libraries(uid, filter)).await
+                DbMsg::SearchLibraries {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_libraries(uid, gid, filter))
+                        .await
                 }
                 DbMsg::SearchMediaInLibrary {
                     resp,
                     uid,
+                    gid,
                     library_uuid,
                     filter,
                     hidden,
                 } => {
                     self.respond(
                         resp,
-                        self.search_media_in_library(uid, library_uuid, filter, hidden),
+                        self.search_media_in_library(uid, gid, library_uuid, filter, hidden),
                     )
                     .await
                 }

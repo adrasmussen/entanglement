@@ -33,6 +33,7 @@ pub enum DbMsg {
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,
+        gid: HashSet<String>,
         filter: String,
     },
 
@@ -86,11 +87,13 @@ pub enum DbMsg {
     SearchAlbums {
         resp: ESMResp<Vec<AlbumUuid>>,
         uid: String,
+        gid: HashSet<String>,
         filter: String,
     },
     SearchMediaInAlbum {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,
+        gid: HashSet<String>,
         album_uuid: AlbumUuid,
         filter: String,
     },
@@ -112,11 +115,13 @@ pub enum DbMsg {
     SearchLibraries {
         resp: ESMResp<Vec<LibraryUuid>>,
         uid: String,
+        gid: HashSet<String>,
         filter: String,
     },
     SearchMediaInLibrary {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,
+        gid: HashSet<String>,
         library_uuid: LibraryUuid,
         filter: String,
         hidden: bool,
