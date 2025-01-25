@@ -38,7 +38,7 @@ fn AlbumSearchBar(props: AlbumSearchBarProps) -> Element {
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{album_search_signal()}"
+                        value: "{album_search_signal()}",
                     }
                     input { r#type: "submit", value: "Search" }
                 }
@@ -80,7 +80,7 @@ pub fn AlbumSearch() -> Element {
 
         match albums {
             Ok(albums) => rsx! {
-                AlbumTable { albums: albums }
+                AlbumTable { albums }
             },
             Err(err) => rsx! {
                 span { "{err}" }

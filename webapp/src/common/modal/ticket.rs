@@ -38,7 +38,7 @@ pub fn ShowTicketBox(props: ShowTicketBoxProps) -> Element {
                 img {
                     onclick: move |_| { stack_signal.push(Modal::ShowMedia(media_uuid)) },
 
-                    src: full_link(media_uuid)
+                    src: full_link(media_uuid),
                 }
             }
             div {

@@ -29,7 +29,11 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
     });
 
     let (media, albums, tickets) = match &*media_future.read() {
-        Some(Ok(resp)) => (resp.media.clone(), resp.albums.clone(), resp.tickets.clone()),
+        Some(Ok(resp)) => (
+            resp.media.clone(),
+            resp.albums.clone(),
+            resp.tickets.clone(),
+        ),
         Some(Err(err)) => return modal_err(err.to_string()),
         None => return modal_err("Still waiting on get_media future..."),
     };
@@ -82,14 +86,14 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                     input {
                         name: "date",
                         r#type: "text",
-                        value: "{media.metadata.date}"
+                        value: "{media.metadata.date}",
                     }
 
                     label { "Note" }
                     textarea {
                         name: "note",
                         rows: "8",
-                        value: "{media.metadata.note}"
+                        value: "{media.metadata.note}",
                     }
 
                     input { r#type: "submit", value: "Update metadata" }

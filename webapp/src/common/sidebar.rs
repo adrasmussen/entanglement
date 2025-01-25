@@ -1,4 +1,3 @@
-
 use dioxus::prelude::*;
 
 use api::media::*;
@@ -16,7 +15,7 @@ pub fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
 
     let media_uuid = match view_media_signal() {
         Some(val) => val,
-        None => return rsx! {  },
+        None => return rsx! {},
     };
 
     let media = use_resource(move || async move {
@@ -39,19 +38,17 @@ pub fn MediaSidePanel(props: MediaSidePanelProps) -> Element {
         div { class: "sidepanel",
 
             match result {
-                Some(result) => rsx!{
+                Some(result) => rsx! {
                     div {
-                        img {
-                            src: "/entanglement/media/full/{media_uuid}",
-                        }
-                        span { "library: {result.media.library_uuid}" },
-                        span { "path: {result.media.path}" },
-                        span { "hidden: {result.media.hidden}" },
-                        span { "date: {result.media.metadata.date}" },
-                        span { "note: {result.media.metadata.note}" },
+                        img { src: "/entanglement/media/full/{media_uuid}" }
+                        span { "library: {result.media.library_uuid}" }
+                        span { "path: {result.media.path}" }
+                        span { "hidden: {result.media.hidden}" }
+                        span { "date: {result.media.metadata.date}" }
+                        span { "note: {result.media.metadata.note}" }
                     }
                 },
-                None => rsx! {}
+                None => rsx! {},
             }
         }
     }

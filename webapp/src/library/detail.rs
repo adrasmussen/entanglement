@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::{
-    library::{grid::MediaGrid, MEDIA_SEARCH_KEY},
     common::{storage::*, style},
+    library::{grid::MediaGrid, MEDIA_SEARCH_KEY},
 };
 use api::library::*;
 
@@ -63,7 +63,7 @@ fn LibraryDetailBar(props: LibraryDetailBarProps) -> Element {
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{media_search_signal()}"
+                        value: "{media_search_signal()}",
                     }
                     input { r#type: "submit", value: "Search" }
                 }
@@ -73,7 +73,6 @@ fn LibraryDetailBar(props: LibraryDetailBarProps) -> Element {
         }
     }
 }
-
 
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryDetailProps {
@@ -116,8 +115,10 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
             String::from("Error from search_media_in_library"),
         ),
         None => (
-            Err(String::from("Still waiting on search_media_in_library
-             future...")),
+            Err(String::from(
+                "Still waiting on search_media_in_library
+             future...",
+            )),
             String::from(""),
         ),
     };
@@ -127,7 +128,7 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
 
         match media {
             Ok(media) => rsx! {
-                MediaGrid {media: media }
+                MediaGrid { media }
             },
             Err(err) => rsx! {
                 span { "{err}" }

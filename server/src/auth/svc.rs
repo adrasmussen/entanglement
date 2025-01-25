@@ -272,7 +272,7 @@ impl ESAuthService for AuthCache {
             let access_cache = access_cache.read().await;
 
             if let Some(groups) = access_cache.get(&media_uuid) {
-                 return Ok(self.is_group_member(uid, groups.clone()).await?)
+                return Ok(self.is_group_member(uid, groups.clone()).await?);
             }
         }
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::media::MediaUuid;
 use crate::endpoint;
+use crate::media::MediaUuid;
 
 // structs and types
 
@@ -35,7 +35,7 @@ endpoint!(GetComment);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetCommentReq {
-    pub comment_uuid: CommentUuid
+    pub comment_uuid: CommentUuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ endpoint!(DeleteComment);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeleteCommentReq {
-    pub comment_uuid: CommentUuid
+    pub comment_uuid: CommentUuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

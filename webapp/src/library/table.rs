@@ -38,9 +38,11 @@ fn LibraryListEntry(props: LibraryTableRowProps) -> Element {
             td {
                 Link {
                     to: Route::LibraryDetail {
-                        library_uuid: library_uuid.to_string()
+                        library_uuid: library_uuid.to_string(),
                     },
-                    span {"{result.path}" }}}
+                    span { "{result.path}" }
+                }
+            }
             td { "{result.gid}" }
             td { "{result.count}" }
             td { "{result.mtime}" }

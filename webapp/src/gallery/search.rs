@@ -40,7 +40,7 @@ fn GallerySearchBar(props: GallerySearchBarProps) -> Element {
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{media_search_signal()}"
+                        value: "{media_search_signal()}",
                     }
                     input { r#type: "submit", value: "Search" }
                 }
@@ -82,7 +82,7 @@ pub fn GallerySearch() -> Element {
 
         match media {
             Ok(media) => rsx! {
-                MediaGrid { media: media }
+                MediaGrid { media }
             },
             Err(err) => rsx! {
                 span { "{err}" }

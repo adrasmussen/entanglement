@@ -53,7 +53,6 @@ impl EntanglementService for MySQLService {
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
-
                         let esmstr = format!("{msg:?}");
 
                         match state.message_handler(msg).await {

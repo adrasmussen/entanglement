@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{album::AlbumUuid, library::LibraryUuid, comment::CommentUuid};
 use crate::endpoint;
+use crate::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid};
 
 // structs and types
 

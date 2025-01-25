@@ -80,6 +80,9 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         }
     };
 
+    // only look the link up once, at the cost of a clone
+    let image_src = full_link(media_uuid);
+
     // this whole thing should probably be carved up into three elements:
     //  1) display box (per media)
     //  2) edit functions (has media-specific extras)
@@ -93,7 +96,9 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                 // if we supported several types, we could match here, which would likely mean
                 // geting a more general MediaDetail element or similar
                 div {
-                    img { class: "gallery-img", src: full_link(media_uuid) }
+                    a { href: image_src.clone(), target: "_blank",
+                        img { class: "gallery-img", src: image_src }
+                    }
                 }
                 div {
                     form {
@@ -137,7 +142,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                         input {
                             name: "date",
                             r#type: "text",
-                            value: "{media.date}"
+                            value: "{media.date}",
                         }
 
                         label { "Note" }

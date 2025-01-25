@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::media::MediaUuid;
 use crate::endpoint;
+use crate::media::MediaUuid;
 
 // structs and types
 

@@ -11,13 +11,13 @@ mod home;
 use home::Home;
 
 mod gallery;
-use gallery::{Gallery, GallerySearch, GalleryDetail};
+use gallery::{Gallery, GalleryDetail, GallerySearch};
 
 mod album;
-use album::{Albums, AlbumSearch, AlbumDetail};
+use album::{AlbumDetail, AlbumSearch, Albums};
 
 mod library;
-use library::{Libraries, LibrarySearch, LibraryDetail};
+use library::{Libraries, LibraryDetail, LibrarySearch};
 
 fn main() {
     // Init logger
@@ -73,7 +73,7 @@ pub fn App() -> Element {
 fn NavBarButton(target: Route, text: String) -> Element {
     let current_path: Route = use_route();
 
-    let active_class = if current_path.is_child_of(&target) {
+    let active_class = if current_path.is_child_of(&target) || current_path == target {
         "active"
     } else {
         ""

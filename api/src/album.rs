@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::media::MediaUuid;
 use crate::endpoint;
+use crate::media::MediaUuid;
 
 // structs and types
 
@@ -77,7 +77,6 @@ pub struct UpdateAlbumReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateAlbumResp {}
-
 
 // add media to an album
 endpoint!(AddMediaToAlbum);

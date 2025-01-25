@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::{
-    library::{table::LibraryTable, LIBRARY_SEARCH_KEY},
     common::{storage::*, style},
+    library::{table::LibraryTable, LIBRARY_SEARCH_KEY},
 };
 use api::library::*;
 
@@ -33,7 +33,7 @@ fn LibrarySearchBar(props: LibrarySearchBarProps) -> Element {
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{library_search_signal()}"
+                        value: "{library_search_signal()}",
                     }
                     input { r#type: "submit", value: "Search" }
                 }
@@ -75,7 +75,7 @@ pub fn LibrarySearch() -> Element {
 
         match libraries {
             Ok(libraries) => rsx! {
-                LibraryTable { libraries: libraries }
+                LibraryTable { libraries }
             },
             Err(err) => rsx! {
                 span { "{err}" }
