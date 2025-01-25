@@ -9,7 +9,7 @@ mod fs;
 mod http;
 mod service;
 
-use api::{SLICE_PATH, THUMBNAIL_PATH};
+use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::config::ESConfig;
 use service::EntanglementService;
 // the outermost caller should definitely have a loop that periodically calls
@@ -31,7 +31,9 @@ async fn main() -> anyhow::Result<()> {
         )),
         http_socket: String::from("[::]:8080"),
         http_url_root: String::from("/entanglement"),
-        http_doc_root: String::from("/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public"),
+        http_doc_root: String::from(
+            "/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public",
+        ),
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
@@ -41,6 +43,8 @@ async fn main() -> anyhow::Result<()> {
     checks::create_temp_file(&config.media_srcdir).expect_err("media_srcdir is writeable");
     checks::create_temp_file(&config.media_srvdir).expect("media_srvdir is not writeable");
 
+    checks::subdir_exists(config.clone(), ORIGINAL_PATH)
+        .expect("could not create thumbnail path in media_srvdir");
     checks::subdir_exists(config.clone(), THUMBNAIL_PATH)
         .expect("could not create thumbnail path in media_srvdir");
     checks::subdir_exists(config.clone(), SLICE_PATH)

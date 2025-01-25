@@ -53,9 +53,12 @@ impl EntanglementService for MySQLService {
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
+
+                        let esmstr = format!("{msg:?}");
+
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(_) => println!("mysql_service failed to reply to message"),
+                            Err(err) => println!("mysql_service failed to reply to message!\nError: {err}\nMessage: {esmstr}"),
                         }
                     });
                 }

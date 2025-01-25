@@ -74,13 +74,21 @@ impl AuthzBackend for YamlGroupFile {
     }
 
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
-        match self.data.get(&uid) {
-            Some(v) => Ok(v.clone()),
-            None => Ok(HashSet::new()),
+        let mut out = HashSet::new();
+
+        for (k, v) in self.data.iter() {
+            if v.contains(&uid) {
+                out.insert(k.clone());
+            }
         }
+
+        Ok(out)
     }
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
-        todo!()
+        match self.data.get(&gid) {
+            Some(v) => Ok(v.clone()),
+            None => Ok(HashSet::new()),
+        }
     }
 }

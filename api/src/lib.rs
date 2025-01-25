@@ -3,9 +3,11 @@ pub mod comment;
 pub mod library;
 pub mod media;
 
+pub const ORIGINAL_PATH: &str = "originals";
 pub const THUMBNAIL_PATH: &str = "thumbnails";
 pub const SLICE_PATH: &str = "slices";
 
+// TODO -- this needs to be modified for the reverse proxy, too
 #[macro_export]
 macro_rules! endpoint {
     ($name:ident) => {

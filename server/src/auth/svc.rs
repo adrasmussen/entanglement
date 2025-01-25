@@ -244,7 +244,7 @@ impl ESAuthService for AuthCache {
 
             let authz_providers = authz_providers.lock().await;
 
-            // TODO -- skip on error?
+            // TODO -- skip on error, validate group names (no whitespace or comma)
             for provider in authz_providers.iter() {
                 groups.extend(provider.groups_for_user(uid.clone()).await?);
             }
@@ -271,9 +271,8 @@ impl ESAuthService for AuthCache {
         {
             let access_cache = access_cache.read().await;
 
-            match access_cache.get(&media_uuid) {
-                Some(groups) => return Ok(self.is_group_member(uid, groups.clone()).await?),
-                None => {}
+            if let Some(groups) = access_cache.get(&media_uuid) {
+                 return Ok(self.is_group_member(uid, groups.clone()).await?)
             }
         }
 

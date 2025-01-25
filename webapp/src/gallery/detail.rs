@@ -70,7 +70,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         ),
         Some(Err(err)) => {
             return rsx! {
-                span { "{err.to_string()}" }
+                span { "err: {err.to_string()}" }
             }
         }
         None => {

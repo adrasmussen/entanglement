@@ -13,6 +13,7 @@ use crate::service::ESMSender;
 use api::{
     library::{LibraryScanJob, LibraryUuid},
     media::{Media, MediaMetadata, MediaUuid},
+    ORIGINAL_PATH,
 };
 use common::config::ESConfig;
 
@@ -45,7 +46,7 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         // things to check eventually:
         //  * too many errors
         //  * cancel signal
-        if !tasks.len() < 8 {
+        if tasks.len() > 8 {
             tasks.join_next().await;
         }
 
@@ -174,7 +175,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     };
 
     let media_metadata: Result<(MediaMetadata, Option<String>), anyhow::Error> = match ext {
-        ".jpg" | ".png" | ".tiff" => process_image(context.config.clone(), path.clone()).await,
+        "jpg" | "png" | "tiff" => process_image(context.config.clone(), path.clone()).await,
         _ => {
             context
                 .error(format!("failed to match {ext} to known file types"))
@@ -254,7 +255,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     // map uuid -> path without relying on magic numbers
     let link = context
         .media_linkdir
-        .join("full")
+        .join(ORIGINAL_PATH)
         .join(media_uuid.to_string());
 
     // TODO -- change to relative by adjusting original path

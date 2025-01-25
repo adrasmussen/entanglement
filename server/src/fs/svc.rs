@@ -127,7 +127,7 @@ impl ESFileService for FileScanner {
         let context = Arc::new(ScanContext {
             config: self.config.clone(),
             library_uuid: library_uuid,
-            library_path: PathBuf::from(library.path),
+            library_path: self.config.media_srcdir.clone().join(library.path),
             db_svc_sender: self.db_svc_sender.clone(),
             media_linkdir: self.config.media_srvdir.clone(),
             job_status: job,

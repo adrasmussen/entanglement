@@ -37,7 +37,7 @@ pub async fn media_access_groups(
         FROM
             (
                 libraries
-            INNER JOIN media ON libraries.library_uuid = media.media_uuid
+            INNER JOIN media ON libraries.library_uuid = media.library_uuid
             )
         WHERE
             media_uuid = :media_uuid"
@@ -836,21 +836,15 @@ pub async fn search_media_in_library(
         FROM
             (
             SELECT
-                media_uuid
+                library_uuid
             FROM
-                (
-                SELECT
-                    album_uuid
-                FROM
-                    albums
-                WHERE
-                    INSTR(:gid, gid) > 0 AND album_uuid = :album_uuid
-            ) AS t1
-        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
-        ) AS t2
-        INNER JOIN media ON t2.media_uuid = media.media_uuid
+                libraries
+            WHERE
+                INSTR(:gid, gid) > 0 AND library_uuid = :library_uuid
+        ) AS t1
+        INNER JOIN media ON t1.library_uuid = media.library_uuid
         WHERE
-            hidden = FALSE AND CONCAT_WS(' ', date, note) LIKE :filter"
+            hidden = :hidden AND CONCAT_WS(' ', date, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
             "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
