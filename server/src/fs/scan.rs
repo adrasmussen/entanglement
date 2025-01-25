@@ -100,6 +100,9 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
             continue;
         };
     }
+
+    // wait for all the tasks to complete
+    tasks.join_all().await;
 }
 
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
@@ -202,7 +205,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     // once we have the metadata, we assemble the Media struct and send it to the database
     let media = Media {
         library_uuid: context.library_uuid,
-        path: pathstr,
+        path: pathstr.clone(),
         hash: hash,
         mtime: Local::now().timestamp(),
         hidden: false,

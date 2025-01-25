@@ -10,7 +10,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
 use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
-use api::library::{LibraryScanJob, LibraryUuid, LibraryUpdate};
+use api::library::{LibraryScanJob, LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
 
 // file service
