@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
+use dashmap::{mapref::entry::Entry, DashMap};
 use tokio::sync::{Mutex, RwLock};
 
 use api::media::MediaUuid;
@@ -113,9 +114,9 @@ pub struct AuthCache {
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
     authz_providers: Arc<Mutex<Vec<Box<dyn AuthzBackend>>>>,
     // uid: set(gid)
-    user_cache: Arc<RwLock<HashMap<String, HashSet<String>>>>,
+    user_cache: Arc<DashMap<String, AsyncCell<HashSet<String>>>>,
     // media_uuid: set(gid)
-    access_cache: Arc<RwLock<HashMap<MediaUuid, HashSet<String>>>>,
+    access_cache: Arc<DashMap<MediaUuid, AsyncCell<HashSet<String>>>>,
 }
 
 // should we attempt to optimize the rwlock logic to batch writes?
@@ -136,16 +137,12 @@ impl ESAuthService for AuthCache {
     async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
         let user_cache = self.user_cache.clone();
 
-        {
-            let mut user_cache = user_cache.write().await;
-
-            match uid.len() {
-                0 => {
-                    user_cache.drain();
-                }
-                _ => {
-                    let _ = uid.into_iter().map(|uid| user_cache.remove(&uid));
-                }
+        match uid.len() {
+            0 => {
+                user_cache.clear();
+            }
+            _ => {
+                let _ = uid.into_iter().map(|uid| user_cache.remove(&uid));
             }
         }
 
@@ -155,18 +152,14 @@ impl ESAuthService for AuthCache {
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()> {
         let access_cache = self.access_cache.clone();
 
-        {
-            let mut access_cache = access_cache.write().await;
-
-            match media_uuid.len() {
-                0 => {
-                    access_cache.drain();
-                }
-                _ => {
-                    let _ = media_uuid
-                        .into_iter()
-                        .map(|media_uuid| access_cache.remove(&media_uuid));
-                }
+        match media_uuid.len() {
+            0 => {
+                access_cache.clear();
+            }
+            _ => {
+                let _ = media_uuid
+                    .into_iter()
+                    .map(|media_uuid| access_cache.remove(&media_uuid));
             }
         }
 
@@ -187,72 +180,24 @@ impl ESAuthService for AuthCache {
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let user_cache = self.user_cache.clone();
 
-        // if there is an entry in the user cache, assume that it is correct
-        //
-        // this leads to the somewhat unfortunate effect that we need to manually
-        // clear the user cache when group information changes
-        //
-        // when the groups were part of the db, this was easier -- but we can't
-        // easily subscribe to ldap updates
+        let groups = match user_cache.entry(uid.clone()) {
+            Entry::Occupied(entry) => entry.get().get().await,
+            Entry::Vacant(entry) => {
+                let mut val = HashSet::new();
 
-        // many threads may race through this check initially, at least until one
-        // grabs the write() lock below.  then they will all pile up waiting for
-        // a read(), at which point the HashSet should exist
-        //
-        // in the event that the thread with the write lock panics, all the threads
-        // stopped at the second read will get an Error; threads stopped at the
-        // first read will race to the second and try again
-        //
-        // TODO -- in the event of an authz failure, each of the waiting messages
-        // will attempt to populate the cache.  ideally, we detect this somehow
-        // and either fail quickly or tell the http service to reject those requests
-        {
-            let user_cache = user_cache.read().await;
+                let authz_providers = self.authz_providers.clone();
 
-            if let Some(groups) = user_cache.get(&uid) {
-                return Ok(groups.clone());
+                let authz_providers = authz_providers.lock().await;
+
+                for provider in authz_providers.iter() {
+                    val.extend(provider.groups_for_user(uid.clone()).await?);
+                }
+
+                let cell = AsyncCell::new_with(val.clone());
+                entry.insert(cell);
+                val
             }
-        }
-
-        // on a cache miss, we still want to verify that the user is recognized by someone
-        if !self.is_valid_user(uid.clone()).await? {
-            return Err(anyhow::Error::msg("invalid user"));
-        }
-
-        // to ensure that only one thread attempts to populate the cache, we need a second
-        // early return that also awaits the cell
-        let mut user_cache = match user_cache.try_write() {
-            Err(_) => {
-                let user_cache = user_cache.read().await;
-
-                // this is a somewhat awkward error to handle -- it would fire if the thread
-                // that gets the write() lock fails to actually add the uid to the HashMap
-                let groups = user_cache
-                    .get(&uid)
-                    .ok_or_else(|| anyhow::Error::msg("failed to initialize user_cache"))?;
-
-                return Ok(groups.clone());
-            }
-            Ok(lock) => lock,
         };
-
-        // populate the cache
-        let groups: HashSet<String> = {
-            let mut groups = HashSet::new();
-
-            let authz_providers = self.authz_providers.clone();
-
-            let authz_providers = authz_providers.lock().await;
-
-            // TODO -- skip on error, validate group names (no whitespace or comma)
-            for provider in authz_providers.iter() {
-                groups.extend(provider.groups_for_user(uid.clone()).await?);
-            }
-
-            groups
-        };
-
-        user_cache.insert(uid, groups.clone());
 
         Ok(groups.clone())
     }
@@ -268,43 +213,30 @@ impl ESAuthService for AuthCache {
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
-        {
-            let access_cache = access_cache.read().await;
+        let groups = match access_cache.entry(media_uuid) {
+            Entry::Occupied(entry) => entry.get().get().await,
+            Entry::Vacant(entry) => {
+                let val = {
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    self.db_svc_sender
+                        .clone()
+                        .send(
+                            DbMsg::MediaAccessGroups {
+                                resp: tx,
+                                media_uuid: media_uuid,
+                            }
+                            .into(),
+                        )
+                        .await?;
 
-            if let Some(groups) = access_cache.get(&media_uuid) {
-                return Ok(self.is_group_member(uid, groups.clone()).await?);
+                    rx.await??
+                };
+
+                let cell = AsyncCell::new_with(val.clone());
+                entry.insert(cell);
+                val
             }
-        }
-
-        let mut access_cache = match access_cache.try_write() {
-            Err(_) => {
-                let access_cache = access_cache.read().await;
-
-                let groups = access_cache
-                    .get(&media_uuid)
-                    .ok_or_else(|| anyhow::Error::msg("failed to initialize access_cache"))?;
-
-                return Ok(self.is_group_member(uid, groups.clone()).await?);
-            }
-            Ok(lock) => lock,
         };
-
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .clone()
-            .send(
-                DbMsg::MediaAccessGroups {
-                    resp: tx,
-                    media_uuid: media_uuid,
-                }
-                .into(),
-            )
-            .await?;
-
-        let groups = rx.await??;
-
-        access_cache.insert(media_uuid, groups.clone());
 
         Ok(self.is_group_member(uid, groups).await?)
     }
@@ -406,8 +338,8 @@ impl ESInner for AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             authn_providers: Arc::new(Mutex::new(Vec::new())),
             authz_providers: Arc::new(Mutex::new(Vec::new())),
-            user_cache: Arc::new(RwLock::new(HashMap::new())),
-            access_cache: Arc::new(RwLock::new(HashMap::new())),
+            user_cache: Arc::new(DashMap::new()),
+            access_cache: Arc::new(DashMap::new()),
         })
     }
 

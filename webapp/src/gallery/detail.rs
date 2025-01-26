@@ -188,7 +188,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                 }
                 div {
                     div { class: "gallery-info",
-                        span { "Albums: MISSING (needs name, owner, group)" }
+                        span { "Albums: MISSING (needs name, owner, group AND REMOVE BUTTON, highlight if coming from that album)" }
                         for album_uuid in albums {
                             p { "{album_uuid}" }
                         }
