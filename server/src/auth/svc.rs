@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
-use dashmap::{mapref::entry::Entry, DashMap};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use api::media::MediaUuid;
 use common::{
     auth::{proxy::ProxyAuth, yamlfile::YamlGroupFile, AuthnBackend, AuthzBackend},
     config::ESConfig,
+    AwaitCache,
 };
 
 use crate::auth::msg::AuthMsg;
@@ -114,11 +114,43 @@ pub struct AuthCache {
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
     authz_providers: Arc<Mutex<Vec<Box<dyn AuthzBackend>>>>,
     // uid: set(gid)
-    user_cache: Arc<DashMap<String, AsyncCell<HashSet<String>>>>,
+    user_cache: Arc<AwaitCache<String, HashSet<String>>>,
     // media_uuid: set(gid)
-    access_cache: Arc<DashMap<MediaUuid, AsyncCell<HashSet<String>>>>,
+    access_cache: Arc<AwaitCache<MediaUuid, HashSet<String>>>,
 }
 
+impl AuthCache {
+    async fn groups_from_providers(&self, uid: String) -> anyhow::Result<HashSet<String>> {
+        let mut groups = HashSet::new();
+
+        let authz_providers = self.authz_providers.clone();
+
+        let authz_providers = authz_providers.lock().await;
+
+        for provider in authz_providers.iter() {
+            groups.extend(provider.groups_for_user(uid.clone()).await?);
+        }
+
+        Ok(groups)
+    }
+
+    async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        self.db_svc_sender
+            .clone()
+            .send(
+                DbMsg::MediaAccessGroups {
+                    resp: tx,
+                    media_uuid: media_uuid,
+                }
+                .into(),
+            )
+            .await?;
+
+        rx.await?
+    }
+}
 // should we attempt to optimize the rwlock logic to batch writes?
 //
 // maybe batch with tokio::select! and recv_many -- have a separate writer
@@ -180,24 +212,9 @@ impl ESAuthService for AuthCache {
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let user_cache = self.user_cache.clone();
 
-        let groups = match user_cache.entry(uid.clone()) {
-            Entry::Occupied(entry) => entry.get().get().await,
-            Entry::Vacant(entry) => {
-                let mut val = HashSet::new();
-
-                let authz_providers = self.authz_providers.clone();
-
-                let authz_providers = authz_providers.lock().await;
-
-                for provider in authz_providers.iter() {
-                    val.extend(provider.groups_for_user(uid.clone()).await?);
-                }
-
-                let cell = AsyncCell::new_with(val.clone());
-                entry.insert(cell);
-                val
-            }
-        };
+        let groups = user_cache
+            .perhaps(uid.clone(), self.groups_from_providers(uid))
+            .await?;
 
         Ok(groups.clone())
     }
@@ -213,30 +230,9 @@ impl ESAuthService for AuthCache {
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
-        let groups = match access_cache.entry(media_uuid) {
-            Entry::Occupied(entry) => entry.get().get().await,
-            Entry::Vacant(entry) => {
-                let val = {
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    self.db_svc_sender
-                        .clone()
-                        .send(
-                            DbMsg::MediaAccessGroups {
-                                resp: tx,
-                                media_uuid: media_uuid,
-                            }
-                            .into(),
-                        )
-                        .await?;
-
-                    rx.await??
-                };
-
-                let cell = AsyncCell::new_with(val.clone());
-                entry.insert(cell);
-                val
-            }
-        };
+        let groups = access_cache
+            .perhaps(media_uuid.clone(), self.media_access_groups(media_uuid))
+            .await?;
 
         Ok(self.is_group_member(uid, groups).await?)
     }
@@ -338,8 +334,8 @@ impl ESInner for AuthCache {
             db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
             authn_providers: Arc::new(Mutex::new(Vec::new())),
             authz_providers: Arc::new(Mutex::new(Vec::new())),
-            user_cache: Arc::new(DashMap::new()),
-            access_cache: Arc::new(DashMap::new()),
+            user_cache: Arc::new(AwaitCache::new()),
+            access_cache: Arc::new(AwaitCache::new()),
         })
     }
 
