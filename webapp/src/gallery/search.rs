@@ -47,6 +47,7 @@ fn GallerySearchBar(props: GallerySearchBarProps) -> Element {
                 span { "Search History" }
                 span { "{status}" }
                 span { "MISSING: needs attention checkbox" }
+                span { "MISSING: bulk select bar -- add to other viewers" }
             }
         }
     }

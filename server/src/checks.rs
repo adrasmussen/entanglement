@@ -53,7 +53,7 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn subdir_exists(config: Arc<ESConfig>, subdir: &str) -> anyhow::Result<()> {
+pub fn subdir_exists(config: &Arc<ESConfig>, subdir: &str) -> anyhow::Result<()> {
     let subdir = PathBuf::from(subdir);
 
     if subdir.is_absolute() {

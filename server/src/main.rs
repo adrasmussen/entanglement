@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::{debug, info};
 
 mod auth;
 mod checks;
@@ -22,6 +23,8 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    info!("entanglement server starting up, processing config file...");
+
     // temporary dummy configuration -- this will eventually come from a parser
     let config = Arc::new(ESConfig {
         authn_proxy_header: Some(String::from("proxy-user")),
@@ -39,16 +42,24 @@ async fn main() -> anyhow::Result<()> {
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
     });
 
+    info!("done");
+
+    info!("performing filesystem sanity checks...");
+
     // sanity checks
     checks::create_temp_file(&config.media_srcdir).expect_err("media_srcdir is writeable");
     checks::create_temp_file(&config.media_srvdir).expect("media_srvdir is not writeable");
 
-    checks::subdir_exists(config.clone(), ORIGINAL_PATH)
+    checks::subdir_exists(&config, ORIGINAL_PATH)
         .expect("could not create thumbnail path in media_srvdir");
-    checks::subdir_exists(config.clone(), THUMBNAIL_PATH)
+    checks::subdir_exists(&config, THUMBNAIL_PATH)
         .expect("could not create thumbnail path in media_srvdir");
-    checks::subdir_exists(config.clone(), SLICE_PATH)
+    checks::subdir_exists(&config, SLICE_PATH)
         .expect("could not create video slice path in media_srvdir");
+
+    info!("done");
+
+    info!("starting core services...");
 
     // start the core services
     let mut senders = HashMap::new();
@@ -62,6 +73,10 @@ async fn main() -> anyhow::Result<()> {
     db_svc.start(&senders).await?;
     fs_svc.start(&senders).await?;
     http_svc.start(&senders).await?;
+
+    info!("done");
+
+    info!("startup complete!");
 
     loop {}
 }
