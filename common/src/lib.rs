@@ -5,12 +5,13 @@ pub mod db;
 use std::cmp::Eq;
 use std::future::Future;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use dashmap::{mapref::entry::Entry, DashMap};
 
 pub struct AwaitCache<K: Eq + Hash + Clone, V: Clone> {
-    items: DashMap<K, AsyncCell<V>>,
+    items: DashMap<K, Arc<AsyncCell<V>>>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> AwaitCache<K, V> {
@@ -25,16 +26,18 @@ impl<K: Eq + Hash + Clone, V: Clone> AwaitCache<K, V> {
         key: K,
         init: Fut,
     ) -> anyhow::Result<V> {
-        match self.items.entry(key) {
-            Entry::Occupied(entry) => Ok(entry.get().get().await),
+        let cell = match self.items.entry(key) {
+            Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let val = init.await?;
 
                 let cell = AsyncCell::new_with(val.clone());
-                entry.insert(cell);
-                Ok(val)
+                entry.insert(Arc::new(cell));
+                return Ok(val);
             }
-        }
+        };
+
+        Ok(cell.get().await)
     }
 
     pub fn clear(&self) {
