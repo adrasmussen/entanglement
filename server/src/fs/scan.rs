@@ -48,7 +48,7 @@ impl ScanContext {
 pub async fn run_scan(context: Arc<ScanContext>) -> () {
     let context = context.clone();
 
-    info!({ library_uuid = context.library_uuid, library_path = ?context.library_path, scan_start = Local::now().timestamp() }, "starting scan");
+    info!({ library_uuid = context.library_uuid, library_path = ?context.library_path }, "starting scan");
 
     let mut tasks = JoinSet::new();
 
@@ -107,7 +107,7 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
     tasks.join_all().await;
 }
 
-#[instrument(skip(context))]
+#[instrument(skip(context, path))]
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     // first, check if the media already exists in the database
     let pathstr = match path.to_str() {
