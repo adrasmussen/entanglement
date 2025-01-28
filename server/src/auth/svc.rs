@@ -208,7 +208,7 @@ impl ESAuthService for AuthCache {
     // authz
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
-        info!({provider = %provider}, "adding authorization provider");
+        info!({provider = %provider});
 
         let authz_providers = self.authz_providers.clone();
 
@@ -294,7 +294,7 @@ impl ESAuthService for AuthCache {
     // authn
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
-        info!({provider = %provider}, "adding authentication provider");
+        info!({provider = %provider});
 
         let authn_providers = self.authn_providers.clone();
 
