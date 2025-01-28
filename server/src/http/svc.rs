@@ -22,6 +22,7 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
@@ -79,6 +80,7 @@ impl EntanglementService for HttpService {
         }
     }
 
+    #[instrument(level=Level::DEBUG, skip(self, senders))]
     async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders.clone())?);
@@ -104,18 +106,23 @@ impl EntanglementService for HttpService {
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(_) => println!("http service failed to reply to message"),
+                            Err(err) => {
+                                error!({service = "http_service", channel = "esm", error = %err})
+                            }
                         }
                     });
                 }
 
-                Err(anyhow::Error::msg(format!("channel disconnected")))
+                Err(anyhow::Error::msg(format!(
+                    "http_service esm channel disconnected"
+                )))
             }
         };
 
         let msg_handle = tokio::task::spawn(msg_serve);
         self.msg_handle.set(msg_handle);
 
+        debug!("finished startup for http_service");
         Ok(())
     }
 }
@@ -168,6 +175,7 @@ impl HttpEndpoint {
     //
     // specifically axum::serve() doesn't really play nice with TLS, which we'll want
     // to offer as an option eventually
+    #[instrument(level=Level::DEBUG, skip_all)]
     async fn serve_http(
         self: Arc<Self>,
         socket: SocketAddr,
@@ -264,7 +272,7 @@ impl HttpEndpoint {
         // the main http server loop
         //
         // we want to return the handle to the caller, not the future, and so we just spawn it here
-        tokio::task::spawn(async move {
+        let handle = tokio::task::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
                 let service = service.clone();
 
@@ -278,15 +286,19 @@ impl HttpEndpoint {
                     .await
                     {
                         Ok(()) => (),
-                        Err(err) => println!("{}", err.to_string()),
+                        Err(err) => error!({service = "http_service", conn = "http", error = %err}),
                     }
                 });
             }
 
-            Err(anyhow::Error::msg("http channel disconnected"))
-        })
+            Err(anyhow::Error::msg("http_service http channel disconnected"))
+        });
+
+        debug!("finished startup for serve_http");
+        handle
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn groups_for_user(&self, uid: &String) -> anyhow::Result<HashSet<String>> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -303,6 +315,7 @@ impl HttpEndpoint {
         rx.await?
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn is_group_member(&self, uid: &String, gid: HashSet<String>) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -320,6 +333,7 @@ impl HttpEndpoint {
         rx.await?
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -337,6 +351,7 @@ impl HttpEndpoint {
         rx.await?
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -354,6 +369,7 @@ impl HttpEndpoint {
         rx.await?
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn can_access_comment(
         &self,
         uid: &String,
@@ -378,6 +394,7 @@ impl HttpEndpoint {
         self.can_access_media(uid, &comment.media_uuid).await
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn owns_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -398,6 +415,7 @@ impl HttpEndpoint {
         Ok(uid.to_owned() == comment.uid)
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -418,6 +436,7 @@ impl HttpEndpoint {
         self.is_group_member(&uid, HashSet::from([album.gid])).await
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn owns_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -438,6 +457,7 @@ impl HttpEndpoint {
         Ok(uid.to_owned() == album.uid)
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn owns_library(&self, uid: &String, library_uuid: &LibraryUuid) -> anyhow::Result<bool> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 

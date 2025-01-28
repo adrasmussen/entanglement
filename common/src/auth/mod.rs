@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -25,7 +26,7 @@ pub struct Group {
 //
 // see notes in server/src/auth/svc.rs about why the is_group_member() can spam messages
 #[async_trait]
-pub trait AuthzBackend: Send + Sync + 'static {
+pub trait AuthzBackend: Display + Send + Sync + 'static {
     async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized;
@@ -36,7 +37,7 @@ pub trait AuthzBackend: Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait AuthnBackend: Send + Sync + 'static {
+pub trait AuthnBackend: Display + Send + Sync + 'static {
     async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized;

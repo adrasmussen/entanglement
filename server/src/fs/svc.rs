@@ -6,6 +6,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
@@ -39,6 +40,7 @@ impl EntanglementService for FileService {
         }
     }
 
+    #[instrument(level=Level::DEBUG, skip(self, senders))]
     async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
@@ -54,12 +56,16 @@ impl EntanglementService for FileService {
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(_) => println!("file_service failed to reply to message"),
+                            Err(err) => {
+                                error!({service = "file_service", channel = "esm", error = %err})
+                            }
                         }
                     });
                 }
 
-                Err(anyhow::Error::msg(format!("channel disconnected")))
+                Err(anyhow::Error::msg(format!(
+                    "file_service esm channel disconnected"
+                )))
             }
         };
 
@@ -67,6 +73,7 @@ impl EntanglementService for FileService {
 
         self.handle.set(handle);
 
+        debug!("finished startup for file_service");
         Ok(())
     }
 }

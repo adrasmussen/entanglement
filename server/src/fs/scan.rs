@@ -63,7 +63,9 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                context.error("unknown path", "failed to parse DirEntry", err).await;
+                context
+                    .error("unknown path", "failed to parse DirEntry", err)
+                    .await;
                 continue;
             }
         };
@@ -97,7 +99,11 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
             // technically, this should be unreachable, but we want to cover the eventuality
             // that the behavior of is_dir()/is_file() change
             context
-                .error(entry.path(), "direntry is neither file nor directory", "custom")
+                .error(
+                    entry.path(),
+                    "direntry is neither file nor directory",
+                    "custom",
+                )
                 .await;
             continue;
         };

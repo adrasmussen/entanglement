@@ -11,6 +11,7 @@ use common::{
     config::ESConfig,
     AwaitCache,
 };
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::auth::msg::AuthMsg;
 use crate::auth::ESAuthService;
@@ -49,6 +50,7 @@ impl EntanglementService for AuthService {
         }
     }
 
+    #[instrument(level=Level::DEBUG, skip(self, senders))]
     async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
         let config = self.config.clone();
         let receiver = self.receiver.clone();
@@ -92,12 +94,16 @@ impl EntanglementService for AuthService {
                     tokio::task::spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(_) => println!("cache service failed to reply to message"),
+                            Err(err) => {
+                                error!({service = "auth_service", channel = "esm", error = %err})
+                            }
                         }
                     });
                 }
 
-                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+                Err(anyhow::Error::msg(format!(
+                    "auth_service esm channel disconnected"
+                )))
             }
         };
 
@@ -105,6 +111,7 @@ impl EntanglementService for AuthService {
 
         self.handle.set(handle);
 
+        debug!("finished startup for auth_service");
         Ok(())
     }
 }
@@ -199,7 +206,10 @@ impl ESAuthService for AuthCache {
     }
 
     // authz
+    #[instrument(level=Level::DEBUG, skip_all)]
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
+        info!({provider = %provider}, "adding authorization provider");
+
         let authz_providers = self.authz_providers.clone();
 
         let mut authz_providers = authz_providers.lock().await;
@@ -282,7 +292,10 @@ impl ESAuthService for AuthCache {
     }
 
     // authn
+    #[instrument(level=Level::DEBUG, skip_all)]
     async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
+        info!({provider = %provider}, "adding authentication provider");
+
         let authn_providers = self.authn_providers.clone();
 
         let mut authn_providers = authn_providers.lock().await;

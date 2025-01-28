@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -24,5 +25,11 @@ impl AuthnBackend for ProxyAuth {
     // previously logged on
     async fn is_valid_user(&self, _uid: String) -> anyhow::Result<bool> {
         Ok(true)
+    }
+}
+
+impl Display for ProxyAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "http reverse proxy header authentication")
     }
 }

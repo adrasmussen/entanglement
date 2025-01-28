@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -90,5 +91,11 @@ impl AuthzBackend for YamlGroupFile {
             Some(v) => Ok(v.clone()),
             None => Ok(HashSet::new()),
         }
+    }
+}
+
+impl Display for YamlGroupFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "file-based group authorization")
     }
 }
