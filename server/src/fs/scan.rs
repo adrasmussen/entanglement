@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::Local;
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument, Level};
 use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
@@ -113,7 +113,7 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
     tasks.join_all().await;
 }
 
-#[instrument(skip(context, path))]
+#[instrument(level=Level::DEBUG, skip(context, path))]
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     // first, check if the media already exists in the database
     let pathstr = match path.to_str() {

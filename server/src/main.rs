@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 
 mod auth;
 mod checks;

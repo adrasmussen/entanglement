@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, instrument, Level};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
