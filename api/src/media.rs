@@ -7,7 +7,7 @@ use crate::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid};
 
 pub type MediaUuid = i64;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum MediaMetadata {
     Image,
     Video,
@@ -15,7 +15,7 @@ pub enum MediaMetadata {
     Audio,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Media {
     pub library_uuid: LibraryUuid,
     pub path: String,

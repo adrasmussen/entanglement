@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::common::{stream::*, style};
+use crate::{
+    common::{stream::*, style},
+    gallery::{info::MediaInfo, media::MediaDetail},
+};
 use api::media::*;
 
 // GalleryDetail elements
@@ -80,9 +83,6 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         }
     };
 
-    // only look the link up once, at the cost of a clone
-    let image_src = full_link(media_uuid);
-
     // this whole thing should probably be carved up into three elements:
     //  1) display box (per media)
     //  2) edit functions (has media-specific extras)
@@ -93,102 +93,13 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         div {
             style { "{style::GALLERY_DETAIL}" }
             div { class: "gallery-outer",
-                // if we supported several types, we could match here, which would likely mean
-                // geting a more general MediaDetail element or similar
-                div {
-                    a { href: image_src.clone(), target: "_blank",
-                        img { class: "gallery-img", src: image_src }
-                    }
-                }
-                div {
-                    form {
-                        class: "gallery-info",
-                        onsubmit: move |event| async move {
-                            let mut status_signal = status_signal;
-                            let date = event.values().get("date").map(|v| v.as_value());
-                            let note = event.values().get("note").map(|v| v.as_value());
-                            let result = match update_media(
-                                    &UpdateMediaReq {
-                                        media_uuid: media_uuid.clone(),
-                                        update: MediaUpdate {
-                                            hidden: None,
-                                            attention: None,
-                                            date: date,
-                                            note: note,
-                                        },
-                                    },
-                                )
-                                .await
-                            {
-                                Ok(_) => String::from("Metadata updated successfully"),
-                                Err(err) => format!("Error updating metadata: {}", err.to_string()),
-                            };
-                            status_signal.set(result)
-                        },
-
-                        label { "Library" }
-                        span { "{media.library_uuid}" }
-
-                        label { "Path" }
-                        span { "{media.path}" }
-
-                        label { "Hidden" }
-                        span { "{media.hidden}" }
-
-                        label { "Needs attention" }
-                        span { "{media.attention}" }
-
-                        label { "Date" }
-                        input {
-                            name: "date",
-                            r#type: "text",
-                            value: "{media.date}",
-                        }
-
-                        label { "Note" }
-                        textarea { name: "note", rows: "8", value: "{media.note}" }
-
-                        input { r#type: "submit", value: "Update metadata" }
-                    }
-                    div { grid_column: "2",
-
-                        button { onclick: move |_| {}, r#type: "button", "Create comment" }
-                        button { onclick: move |_| {}, r#type: "button", "Add to album" }
-                        button { onclick: move |_| {}, r#type: "button", "Remove from album" }
-                        button {
-                            onclick: move |_| async move {
-                                let mut status_signal = status_signal;
-                                let result = match update_media(
-                                        &UpdateMediaReq {
-                                            media_uuid: media_uuid,
-                                            update: MediaUpdate {
-                                                hidden: Some(!media.hidden),
-                                                attention: None,
-                                                date: None,
-                                                note: None,
-                                            },
-                                        },
-                                    )
-                                    .await
-                                {
-                                    Ok(_) => String::from("Hidden state updated successfully"),
-                                    Err(err) => format!("Error updating hidden state: {}", err.to_string()),
-                                };
-                                status_signal.set(result);
-                            },
-                            r#type: "button",
-                            "Toggle Hidden"
-                        }
-                        button { onclick: move |_| {}, r#type: "button", "Needs attention" }
-                    }
-
-                    div {
-                        span { "MISSING: magic callback logic" }
-                    }
-                }
+                MediaDetail { media_uuid, media_type: media.metadata.clone() }
+                MediaInfo { media_uuid, media, status_signal }
                 div {
                     div { class: "gallery-info",
-                        span { "Albums: MISSING (needs name, owner, group AND REMOVE BUTTON, highlight if coming from that album)" }
+                        span {
+                            "Albums: MISSING (needs name, owner, group AND REMOVE BUTTON, highlight if coming from that album)"
+                        }
                         for album_uuid in albums {
                             p { "{album_uuid}" }
                         }

@@ -184,7 +184,7 @@ pub const GALLERY_DETAIL: &str = r#"
     margin-left: 8px;
 }
 
-.gallery-img {
+.gallery-media {
     width: 400px;
     object-fit: contain;
 }

@@ -39,6 +39,21 @@ where
     }
 }
 
+pub fn try_and_forget_local_storage<T>(key: &str) -> T
+where
+    T: Serialize + for<'a> Deserialize<'a> + Default,
+{
+    let key = format!("entanglement_{}", key);
+
+    match LocalStorage::get(key.clone()) {
+        Ok(val) => {
+            set_local_storage(&key, T::default());
+            val
+        }
+        Err(_) => T::default(),
+    }
+}
+
 pub trait SearchStorage
 where
     Self: Serialize,
