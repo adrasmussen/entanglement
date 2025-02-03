@@ -1,17 +1,15 @@
 use dioxus::prelude::*;
 
-use crate::common::modal::{modal_err, Modal};
+use crate::common::modal::{modal_err, MODAL_STACK};
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ShowAlbumBoxProps {
-    stack_signal: Signal<Vec<Modal>>,
     album_uuid: AlbumUuid,
 }
 
 #[component]
 pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
-    let _stack_signal = props.stack_signal;
     let album_uuid = props.album_uuid;
 
     let status_signal = use_signal(|| String::from(""));
@@ -34,17 +32,20 @@ pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
             div {
                 form { class: "modal-info",
 
+                    label { "Name" }
+                    span { "{album.name}" }
+
                     label { "Creator" }
                     span { "{album.uid}" }
 
                     label { "Group" }
                     span { "{album.gid}" }
 
-                    label { "Name" }
-                    span { "{album.metadata.name}" }
-
                     label { "Note" }
-                    span { "{album.metadata.note}" }
+                    span { "{album.note}" }
+
+                    label { "Last modified" }
+                    span { "{album.mtime}" }
                 }
             }
             div { grid_column: "2",
@@ -59,14 +60,10 @@ pub fn ShowAlbumBox(props: ShowAlbumBoxProps) -> Element {
 }
 
 #[derive(Clone, PartialEq, Props)]
-pub struct CreateAlbumBoxProps {
-    stack_signal: Signal<Vec<Modal>>,
-}
+pub struct CreateAlbumBoxProps {}
 
 #[component]
-pub fn CreateAlbumBox(props: CreateAlbumBoxProps) -> Element {
-    let _stack_signal = props.stack_signal;
-
+pub fn CreateAlbumBox() -> Element {
     let status_signal = use_signal(|| String::from(""));
 
     rsx! {
@@ -97,8 +94,8 @@ pub fn CreateAlbumBox(props: CreateAlbumBoxProps) -> Element {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
-                        let result = match create_album(
-                                &CreateAlbumReq {
+                        let result = match add_album(
+                                &AddAlbumReq {
                                     gid: gid,
                                     name: name,
                                     note: note,
@@ -106,7 +103,10 @@ pub fn CreateAlbumBox(props: CreateAlbumBoxProps) -> Element {
                             )
                             .await
                         {
-                            Ok(_) => String::from("Album created successfully"),
+                            Ok(_) => {
+                                MODAL_STACK.with_mut(|v| v.pop());
+                                return;
+                            }
                             Err(err) => format!("Error creating album: {}", err.to_string()),
                         };
                         status_signal.set(result)

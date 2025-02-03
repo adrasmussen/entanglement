@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 
 use crate::{
-    common::style,
+    common::{
+        modal::{ModalBox, MODAL_STACK},
+        style,
+    },
     gallery::{info::MediaInfo, media::MediaDetail, related::MediaRelated},
 };
 use api::media::*;
@@ -53,11 +56,15 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         }
     };
 
-    // with some better ergonomics, we might be able to remove this
+    // this signal pulls double duty as both a way to communicate errors in the api calls
+    // and a way to trigger rerendering when necessary
     let status_signal = use_signal(|| String::from("waiting to update..."));
 
     let media_future = use_resource(move || async move {
-        status_signal();
+        // subscribe this use_resource to both signals as a somewhat hamfisted way
+        // to ensure updates
+        status_signal.read();
+        MODAL_STACK.read();
 
         get_media(&GetMediaReq {
             media_uuid: media_uuid,
@@ -83,12 +90,9 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         }
     };
 
-    // this whole thing should probably be carved up into three elements:
-    //  1) display box (per media)
-    //  2) edit functions (has media-specific extras)
-    //  3) comments
     rsx! {
-        GalleryDetailBar { status: status_signal() }
+        ModalBox {}
+        GalleryDetailBar { status: status_signal.read() }
 
         div {
             style { "{style::GALLERY_DETAIL}" }

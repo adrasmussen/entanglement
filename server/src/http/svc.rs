@@ -790,7 +790,7 @@ async fn add_album(
                     gid: message.gid,
                     mtime: Local::now().timestamp(),
                     name: message.name,
-                    note: message.description,
+                    note: message.note,
                 },
             }
             .into(),

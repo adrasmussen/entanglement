@@ -1,20 +1,18 @@
 use dioxus::prelude::*;
 
 use crate::common::{
-    modal::{modal_err, Modal},
+    modal::{modal_err, Modal, MODAL_STACK},
     stream::*,
 };
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ShowMediaBoxProps {
-    stack_signal: Signal<Vec<Modal>>,
     media_uuid: MediaUuid,
 }
 
 #[component]
 pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
-    let stack_signal = props.stack_signal;
     let media_uuid = props.media_uuid;
 
     let status_signal = use_signal(|| String::from(""));
@@ -28,18 +26,18 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
         .await
     });
 
-    let (media, albums, tickets) = match &*media_future.read() {
+    let (media, _albums, _comments) = match &*media_future.read() {
         Some(Ok(resp)) => (
             resp.media.clone(),
             resp.albums.clone(),
-            resp.tickets.clone(),
+            resp.comments.clone(),
         ),
         Some(Err(err)) => return modal_err(err.to_string()),
         None => return modal_err("Still waiting on get_media future..."),
     };
 
     rsx! {
-        div { class: "modal-body",
+        div { class: "modal-media",
             div {
                 img { src: full_link(media_uuid) }
             }
@@ -48,18 +46,14 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                     class: "modal-info",
                     onsubmit: move |event| async move {
                         let mut status_signal = status_signal;
-                        let date = match event.values().get("date") {
-                            Some(val) => val.as_value(),
-                            None => String::from(""),
-                        };
-                        let note = match event.values().get("note") {
-                            Some(val) => val.as_value(),
-                            None => String::from(""),
-                        };
+                        let date = event.values().get("date").map(|v| v.as_value());
+                        let note = event.values().get("note").map(|v| v.as_value());
                         let result = match update_media(
                                 &UpdateMediaReq {
                                     media_uuid: media_uuid.clone(),
-                                    change: MediaMetadata {
+                                    update: MediaUpdate {
+                                        hidden: None,
+                                        attention: None,
                                         date: date,
                                         note: note,
                                     },
@@ -83,18 +77,10 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                     span { "{media.hidden}" }
 
                     label { "Date" }
-                    input {
-                        name: "date",
-                        r#type: "text",
-                        value: "{media.metadata.date}",
-                    }
+                    input { name: "date", r#type: "text", value: "{media.date}" }
 
                     label { "Note" }
-                    textarea {
-                        name: "note",
-                        rows: "8",
-                        value: "{media.metadata.note}",
-                    }
+                    textarea { name: "note", rows: "8", value: "{media.note}" }
 
                     input { r#type: "submit", value: "Update metadata" }
 
@@ -102,20 +88,24 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
 
                         button {
                             onclick: move |_| {
-                                let mut stack_signal = stack_signal;
-                                stack_signal.push(Modal::CreateTicket(media_uuid))
+                                MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
                             },
                             r#type: "button",
-                            "Create ticket"
+                            "Create album"
                         }
                         button { onclick: move |_| {}, r#type: "button", "Albums" }
                         button {
                             onclick: move |_| async move {
                                 let mut status_signal = status_signal;
-                                let result = match set_media_hidden(
-                                        &SetMediaHiddenReq {
+                                let result = match update_media(
+                                        &UpdateMediaReq {
                                             media_uuid: media_uuid,
-                                            hidden: !media.hidden,
+                                            update: MediaUpdate {
+                                                hidden: Some(!media.hidden),
+                                                attention: None,
+                                                date: None,
+                                                note: None,
+                                            },
                                         },
                                     )
                                     .await

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::common::style;
-use api::{album::AlbumUuid, library::LibraryUuid, media::MediaUuid, ticket::TicketUuid};
+use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
 
 mod media;
 use media::ShowMediaBox;
@@ -9,28 +9,36 @@ use media::ShowMediaBox;
 mod album;
 use album::{CreateAlbumBox, ShowAlbumBox};
 
-mod ticket;
-use ticket::ShowTicketBox;
+mod comment;
+use comment::{AddCommentBox, DeleteCommentBox};
 
+pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
+
+// Modal
+//
+// this enumerates all of the modal boxes we can display, and what the relevant
+// data is to show the correct box.  pushing this onto the modal stack will
+// trigger the ModalBox, below
 pub enum Modal {
     ShowMedia(MediaUuid),
     ShowAlbum(AlbumUuid),
     CreateAlbum,
     ShowLibrary(LibraryUuid),
     AddLibrary,
-    ShowTicket(TicketUuid),
-    CreateTicket(MediaUuid),
+    AddComment(MediaUuid),
+    DeleteComment(CommentUuid),
 }
 
+// ModalBox
+//
+// this is the struct that, once included into another element, actually displays
+// the modal on the top of the stack.  it only knows about the the stack_signal,
+// since anything that pushes onto the stack provides the rest of the information
 #[derive(Clone, PartialEq, Props)]
-pub struct ModalBoxProps {
-    stack_signal: Signal<Vec<Modal>>,
-}
+pub struct ModalBoxProps {}
 
 #[component]
-pub fn ModalBox(props: ModalBoxProps) -> Element {
-    let mut stack_signal = props.stack_signal;
-
+pub fn ModalBox() -> Element {
     rsx! {
         div {
             style { "{style::MODAL}" }
@@ -40,22 +48,22 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                         span {
                             class: "close",
                             onclick: move |_| {
-                                stack_signal.pop();
+                                MODAL_STACK.with_mut(|v| v.pop());
                             },
                             "X"
                         }
                     }
-                    match stack_signal.last() {
+                    match MODAL_STACK.read().last() {
                         Some(val) => {
                             match *val {
                                 Modal::ShowMedia(media_uuid) => rsx! {
-                                    ShowMediaBox { stack_signal, media_uuid }
+                                    ShowMediaBox { media_uuid }
                                 },
                                 Modal::ShowAlbum(album_uuid) => rsx! {
-                                    ShowAlbumBox { stack_signal, album_uuid }
+                                    ShowAlbumBox { album_uuid }
                                 },
                                 Modal::CreateAlbum => rsx! {
-                                    CreateAlbumBox { stack_signal }
+                                    CreateAlbumBox {}
                                 },
                                 Modal::ShowLibrary(library_uuid) => rsx! {
                                     ModalErr { err: "not implemented" }
@@ -63,11 +71,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                                 Modal::AddLibrary => rsx! {
                                     ModalErr { err: "not implemented" }
                                 },
-                                Modal::ShowTicket(ticket_uuid) => rsx! {
-                                    ShowTicketBox { stack_signal, ticket_uuid }
+                                Modal::AddComment(media_uuid) => rsx! {
+                                    AddCommentBox { media_uuid }
                                 },
-                                Modal::CreateTicket(media_uuid) => rsx! {
-                                    ModalErr { err: "not implemented" }
+                                Modal::DeleteComment(comment_uuid) => rsx! {
+                                    DeleteCommentBox { comment_uuid }
                                 },
                             }
                         }

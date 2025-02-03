@@ -112,15 +112,6 @@ pub const MODAL: &str = r#"
     color: white;
 }
 
-.modal-body {
-    display: grid;
-    grid-template-columns: max-content max-content;
-    grid-gap: 5px;
-    padding: 10px 0px 10px 0px;
-    height: fit-content;
-    width: fit-content;
-}
-
 .modal-footer {
     display: grid;
     padding: 2px 16px;
@@ -133,7 +124,16 @@ pub const MODAL: &str = r#"
     width: 600px;
 }
 
-.modal-body img {
+.modal-media {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-gap: 5px;
+    padding: 10px 0px 10px 0px;
+    height: fit-content;
+    width: fit-content;
+}
+
+.modal-media img {
     float: left;
     height: 400px;
     object-fit: contain;
@@ -172,6 +172,14 @@ pub const MODAL: &str = r#"
 
 .modal-info input[type=submit] {
     grid-column: 2;
+}
+
+.modal-body {
+    display: grid;
+    grid-gap: 5px;
+    padding: 10px 0px 10px 0px;
+    height: fit-content;
+    width: min(stretch, fit-content);
 }
 "#;
 
@@ -225,7 +233,7 @@ pub const GALLERY_DETAIL: &str = r#"
 
 .gallery-related {
     display: grid;
-    grid-template-rows: repeat(2, auto 1fr);
+    grid-template-rows: repeat(2, auto auto);
     grid-gap: 10px;
     padding: 20px;
     color: black;

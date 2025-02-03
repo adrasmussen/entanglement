@@ -133,7 +133,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
 
         match media {
             Ok(media) => rsx! {
-                MediaGrid { media }
+                MediaGrid { album_uuid, media }
             },
             Err(err) => rsx! {
                 span { "{err}" }

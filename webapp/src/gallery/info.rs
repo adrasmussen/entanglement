@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use crate::common::modal::{Modal, MODAL_STACK};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -65,7 +66,11 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                 // inside the form because we want to use the grid created by the labels
                 div { grid_column: 2,
                     button { onclick: move |_| {}, r#type: "button", "Add to album" }
-                    button { onclick: move |_| {}, r#type: "button", "Create comment" }
+                    button {
+                        onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::AddComment(media_uuid))) },
+                        r#type: "button",
+                        "Create comment"
+                    }
                     button {
                         onclick: move |_| async move {
                             let mut status_signal = status_signal;

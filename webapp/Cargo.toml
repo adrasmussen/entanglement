@@ -21,3 +21,4 @@ serde_json = "1.0.137"
 tracing = "0.1.41"
 dioxus-logger = "0.6.2"
 getrandom = { version = "0.2.15", features = ["js"] }
+chrono = "0.4.39"

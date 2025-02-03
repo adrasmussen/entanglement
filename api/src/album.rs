@@ -31,7 +31,7 @@ endpoint!(AddAlbum);
 pub struct AddAlbumReq {
     pub gid: String,
     pub name: String,
-    pub description: String,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -18,6 +18,10 @@ pub struct Comment {
 // messages
 
 // add a comment to media
+//
+// note that this exposes an awkward abstraction layer violation:
+// the uid and timestamp both are determined by the http service,
+// and so are ignored by this endpoint
 endpoint!(AddComment);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1,7 +1,11 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::style, Route};
+use crate::{
+    common::{
+        local_time, modal::{Modal, MODAL_STACK}, storage::try_and_forget_local_storage, style
+    }, gallery::GALLERY_ALBUM_KEY, Route
+};
 use api::{album::*, comment::*};
 
 #[derive(Clone, PartialEq, Props)]
@@ -104,14 +108,24 @@ fn CommentTableRow(props: CommentRowProps) -> Element {
         }
     };
 
+    let local_time = local_time(result.mtime);
+
     rsx! {
         tr {
             td { "{result.uid}" }
-            td { "{result.mtime}" }
-            td { "REMOVE" }
+            td { "{local_time}" }
+            td {
+                button {
+                    float: "right",
+                    onclick: move |_| async move {
+                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteComment(comment_uuid)));
+                    },
+                    "Delete"
+                }
+            }
         }
         tr {
-            td { rowspan: 3, "{result.text}" }
+            td { colspan: 3, white_space: "pre", "{result.text}" }
         }
     }
 }
@@ -152,9 +166,11 @@ pub fn MediaRelated(props: MediaRelatedProps) -> Element {
     let albums = props.albums;
     let comments = props.comments;
 
+    let album_highlight = try_and_forget_local_storage::<String>(GALLERY_ALBUM_KEY);
+
     rsx! {
         div { class: "gallery-related",
-            span { "Albums" }
+            span { "Albums {album_highlight}" }
             AlbumTable { albums }
             span { "Comments" }
             CommentTable { comments }
