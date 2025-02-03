@@ -89,6 +89,8 @@ fn CommentTableRow(props: CommentRowProps) -> Element {
     let comment_uuid = props.comment_uuid;
 
     let comment = use_resource(move || async move {
+        // add MODAL_STACK.read(); to make a weird error
+
         get_comment(&GetCommentReq {
             comment_uuid: comment_uuid,
         })
@@ -170,10 +172,14 @@ pub fn MediaRelated(props: MediaRelatedProps) -> Element {
 
     rsx! {
         div { class: "gallery-related",
-            span { "Albums {album_highlight}" }
-            AlbumTable { albums }
-            span { "Comments" }
-            CommentTable { comments }
+            div {
+                h4 { "Albums {album_highlight}" }
+                AlbumTable { albums }
+            }
+            div {
+                h4 { "Comments" }
+                CommentTable { comments }
+            }
         }
     }
 }
