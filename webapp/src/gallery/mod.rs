@@ -4,8 +4,8 @@ use dioxus_router::prelude::*;
 use crate::Route;
 
 mod grid;
-mod media;
 mod info;
+mod media;
 mod related;
 
 mod detail;

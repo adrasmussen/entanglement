@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::{
-    common::{stream::*, style},
-    gallery::{info::MediaInfo, media::MediaDetail},
+    common::style,
+    gallery::{info::MediaInfo, media::MediaDetail, related::MediaRelated},
 };
 use api::media::*;
 
@@ -95,20 +95,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
             div { class: "gallery-outer",
                 MediaDetail { media_uuid, media_type: media.metadata.clone() }
                 MediaInfo { media_uuid, media, status_signal }
-                div {
-                    div { class: "gallery-info",
-                        span {
-                            "Albums: MISSING (needs name, owner, group AND REMOVE BUTTON, highlight if coming from that album)"
-                        }
-                        for album_uuid in albums {
-                            p { "{album_uuid}" }
-                        }
-                        span { "Comments: MISSING (needs comment blocks here)" }
-                        for comment_uuid in comments {
-                            p { "{comment_uuid}" }
-                        }
-                    }
-                }
+                MediaRelated { albums, comments }
             }
         }
     }

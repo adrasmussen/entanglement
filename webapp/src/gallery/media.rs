@@ -12,15 +12,13 @@ pub struct MediaDetailProps {
 #[component]
 pub fn MediaDetail(props: MediaDetailProps) -> Element {
     rsx! {
-        div { class: "gallery-media",
+        div {
             match props.media_type {
                 MediaMetadata::Image => {
                     let image_src = full_link(props.media_uuid);
                     rsx! {
-                        div {
-                            a { href: image_src.clone(), target: "_blank",
-                                img { src: image_src }
-                            }
+                        a { href: image_src.clone(), target: "_blank",
+                            img { class: "gallery-media", src: image_src }
                         }
                     }
                 }

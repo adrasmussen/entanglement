@@ -211,7 +211,6 @@ pub const GALLERY_DETAIL: &str = r#"
 }
 
 .gallery-info input[type=submit], button {
-    float: left;
     padding: 6px;
     border: none;
     margin-top: 8px;
@@ -224,6 +223,14 @@ pub const GALLERY_DETAIL: &str = r#"
     grid-column: 2;
 }
 
+.gallery-related {
+    display: grid;
+    grid-template-rows: repeat(2, auto 1fr);
+    grid-gap: 10px;
+    padding: 20px;
+    color: black;
+    font-size 17px;
+}
 "#;
 
 pub const MEDIA_GRID: &str = r#"

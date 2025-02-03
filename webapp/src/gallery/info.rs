@@ -11,13 +11,14 @@ pub struct MediaInfoProps {
 
 #[component]
 pub fn MediaInfo(props: MediaInfoProps) -> Element {
-    let media_uuid = props.media_uuid.clone();
-    let media = props.media.clone();
-    let status_signal = props.status_signal.clone();
+    let media_uuid = props.media_uuid;
+    let media = props.media;
+    let status_signal = props.status_signal;
 
     rsx! {
-        div { class: "gallery-info",
+        div {
             form {
+                class: "gallery-info",
                 onsubmit: move |event| async move {
                     let mut status_signal = status_signal;
                     let date = event.values().get("date").map(|v| v.as_value());
@@ -60,60 +61,61 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                 textarea { name: "note", rows: "8", value: "{media.note}" }
 
                 input { r#type: "submit", value: "Update metadata" }
+
+                // inside the form because we want to use the grid created by the labels
+                div { grid_column: 2,
+                    button { onclick: move |_| {}, r#type: "button", "Add to album" }
+                    button { onclick: move |_| {}, r#type: "button", "Create comment" }
+                    button {
+                        onclick: move |_| async move {
+                            let mut status_signal = status_signal;
+                            let result = match update_media(
+                                    &UpdateMediaReq {
+                                        media_uuid: media_uuid,
+                                        update: MediaUpdate {
+                                            hidden: Some(!media.hidden),
+                                            attention: None,
+                                            date: None,
+                                            note: None,
+                                        },
+                                    },
+                                )
+                                .await
+                            {
+                                Ok(_) => String::from("Hidden state updated successfully"),
+                                Err(err) => format!("Error updating hidden state: {}", err.to_string()),
+                            };
+                            status_signal.set(result);
+                        },
+                        r#type: "button",
+                        "Toggle Hidden"
+                    }
+                    button {
+                        onclick: move |_| async move {
+                            let mut status_signal = status_signal;
+                            let result = match update_media(
+                                    &UpdateMediaReq {
+                                        media_uuid: media_uuid,
+                                        update: MediaUpdate {
+                                            hidden: None,
+                                            attention: Some(!media.attention),
+                                            date: None,
+                                            note: None,
+                                        },
+                                    },
+                                )
+                                .await
+                            {
+                                Ok(_) => String::from("Attention state updated successfully"),
+                                Err(err) => format!("Error updating attention state: {}", err.to_string()),
+                            };
+                            status_signal.set(result);
+                        },
+                        r#type: "button",
+                        "Needs attention"
+                    }
+                }
             }
         }
-        div { class: "gallery-info", grid_column: "2",
-            button { onclick: move |_| {}, r#type: "button", "Create comment" }
-            button { onclick: move |_| {}, r#type: "button", "Add to album" }
-            button {
-                onclick: move |_| async move {
-                    let mut status_signal = status_signal;
-                    let result = match update_media(
-                            &UpdateMediaReq {
-                                media_uuid: media_uuid,
-                                update: MediaUpdate {
-                                    hidden: Some(!media.hidden),
-                                    attention: None,
-                                    date: None,
-                                    note: None,
-                                },
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => String::from("Hidden state updated successfully"),
-                        Err(err) => format!("Error updating hidden state: {}", err.to_string()),
-                    };
-                    status_signal.set(result);
-                },
-                r#type: "button",
-                "Toggle Hidden"
-            }
-            button {
-                onclick: move |_| async move {
-                    let mut status_signal = status_signal;
-                    let result = match update_media(
-                            &UpdateMediaReq {
-                                media_uuid: media_uuid,
-                                update: MediaUpdate {
-                                    hidden: None,
-                                    attention: Some(!media.attention),
-                                    date: None,
-                                    note: None,
-                                },
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => String::from("Attention state updated successfully"),
-                        Err(err) => format!("Error updating attention state: {}", err.to_string()),
-                    };
-                    status_signal.set(result);
-                },
-                r#type: "button",
-                "Needs attention"
-            }
-        }
-        // media-specific options go here
     }
 }
