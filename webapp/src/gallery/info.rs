@@ -44,7 +44,7 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                 },
 
                 label { "Library" }
-                span { "{media.library_uuid}" }
+                span { "{media.library_uuid} (should include link)" }
 
                 label { "Path" }
                 span { "{media.path}" }

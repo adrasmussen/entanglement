@@ -267,7 +267,7 @@ impl HttpEndpoint {
         });
 
         // for the moment, we just panic if the socket is in use
-        let listener = tokio::net::TcpListener::bind(socket).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(socket).await.expect("http_service failed to bind tcp socket");
 
         // the main http server loop
         //
@@ -492,7 +492,7 @@ impl HttpEndpoint {
 // by the middleware auth layer; see http/auth.rs
 
 // this relatively straightforward reader handles all types of media (images,
-// thumbnails, video, etc), which will likely not work once we need vide slices
+// thumbnails, video, etc), which will likely not work once we need video slices
 async fn stream_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,

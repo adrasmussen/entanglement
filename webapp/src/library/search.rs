@@ -39,7 +39,6 @@ fn LibrarySearchBar(props: LibrarySearchBarProps) -> Element {
                 }
                 span { "Search History" }
                 span { "{status}" }
-                span { "MISSING: create library modal" }
             }
         }
     }

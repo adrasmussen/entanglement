@@ -744,7 +744,7 @@ pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<Library
 
 pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
     let mut result = r"
-        SELECT path, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
+        SELECT path, uid, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
         .with(params! {
             "library_uuid" => library_uuid,
         })
@@ -758,13 +758,14 @@ pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Resul
         None => return Ok(None),
     };
 
-    let data = from_row_opt::<(String, String, i64, i64)>(row)?;
+    let data = from_row_opt::<(String, String, String, i64, i64)>(row)?;
 
     Ok(Some(Library {
         path: data.0,
-        gid: data.1,
-        mtime: data.2,
-        count: data.3,
+        uid: data.1,
+        gid: data.2,
+        mtime: data.3,
+        count: data.4,
     }))
 }
 

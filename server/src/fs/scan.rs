@@ -4,17 +4,19 @@ use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use blockhash::blockhash256;
 use chrono::Local;
+use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{error, info, instrument, Level};
+use tracing::{debug, error, info, instrument, Level};
 use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
+use crate::fs::{media_original_path, media_thumbnail_path};
 use crate::service::ESMSender;
 use api::{
     library::{LibraryScanJob, LibraryUuid},
     media::{Media, MediaMetadata, MediaUuid},
-    ORIGINAL_PATH,
 };
 use common::config::ESConfig;
 
@@ -24,7 +26,6 @@ pub struct ScanContext {
     pub library_uuid: LibraryUuid,
     pub library_path: PathBuf,
     pub db_svc_sender: ESMSender,
-    pub media_linkdir: PathBuf,
     pub job_status: Arc<RwLock<LibraryScanJob>>,
 }
 
@@ -44,7 +45,16 @@ impl ScanContext {
     }
 }
 
-#[instrument(skip(context))]
+struct MediaData {
+    hash: String,
+    date: String,
+    metadata: MediaMetadata,
+}
+
+// concurrent file scanner
+//
+//
+#[instrument(level=Level::DEBUG, skip(context))]
 pub async fn run_scan(context: Arc<ScanContext>) -> () {
     let context = context.clone();
 
@@ -52,11 +62,13 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
 
     let mut tasks = JoinSet::new();
 
+    let max_threads = context.config.clone().fs_scanner_threads;
+
     for entry in WalkDir::new(context.library_path.clone()).into_iter() {
         // things to check eventually:
         //  * too many errors
         //  * cancel signal
-        if tasks.len() > 8 {
+        if tasks.len() > max_threads {
             tasks.join_next().await;
         }
 
@@ -92,6 +104,9 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
 
         if meta.is_dir() {
             // look for starlark files to run, possibly with a specific name
+            //
+            // note thet library.uid will need to be plumbed through to here
+            // so that we can actually use the relevant DbMsg calls
             continue;
         } else if meta.is_file() {
             tasks.spawn(register_media(context.clone(), path));
@@ -115,6 +130,8 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
 
 #[instrument(level=Level::DEBUG, skip(context, path))]
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
+    debug!({path = ?path}, "started processing media");
+
     // first, check if the media already exists in the database
     let pathstr = match path.to_str() {
         Some(pathstr) => pathstr.to_owned(),
@@ -196,7 +213,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    let media_metadata: Result<(MediaMetadata, Option<String>), anyhow::Error> = match ext {
+    let mediadata: Result<MediaData, anyhow::Error> = match ext {
         "jpg" | "png" | "tiff" => process_image(context.config.clone(), path.clone()).await,
         _ => {
             context
@@ -210,7 +227,8 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    let media_metadata: (MediaMetadata, Option<String>) = match media_metadata {
+    // async closures haven't stabilized yet
+    let mediadata: MediaData = match mediadata {
         Ok(val) => val,
         Err(err) => {
             context
@@ -220,22 +238,17 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    // calculate the hash
-    let hash = "OH NO".to_owned();
-
     // once we have the metadata, we assemble the Media struct and send it to the database
     let media = Media {
         library_uuid: context.library_uuid,
         path: pathstr.clone(),
-        hash: hash,
+        hash: mediadata.hash,
         mtime: Local::now().timestamp(),
         hidden: false,
         attention: false,
-        date: media_metadata
-            .1
-            .unwrap_or_else(|| "get from parser".to_owned()),
+        date: mediadata.date,
         note: "".to_owned(),
-        metadata: media_metadata.0,
+        metadata: mediadata.metadata.clone(),
     };
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -279,15 +292,11 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    // this should probably be another helper function so that the http server can easily
-    // map uuid -> path without relying on magic numbers
-    let link = context
-        .media_linkdir
-        .join(ORIGINAL_PATH)
-        .join(media_uuid.to_string());
-
     // TODO -- change to relative by adjusting original path
-    match symlink(path.clone(), link) {
+    match symlink(
+        path.clone(),
+        media_original_path(context.config.clone(), media_uuid.to_string()),
+    ) {
         Ok(_) => {}
         Err(err) => {
             context.error(path, "failed to add symlink", err).await;
@@ -295,29 +304,89 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     }
 
+    match create_thumbnail(
+        context.config.clone(),
+        path.clone(),
+        media_uuid,
+        mediadata.metadata,
+    ) {
+        Ok(_) => {}
+        Err(err) => {
+            context.error(path, "failed to create thumbnail", err).await;
+            return;
+        }
+    }
+
     context.count_inc().await;
+    debug!({path = ?path}, "finished processing media");
 }
 
-async fn process_image(
-    config: Arc<ESConfig>,
-    path: PathBuf,
-) -> anyhow::Result<(MediaMetadata, Option<String>)> {
-    use exif::{In, Reader, Tag};
+async fn process_image(_config: Arc<ESConfig>, path: PathBuf) -> anyhow::Result<MediaData> {
+    debug!({path = ?path}, "starting processing image");
 
+    // exif processing
+    //
+    // we attempt to read the exif metadata for the image to extract the date
     // following the exif docs, open the file synchronously and read from the container
     let file = std::fs::File::open(&path)?;
 
     let mut bufreader = std::io::BufReader::new(file);
 
-    let exifreader = Reader::new();
+    let exifreader = exif::Reader::new();
 
     let exif = exifreader.read_from_container(&mut bufreader)?;
 
     // process the exif fields
-    let datetime_original = match exif.get_field(Tag::DateTimeOriginal, In::PRIMARY) {
+    let datetime_original = match exif.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY) {
         Some(dto) => format!("{}", dto.display_value()),
         None => String::from(""),
     };
 
-    Ok((MediaMetadata::Image, Some(datetime_original)))
+    // perceptual hashing
+    let image = image::open(&path)?;
+
+    let hash = blockhash256(&image);
+
+    debug!({path = ?path}, "finshed processing image");
+
+    Ok(MediaData {
+        hash: hash.to_string(),
+        date: datetime_original,
+        metadata: MediaMetadata::Image,
+    })
+}
+
+fn create_thumbnail(
+    config: Arc<ESConfig>,
+    path: PathBuf,
+    media_uuid: MediaUuid,
+    media_metadata: MediaMetadata,
+) -> anyhow::Result<()> {
+    debug!({path = ?path}, "started creating thumbnail");
+
+    let mut decoder = match media_metadata {
+        MediaMetadata::Image => ImageReader::open(path.clone())?.into_decoder()?,
+        _ => return Err(anyhow::Error::msg("not implemented")),
+    };
+
+    // this both solves the crate version collision and corrects the orientation, too
+    let orientation = decoder.orientation()?;
+
+    debug!({path = ?path, orientation = ?orientation}, "orientation for image");
+
+    let image = DynamicImage::from_decoder(decoder)?;
+
+    // create the thumbnail with bounds, not exact sizing
+    let mut thumbnail = image.thumbnail(400, 400);
+
+    thumbnail.apply_orientation(orientation);
+
+    thumbnail.save_with_format(
+        media_thumbnail_path(config, media_uuid.to_string()),
+        ImageFormat::Png,
+    )?;
+
+    debug!({path = ?path}, "finished creating thumbnail");
+
+    Ok(())
 }

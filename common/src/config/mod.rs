@@ -31,4 +31,8 @@ pub struct ESConfig {
     // read-write path where symlinks are created, as
     // well as subfolders for thumbnails and slices
     pub media_srvdir: PathBuf,
+
+    // maximum number of threads used to process media
+    // (in reality, tokio tasks)
+    pub fs_scanner_threads: usize,
 }

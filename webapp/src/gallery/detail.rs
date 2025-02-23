@@ -15,9 +15,6 @@ use api::media::*;
 // set of elements that displays the media details and has all of
 // the api calls to modify those details
 //
-// we will eventually want to add in a ?-search string to the path
-// to keep some of the context of where we came from
-//
 // once we support more media types, the main body will need to
 // switch based on the MediaType enum
 #[derive(Clone, PartialEq, Props)]

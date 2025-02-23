@@ -110,6 +110,9 @@ impl ESFileService for FileScanner {
             anyhow::Error::msg(format!("Failed to find library {}", library_uuid.clone()))
         })?;
 
+        // rather than start another thread to listen for the jobs status, we create this shared
+        // struct that will be arc'd into the scan context, modified over the couse of the scan,
+        // and read back later to send the status/library update
         let job = Arc::new(RwLock::new(LibraryScanJob {
             start_time: Local::now().timestamp(),
             file_count: 0,
@@ -131,12 +134,13 @@ impl ESFileService for FileScanner {
             }
         }
 
+        // this struct contains everything needed to actually run a scan, including the job struct,
+        // conveniently packaged so that run_scan() can easily pass relevant information down
         let context = Arc::new(ScanContext {
             config: self.config.clone(),
             library_uuid: library_uuid,
             library_path: self.config.media_srcdir.clone().join(library.path),
             db_svc_sender: self.db_svc_sender.clone(),
-            media_linkdir: self.config.media_srvdir.clone(),
             job_status: job,
         });
 

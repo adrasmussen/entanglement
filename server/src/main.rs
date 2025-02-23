@@ -40,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
         mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
+        fs_scanner_threads: 8,
     });
 
     info!("done");

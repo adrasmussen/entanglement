@@ -11,9 +11,15 @@ pub type LibraryUuid = i64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
+    // the path to the library, relative to the media_srcdir
     pub path: String,
+    // effective user for running scripts
+    pub uid: String,
+    // owner gid used to check privileges
     pub gid: String,
+    // last modification time of the library
     pub mtime: i64,
+    // number of files seen on the last count
     pub count: i64,
 }
 
