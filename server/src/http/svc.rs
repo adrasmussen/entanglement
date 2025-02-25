@@ -267,7 +267,9 @@ impl HttpEndpoint {
         });
 
         // for the moment, we just panic if the socket is in use
-        let listener = tokio::net::TcpListener::bind(socket).await.expect("http_service failed to bind tcp socket");
+        let listener = tokio::net::TcpListener::bind(socket)
+            .await
+            .expect("http_service failed to bind tcp socket");
 
         // the main http server loop
         //
@@ -507,6 +509,8 @@ async fn stream_media(
 
     let media_uuid = media_uuid.to_string();
 
+    // the pathbuf join() method inexplicably replaces the path if the argument
+    // is absolute, so we include this explicit check
     if PathBuf::from(&dir).is_absolute() || PathBuf::from(&media_uuid).is_absolute() {
         return Ok(StatusCode::BAD_REQUEST.into_response());
     }

@@ -22,7 +22,6 @@ pub struct Media {
     pub hash: String,
     pub mtime: i64,
     pub hidden: bool,
-    pub attention: bool,
     pub date: String,
     pub note: String,
     pub metadata: MediaMetadata,
@@ -31,7 +30,6 @@ pub struct Media {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MediaUpdate {
     pub hidden: Option<bool>,
-    pub attention: Option<bool>,
     pub date: Option<String>,
     pub note: Option<String>,
 }

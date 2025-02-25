@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use tracing::debug;
 
 use crate::{
     common::{storage::*, style},
@@ -34,60 +35,67 @@ fn GallerySearchBar(props: GallerySearchBarProps) -> Element {
                             Some(val) => val.as_value(),
                             None => String::from(""),
                         };
+                        debug!("updating media_search_signal");
                         media_search_signal.set(filter.clone());
                         set_local_storage(MEDIA_SEARCH_KEY, filter);
                     },
                     input {
                         name: "search_filter",
                         r#type: "text",
-                        value: "{media_search_signal()}",
+                        value: "{media_search_signal}",
                     }
                     input { r#type: "submit", value: "Search" }
                 }
-                span { "Search History" }
                 span { "{status}" }
-                span { "MISSING: needs attention checkbox" }
-                span { "MISSING: bulk select bar -- add to other viewers" }
+                span { "TODO: bulk select bar" }
             }
         }
     }
 }
 
+//
+// ROUTE TARGET
+//
 #[component]
 pub fn GallerySearch() -> Element {
+    // this signal must only be set in an onclick or similar, and never by the component
+    // functions lest we trigger an infinite loop
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
+    // use_resource() automatically subscribes to updates from hooks that it reads, so setting
+    // a new search signal re-runs the future...
     let media_future = use_resource(move || async move {
-        let filter = media_search_signal();
+        let filter = media_search_signal;
 
-        search_media(&SearchMediaReq { filter: filter }).await
+        search_media(&SearchMediaReq { filter: filter() }).await
     });
 
-    let (media, status) = match &*media_future.read() {
-        Some(Ok(resp)) => (
-            Ok(resp.media.clone()),
-            format!("Found {} results", resp.media.len()),
-        ),
-        Some(Err(err)) => (
-            Err(err.to_string()),
-            String::from("Error from search_media"),
-        ),
-        None => (
-            Err(String::from("Still waiting on search_media future...")),
-            String::from(""),
-        ),
-    };
-
-    rsx! {
-        GallerySearchBar { media_search_signal, status }
-
-        match media {
-            Ok(media) => rsx! {
-                MediaGrid { media }
-            },
-            Err(err) => rsx! {
+    // ... which in turn re-renders the whole component because it is subscribed to that hook
+    match &*media_future.read_unchecked() {
+        Some(Ok(resp)) => {
+            return rsx! {
+                GallerySearchBar {
+                    media_search_signal,
+                    status: format!("Found {} results", resp.media.len()),
+                }
+                // this clone is not great -- in principle, there may be quite a lot of stuff
+                // in the vec, especially at this call site
+                MediaGrid { media: resp.media.clone() }
+            };
+        }
+        Some(Err(err)) => {
+            return rsx! {
+                GallerySearchBar {
+                    media_search_signal,
+                    status: String::from("Error from search_media"),
+                }
                 span { "{err}" }
-            },
+            }
+        }
+        None => {
+            return rsx! {
+                span { "loading..." }
+            }
         }
     }
 }

@@ -1,15 +1,18 @@
 use dioxus::prelude::*;
+use tracing::debug;
 
 use crate::common::{local_time, modal::MODAL_STACK};
 use api::{comment::*, media::MediaUuid};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct AddCommentBoxProps {
+    update_signal: Signal<()>,
     media_uuid: MediaUuid,
 }
 
 #[component]
 pub fn AddCommentBox(props: AddCommentBoxProps) -> Element {
+    let mut update_signal = props.update_signal;
     let media_uuid = props.media_uuid;
 
     let status_signal = use_signal(|| String::from(""));
@@ -29,7 +32,7 @@ pub fn AddCommentBox(props: AddCommentBoxProps) -> Element {
                             status_signal.set(String::from("Error adding comment: empty text"));
                             return;
                         }
-                        let result = match add_comment(
+                        match add_comment(
                                 &AddCommentReq {
                                     comment: Comment {
                                         media_uuid: media_uuid,
@@ -42,15 +45,17 @@ pub fn AddCommentBox(props: AddCommentBoxProps) -> Element {
                             .await
                         {
                             Ok(_) => {
+                                update_signal.set(());
                                 MODAL_STACK.with_mut(|v| v.pop());
                                 return;
                             }
-                            Err(err) => format!("Error creating album: {}", err.to_string()),
+                            Err(err) => {
+                                status_signal.set(format!("Error adding comment: {}", err.to_string()))
+                            }
                         };
-                        status_signal.set(result)
                     },
 
-                    label { "Text" }
+                    p { "Text" }
                     textarea {
                         name: "text",
                         rows: "8",
@@ -70,18 +75,20 @@ pub fn AddCommentBox(props: AddCommentBoxProps) -> Element {
             }
         }
         div { class: "modal-footer",
-            span { "{status_signal()}" }
+            span { "{status_signal}" }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
 pub struct DeleteCommentBoxProps {
+    update_signal: Signal<()>,
     comment_uuid: CommentUuid,
 }
 
 #[component]
 pub fn DeleteCommentBox(props: DeleteCommentBoxProps) -> Element {
+    let mut update_signal = props.update_signal;
     let comment_uuid = props.comment_uuid;
 
     let status_signal = use_signal(|| String::from(""));
@@ -116,7 +123,7 @@ pub fn DeleteCommentBox(props: DeleteCommentBoxProps) -> Element {
                     button {
                         onclick: move |_| async move {
                             let mut status_signal = status_signal;
-                            let result = match delete_comment(
+                            match delete_comment(
                                     &DeleteCommentReq {
                                         comment_uuid: comment_uuid,
                                     },
@@ -124,12 +131,14 @@ pub fn DeleteCommentBox(props: DeleteCommentBoxProps) -> Element {
                                 .await
                             {
                                 Ok(_) => {
+                                    update_signal.set(());
                                     MODAL_STACK.with_mut(|v| v.pop());
                                     return;
                                 }
-                                Err(err) => format!("Error deleting comment: {}", err.to_string()),
+                                Err(err) => {
+                                    status_signal.set(format!("Error deleting comment: {}", err.to_string()))
+                                }
                             };
-                            status_signal.set(result)
                         },
                         "Delete comment"
                     }
@@ -143,7 +152,7 @@ pub fn DeleteCommentBox(props: DeleteCommentBoxProps) -> Element {
             }
         }
         div { class: "modal-footer",
-            span { "{status_signal()}" }
+            span { "{status_signal}" }
         }
     }
 }

@@ -7,7 +7,7 @@ mod media;
 use media::ShowMediaBox;
 
 mod album;
-use album::{CreateAlbumBox, ShowAlbumBox};
+use album::{CreateAlbumBox, DeleteAlbumBox, ShowAlbumBox};
 
 mod comment;
 use comment::{AddCommentBox, DeleteCommentBox};
@@ -23,6 +23,10 @@ pub enum Modal {
     ShowMedia(MediaUuid),
     ShowAlbum(AlbumUuid),
     CreateAlbum,
+    DeleteAlbum(AlbumUuid),
+    UpdateAlbum(AlbumUuid),
+    AddMediaToAlbum(MediaUuid),
+    RmMediaFromAlbum(MediaUuid, AlbumUuid),
     ShowLibrary(LibraryUuid),
     AddLibrary,
     AddComment(MediaUuid),
@@ -32,13 +36,17 @@ pub enum Modal {
 // ModalBox
 //
 // this is the struct that, once included into another element, actually displays
-// the modal on the top of the stack.  it only knows about the the stack_signal,
-// since anything that pushes onto the stack provides the rest of the information
+// the modal on the top of the stack (from the global signal).  the meaning of
+// the update_signal is dependent on the calling component, and is intended to be
+// a more targeted way to know when to re-run use_resource() hooks.
 #[derive(Clone, PartialEq, Props)]
-pub struct ModalBoxProps {}
+pub struct ModalBoxProps {
+    update_signal: Signal<()>,
+}
 
 #[component]
-pub fn ModalBox() -> Element {
+pub fn ModalBox(props: ModalBoxProps) -> Element {
+    let update_signal = props.update_signal;
     rsx! {
         div {
             style { "{style::MODAL}" }
@@ -65,6 +73,20 @@ pub fn ModalBox() -> Element {
                                 Modal::CreateAlbum => rsx! {
                                     CreateAlbumBox {}
                                 },
+                                Modal::DeleteAlbum(album_uuid) => rsx! {
+                                    DeleteAlbumBox { update_signal, album_uuid }
+                                },
+                                Modal::UpdateAlbum(album_uuid) => rsx! {
+                                    ModalErr { err: "not implemented" }
+                                },
+                                Modal::AddMediaToAlbum(media_uuid) => rsx! {
+                                    ModalErr { err: "not implemented" }
+                                },
+                                Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
+                                    rsx! {
+                                        ModalErr { err: "not implemented" }
+                                    }
+                                }
                                 Modal::ShowLibrary(library_uuid) => rsx! {
                                     ModalErr { err: "not implemented" }
                                 },
@@ -72,10 +94,10 @@ pub fn ModalBox() -> Element {
                                     ModalErr { err: "not implemented" }
                                 },
                                 Modal::AddComment(media_uuid) => rsx! {
-                                    AddCommentBox { media_uuid }
+                                    AddCommentBox { update_signal, media_uuid }
                                 },
                                 Modal::DeleteComment(comment_uuid) => rsx! {
-                                    DeleteCommentBox { comment_uuid }
+                                    DeleteCommentBox { update_signal, comment_uuid }
                                 },
                             }
                         }

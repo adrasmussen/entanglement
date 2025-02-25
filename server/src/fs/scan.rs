@@ -245,7 +245,6 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         hash: mediadata.hash,
         mtime: Local::now().timestamp(),
         hidden: false,
-        attention: false,
         date: mediadata.date,
         note: "".to_owned(),
         metadata: mediadata.metadata.clone(),

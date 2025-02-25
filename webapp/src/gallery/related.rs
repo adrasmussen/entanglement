@@ -3,18 +3,25 @@ use dioxus_router::prelude::*;
 
 use crate::{
     common::{
-        local_time, modal::{Modal, MODAL_STACK}, storage::try_and_forget_local_storage, style
-    }, gallery::GALLERY_ALBUM_KEY, Route
+        local_time,
+        modal::{Modal, MODAL_STACK},
+        storage::try_and_forget_local_storage,
+        style,
+    },
+    gallery::GALLERY_ALBUM_KEY,
+    Route,
 };
-use api::{album::*, comment::*};
+use api::{album::*, comment::*, media::MediaUuid};
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumTableRowProps {
+    media_uuid: MediaUuid,
     album_uuid: AlbumUuid,
 }
 
 #[component]
 fn AlbumTableRow(props: AlbumTableRowProps) -> Element {
+    let media_uuid = props.media_uuid;
     let album_uuid = props.album_uuid;
 
     let album = use_resource(move || async move {
@@ -49,18 +56,31 @@ fn AlbumTableRow(props: AlbumTableRowProps) -> Element {
             }
             td { "{result.uid}" }
             td { "{result.gid}" }
-            td { "REMOVE" }
+            td {
+                button {
+                    float: "right",
+                    onclick: move |_| async move {
+                        MODAL_STACK
+                            .with_mut(|v| v.push(Modal::RmMediaFromAlbum(media_uuid, album_uuid)));
+                    },
+                    "Remove"
+                }
+            }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
 struct AlbumTableProps {
+    media_uuid: MediaUuid,
     albums: Vec<AlbumUuid>,
 }
 
 #[component]
 fn AlbumTable(props: AlbumTableProps) -> Element {
+    let media_uuid = props.media_uuid;
+    let albums = props.albums;
+
     rsx! {
         div { style: "{style::TABLE}",
             table {
@@ -71,8 +91,8 @@ fn AlbumTable(props: AlbumTableProps) -> Element {
                     th { "Operations" }
                 }
 
-                for album_uuid in props.albums.iter() {
-                    AlbumTableRow { album_uuid: *album_uuid }
+                for album_uuid in albums.iter() {
+                    AlbumTableRow { media_uuid, album_uuid: *album_uuid }
                 }
             }
         }
@@ -88,8 +108,10 @@ struct CommentRowProps {
 fn CommentTableRow(props: CommentRowProps) -> Element {
     let comment_uuid = props.comment_uuid;
 
+    tracing::debug!("rendering comment {comment_uuid}");
+
     let comment = use_resource(move || async move {
-        // add MODAL_STACK.read(); to make a weird error
+        tracing::debug!("running get_comment for {comment_uuid}");
 
         get_comment(&GetCommentReq {
             comment_uuid: comment_uuid,
@@ -137,8 +159,18 @@ struct CommentTableProps {
     comments: Vec<CommentUuid>,
 }
 
+// TODO -- this does not render correctly after deleting a comment in the middle
+// of the vector, and attempts to signalize it haven't been particularly successful
+//
+// oddly enough, it follows the same basic logic as the MediaGrid in this module,
+// so it's not clear why the length of the vec is correct but the contents are not
+//
+// we should also sort the coments by timestamp since Uuid is not necessarily stable
 #[component]
 fn CommentTable(props: CommentTableProps) -> Element {
+    let comments = props.comments;
+    tracing::debug!({comments = ?comments}, "found comments");
+
     rsx! {
         div {
             style { "{style::TABLE}" }
@@ -149,7 +181,7 @@ fn CommentTable(props: CommentTableProps) -> Element {
                     th { "Operations" }
                 }
 
-                for comment_uuid in props.comments.iter() {
+                for comment_uuid in comments.iter() {
                     CommentTableRow { comment_uuid: *comment_uuid }
                 }
             }
@@ -159,12 +191,15 @@ fn CommentTable(props: CommentTableProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaRelatedProps {
+    update_signal: Signal<()>,
+    media_uuid: MediaUuid,
     albums: Vec<AlbumUuid>,
     comments: Vec<CommentUuid>,
 }
 
 #[component]
 pub fn MediaRelated(props: MediaRelatedProps) -> Element {
+    let media_uuid = props.media_uuid;
     let albums = props.albums;
     let comments = props.comments;
 
@@ -174,11 +209,15 @@ pub fn MediaRelated(props: MediaRelatedProps) -> Element {
         div { class: "gallery-related",
             div {
                 h4 { "Albums {album_highlight}" }
-                AlbumTable { albums }
+                AlbumTable { media_uuid, albums }
             }
             div {
                 h4 { "Comments" }
                 CommentTable { comments }
+            }
+            div {
+                h4 { "Similar media" }
+                span { "not implemented {media_uuid}" }
             }
         }
     }

@@ -4,16 +4,16 @@ use crate::common::stream::*;
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
-pub struct MediaDetailProps {
+pub struct MediaViewProps {
     media_uuid: MediaUuid,
-    media_type: MediaMetadata,
+    media_metadata: MediaMetadata,
 }
 
 #[component]
-pub fn MediaDetail(props: MediaDetailProps) -> Element {
+pub fn MediaView(props: MediaViewProps) -> Element {
     rsx! {
         div {
-            match props.media_type {
+            match props.media_metadata {
                 MediaMetadata::Image => {
                     let image_src = full_link(props.media_uuid);
                     rsx! {

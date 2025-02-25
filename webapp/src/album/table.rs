@@ -1,7 +1,13 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::style, Route};
+use crate::{
+    common::{
+        modal::{Modal, MODAL_STACK},
+        style,
+    },
+    Route,
+};
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -47,6 +53,16 @@ fn AlbumTableRow(props: AlbumTableRowProps) -> Element {
             td { "{result.gid}" }
             td { "{result.note}" }
             td { "{result.mtime}" }
+            td {
+                button { float: "right", onclick: move |_| async move {}, "Update" }
+                button {
+                    float: "right",
+                    onclick: move |_| async move {
+                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid)))
+                    },
+                    "Delete"
+                }
+            }
         }
     }
 }
@@ -65,9 +81,10 @@ pub fn AlbumTable(props: AlbumListProps) -> Element {
                 tr {
                     th { "Name" }
                     th { "Creator" }
-                    th { "Group" }
+                    th { "Group (TODO: group member modal)" }
                     th { "Note" }
                     th { "Last modified" }
+                    th { "Operations" }
                 }
 
                 for album_uuid in props.albums.iter() {

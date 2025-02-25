@@ -2,7 +2,11 @@ use dioxus::prelude::*;
 
 use crate::{
     album::{grid::MediaGrid, MEDIA_SEARCH_KEY},
-    common::{storage::*, style},
+    common::{
+        modal::{Modal, ModalBox, MODAL_STACK},
+        storage::*,
+        style,
+    },
 };
 use api::album::*;
 
@@ -53,7 +57,13 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
                 span { "Album: {album_result.name}" }
                 span { "Owner: {album_result.uid}" }
                 span { "Group: {album_result.gid}" }
-                span { "MISSING: delete album modal, update album modal" }
+                button { onclick: move |_| async move {}, "Update" }
+                button {
+                    onclick: move |_| async move {
+                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid)))
+                    },
+                    "Delete"
+                }
             }
         }
         div {
@@ -75,7 +85,6 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
                     }
                     input { r#type: "submit", value: "Search" }
                 }
-                span { "Search History" }
                 span { "{status}" }
             }
         }
@@ -98,6 +107,8 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
             }
         }
     };
+
+    let update_signal = use_signal(|| ());
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
@@ -129,6 +140,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
     };
 
     rsx!(
+        ModalBox { update_signal }
         AlbumDetailBar { media_search_signal, album_uuid, status }
 
         match media {

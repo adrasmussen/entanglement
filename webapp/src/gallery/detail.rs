@@ -1,11 +1,9 @@
 use dioxus::prelude::*;
+use tracing::debug;
 
 use crate::{
-    common::{
-        modal::{ModalBox, MODAL_STACK},
-        style,
-    },
-    gallery::{info::MediaInfo, media::MediaDetail, related::MediaRelated},
+    common::{modal::ModalBox, style},
+    gallery::{info::MediaInfo, media::MediaView, related::MediaRelated},
 };
 use api::media::*;
 
@@ -17,25 +15,21 @@ use api::media::*;
 //
 // once we support more media types, the main body will need to
 // switch based on the MediaType enum
-#[derive(Clone, PartialEq, Props)]
-struct GalleryDetailBarProps {
-    status: String,
-}
-
 #[component]
-fn GalleryDetailBar(props: GalleryDetailBarProps) -> Element {
-    let status = props.status;
-
+fn GalleryDetailBar() -> Element {
     rsx! {
         div {
             style { "{style::SUBNAV}" }
             div { class: "subnav",
-                span { "{status}" }
+                span { "Gallery detail" }
             }
         }
     }
 }
 
+//
+// ROUTE TARGET
+//
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {
     // this is a String because we get it from the Router
@@ -53,15 +47,11 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         }
     };
 
-    // this signal pulls double duty as both a way to communicate errors in the api calls
-    // and a way to trigger rerendering when necessary
-    let status_signal = use_signal(|| String::from("waiting to update..."));
+    let update_signal = use_signal(|| ());
 
     let media_future = use_resource(move || async move {
-        // subscribe this use_resource to both signals as a somewhat hamfisted way
-        // to ensure updates
-        status_signal.read();
-        MODAL_STACK.read();
+        debug!("running get_media resource");
+        update_signal.read();
 
         get_media(&GetMediaReq {
             media_uuid: media_uuid,
@@ -69,6 +59,8 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
         .await
     });
 
+    // these three clones are not great, but it would take quite a bit of work to make the
+    // destructure zero-copy given the types involved
     let (media, albums, comments) = match &*media_future.read() {
         Some(Ok(resp)) => (
             resp.media.clone(),
@@ -88,15 +80,20 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
     };
 
     rsx! {
-        ModalBox {}
-        GalleryDetailBar { status: status_signal.read() }
+        ModalBox { update_signal }
+        GalleryDetailBar {}
 
         div {
             style { "{style::GALLERY_DETAIL}" }
             div { class: "gallery-outer",
-                MediaDetail { media_uuid, media_type: media.metadata.clone() }
-                MediaInfo { media_uuid, media, status_signal }
-                MediaRelated { albums, comments }
+                MediaView { media_uuid, media_metadata: media.metadata.clone() }
+                MediaInfo { update_signal, media_uuid, media }
+                MediaRelated {
+                    update_signal,
+                    media_uuid,
+                    albums,
+                    comments,
+                }
             }
         }
     }

@@ -53,7 +53,6 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                                     media_uuid: media_uuid.clone(),
                                     update: MediaUpdate {
                                         hidden: None,
-                                        attention: None,
                                         date: date,
                                         note: note,
                                     },
@@ -102,7 +101,6 @@ pub fn ShowMediaBox(props: ShowMediaBoxProps) -> Element {
                                             media_uuid: media_uuid,
                                             update: MediaUpdate {
                                                 hidden: Some(!media.hidden),
-                                                attention: None,
                                                 date: None,
                                                 note: None,
                                             },

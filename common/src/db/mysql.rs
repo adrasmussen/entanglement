@@ -241,8 +241,8 @@ pub async fn rm_user_from_group(pool: Pool, uid: String, gid: String) -> anyhow:
 
 pub async fn add_media(pool: Pool, media: Media) -> anyhow::Result<MediaUuid> {
     let mut result = r"
-        INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, attention, date, note, media_type)
-        VALUES (UUID_SHORT(), :library_uuid, :path, :hash, :mtime, :hidden, :attention, :date, :note, :media_type)
+        INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, date, note, media_type)
+        VALUES (UUID_SHORT(), :library_uuid, :path, :hash, :mtime, :hidden, :date, :note, :media_type)
         RETURNING media_uuid"
         .with(params! {
             "library_uuid" => media.library_uuid,
@@ -250,7 +250,6 @@ pub async fn add_media(pool: Pool, media: Media) -> anyhow::Result<MediaUuid> {
             "hash" => media.hash,
             "mtime" => Local::now().timestamp(),
             "hidden" => media.hidden,
-            "attention" => media.attention,
             "date" => media.date,
             "note" => media.note,
             "media_type" => match media.metadata {
@@ -281,7 +280,7 @@ pub async fn get_media(
     media_uuid: MediaUuid,
 ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
     let mut media_result = r"
-        SELECT library_uuid, path, hash, mtime, hidden, attention, date, note, media_type FROM media WHERE media_uuid = :media_uuid"
+        SELECT library_uuid, path, hash, mtime, hidden, date, note, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
             "media_uuid" => media_uuid,
         })
@@ -296,7 +295,6 @@ pub async fn get_media(
             String,
             String,
             i64,
-            bool,
             bool,
             String,
             String,
@@ -342,10 +340,9 @@ pub async fn get_media(
             hash: media_data.2,
             mtime: media_data.3,
             hidden: media_data.4,
-            attention: media_data.5,
-            date: media_data.6,
-            note: media_data.7,
-            metadata: match media_data.8.as_str() {
+            date: media_data.5,
+            note: media_data.6,
+            metadata: match media_data.7.as_str() {
                 "Image" => MediaMetadata::Image,
                 "Video" => MediaMetadata::Video,
                 "VideoSlice" => MediaMetadata::VideoSlice,
@@ -393,17 +390,6 @@ pub async fn update_media(
         UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
             .with(params! {
                 "hidden" => val,
-                "media_uuid" => media_uuid,
-            })
-            .run(pool.get_conn().await?)
-            .await?;
-    }
-
-    if let Some(val) = update.attention {
-        r"
-        UPDATE media SET attention = :attention WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "attention" => val,
                 "media_uuid" => media_uuid,
             })
             .run(pool.get_conn().await?)
@@ -552,8 +538,7 @@ pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Opti
 
 pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<()> {
     r"
-        DELETE FROM album_contents WHERE album_uuid = :album_uuid;
-        RETURNING media_uuid"
+        DELETE FROM album_contents WHERE album_uuid = :album_uuid"
         .with(params! {
             "album_uuid" => album_uuid,
         })

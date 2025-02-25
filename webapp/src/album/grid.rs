@@ -2,7 +2,9 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    common::{storage::set_local_storage, stream::*, style}, gallery::GALLERY_ALBUM_KEY, Route
+    common::{storage::set_local_storage, stream::*, style},
+    gallery::GALLERY_ALBUM_KEY,
+    Route,
 };
 use api::{album::AlbumUuid, media::*};
 
@@ -26,7 +28,7 @@ fn MediaTile(props: MediaTileProps) -> Element {
                     media_uuid: media_uuid.to_string(),
                 },
                 onclick: move |_| {
-                    set_local_storage(GALLERY_ALBUM_KEY, album_uuid);
+                    set_local_storage(GALLERY_ALBUM_KEY, album_uuid.to_string());
                 },
                 img { src: thumbnail_link(media_uuid) }
             }

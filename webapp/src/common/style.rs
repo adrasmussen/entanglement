@@ -41,11 +41,6 @@ pub const SUBNAV: &str = r#"
     font-size: 17px;
 }
 
-.subnav span:hover {
-    background-color: #eaeaea;
-    color: black;
-}
-
 .subnav input[type=text], input[type=submit], button {
     float: left;
     padding: 6px;

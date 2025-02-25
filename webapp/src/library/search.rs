@@ -37,7 +37,6 @@ fn LibrarySearchBar(props: LibrarySearchBarProps) -> Element {
                     }
                     input { r#type: "submit", value: "Search" }
                 }
-                span { "Search History" }
                 span { "{status}" }
             }
         }

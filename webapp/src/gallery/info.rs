@@ -1,21 +1,30 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
-use crate::common::modal::{Modal, MODAL_STACK};
+use crate::{
+    common::modal::{Modal, MODAL_STACK},
+    Route,
+};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaInfoProps {
+    update_signal: Signal<()>,
     media_uuid: MediaUuid,
     media: Media,
-    status_signal: Signal<String>,
 }
 
 #[component]
 pub fn MediaInfo(props: MediaInfoProps) -> Element {
+    let mut update_signal = props.update_signal;
     let media_uuid = props.media_uuid;
     let media = props.media;
-    let status_signal = props.status_signal;
 
+    let status_signal = use_signal(|| String::from(""));
+
+    // in the functions below, update_signal.set(()) is called on both success
+    // and failure of the underlying API call.  this is so that, in the event
+    // of a database issue, we pull the most recent data for the media
     rsx! {
         div {
             form {
@@ -29,7 +38,6 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                                 media_uuid: media_uuid.clone(),
                                 update: MediaUpdate {
                                     hidden: None,
-                                    attention: None,
                                     date: date,
                                     note: note,
                                 },
@@ -40,20 +48,23 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                         Ok(_) => String::from("Metadata updated successfully"),
                         Err(err) => format!("Error updating metadata: {}", err.to_string()),
                     };
+                    update_signal.set(());
                     status_signal.set(result)
                 },
 
                 label { "Library" }
-                span { "{media.library_uuid} (should include link)" }
+                Link {
+                    to: Route::LibraryDetail {
+                        library_uuid: media.library_uuid.to_string(),
+                    },
+                    span { "{media.library_uuid}" }
+                }
 
                 label { "Path" }
                 span { "{media.path}" }
 
                 label { "Hidden" }
                 span { "{media.hidden}" }
-
-                label { "Needs attention" }
-                span { "{media.attention}" }
 
                 label { "Date" }
                 input { name: "date", r#type: "text", value: "{media.date}" }
@@ -63,9 +74,18 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
 
                 input { r#type: "submit", value: "Update metadata" }
 
-                // inside the form because we want to use the grid created by the labels
-                div { grid_column: 2,
-                    button { onclick: move |_| {}, r#type: "button", "Add to album" }
+                // inside the form because we want to use the grid column created by the labels
+                //
+                // adjust the template_columns as necessary as buttons are added/removed
+                div {
+                    grid_column: 2,
+                    display: "grid",
+                    grid_template_columns: "1fr 1fr 1fr",
+                    button {
+                        onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAlbum(media_uuid))) },
+                        r#type: "button",
+                        "Add to album"
+                    }
                     button {
                         onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::AddComment(media_uuid))) },
                         r#type: "button",
@@ -79,7 +99,6 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                                         media_uuid: media_uuid,
                                         update: MediaUpdate {
                                             hidden: Some(!media.hidden),
-                                            attention: None,
                                             date: None,
                                             note: None,
                                         },
@@ -90,35 +109,16 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                                 Ok(_) => String::from("Hidden state updated successfully"),
                                 Err(err) => format!("Error updating hidden state: {}", err.to_string()),
                             };
+                            update_signal.set(());
                             status_signal.set(result);
                         },
                         r#type: "button",
                         "Toggle Hidden"
                     }
-                    button {
-                        onclick: move |_| async move {
-                            let mut status_signal = status_signal;
-                            let result = match update_media(
-                                    &UpdateMediaReq {
-                                        media_uuid: media_uuid,
-                                        update: MediaUpdate {
-                                            hidden: None,
-                                            attention: Some(!media.attention),
-                                            date: None,
-                                            note: None,
-                                        },
-                                    },
-                                )
-                                .await
-                            {
-                                Ok(_) => String::from("Attention state updated successfully"),
-                                Err(err) => format!("Error updating attention state: {}", err.to_string()),
-                            };
-                            status_signal.set(result);
-                        },
-                        r#type: "button",
-                        "Needs attention"
-                    }
+                }
+
+                div { grid_column: 2,
+                    span { {status_signal} }
                 }
             }
         }

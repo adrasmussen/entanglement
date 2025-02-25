@@ -2,7 +2,11 @@ use dioxus::prelude::*;
 
 use crate::{
     album::{table::AlbumTable, ALBUM_SEARCH_KEY},
-    common::{storage::*, style},
+    common::{
+        modal::{Modal, ModalBox, MODAL_STACK},
+        storage::*,
+        style,
+    },
 };
 use api::album::*;
 
@@ -42,9 +46,12 @@ fn AlbumSearchBar(props: AlbumSearchBarProps) -> Element {
                     }
                     input { r#type: "submit", value: "Search" }
                 }
-                span { "Search History" }
                 span { "{status}" }
-                span { "MISSING: create album modal" }
+                button {
+                    onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum)) },
+                    r#type: "button",
+                    "Create album"
+                }
             }
         }
     }
@@ -52,6 +59,8 @@ fn AlbumSearchBar(props: AlbumSearchBarProps) -> Element {
 
 #[component]
 pub fn AlbumSearch() -> Element {
+    let update_signal = use_signal(|| ());
+
     let album_search_signal = use_signal::<String>(|| try_local_storage(ALBUM_SEARCH_KEY));
 
     let album_future = use_resource(move || async move {
@@ -76,6 +85,7 @@ pub fn AlbumSearch() -> Element {
     };
 
     rsx! {
+        ModalBox { update_signal }
         AlbumSearchBar { album_search_signal, status }
 
         match albums {

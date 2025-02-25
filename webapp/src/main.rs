@@ -2,7 +2,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use tracing::{info, Level};
+use tracing::Level;
 
 mod common;
 use common::style;
@@ -21,7 +21,7 @@ use library::{Libraries, LibraryDetail, LibrarySearch};
 
 fn main() {
     // Init logger
-    dioxus_logger::init(Level::INFO).expect("failed to init logger");
+    dioxus_logger::init(Level::DEBUG).expect("failed to init logger");
     launch(App);
 }
 
