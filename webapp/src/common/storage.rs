@@ -38,7 +38,7 @@ where
     }
 }
 
-pub fn try_and_forget_local_storage<T>(key: &str) -> T
+pub fn _try_and_forget_local_storage<T>(key: &str) -> T
 where
     T: Serialize + for<'a> Deserialize<'a> + Default,
 {

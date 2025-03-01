@@ -5,7 +5,6 @@ use dioxus_router::prelude::*;
 use tracing::Level;
 
 mod common;
-use common::style;
 
 mod components;
 

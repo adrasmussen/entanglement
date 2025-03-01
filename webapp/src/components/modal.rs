@@ -88,7 +88,7 @@ pub fn ModernModal(props: ModalProps) -> Element {
 }
 
 // Helper function to create a standardized footer with common actions
-pub fn modal_footer_buttons(
+pub fn _modal_footer_buttons(
     primary_text: &str,
     primary_action: EventHandler<MouseEvent>,
     secondary_text: &str,
