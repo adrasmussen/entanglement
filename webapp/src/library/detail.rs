@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{storage::*, style},
-    library::{grid::MediaGrid, MEDIA_SEARCH_KEY},
+    library::{MEDIA_SEARCH_KEY, grid::MediaGrid},
 };
 use api::library::*;
 
@@ -35,7 +35,7 @@ fn LibraryDetailBar(props: LibraryDetailBarProps) -> Element {
                 div { class: "subnav",
                     span { "error fetching {library_uuid}" }
                 }
-            }
+            };
         }
     };
 
@@ -87,7 +87,7 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
         Err(_) => {
             return rsx! {
                 span { "failed to convert library_uuid" }
-            }
+            };
         }
     };
 

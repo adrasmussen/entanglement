@@ -1,4 +1,4 @@
-use api::{media::MediaUuid, ORIGINAL_PATH, THUMBNAIL_PATH};
+use api::{ORIGINAL_PATH, THUMBNAIL_PATH, media::MediaUuid};
 
 // TODO -- find a way to pull the build data in here,
 // since these technically need to match the api server

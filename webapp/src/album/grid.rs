@@ -2,9 +2,9 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     common::{storage::set_local_storage, stream::*, style},
     gallery::GALLERY_ALBUM_KEY,
-    Route,
 };
 use api::{album::AlbumUuid, media::*};
 
@@ -24,7 +24,7 @@ fn MediaTile(props: MediaTileProps) -> Element {
         div {
             Link {
                 class: "media-tile",
-                to: Route::ModernGalleryDetail {
+                to: Route::GalleryDetail {
                     media_uuid: media_uuid.to_string(),
                 },
                 onclick: move |_| {

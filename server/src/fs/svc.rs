@@ -6,11 +6,11 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, instrument, Level};
+use tracing::{Level, debug, error, instrument};
 
 use crate::db::msg::DbMsg;
-use crate::fs::{msg::*, scan::*, ESFileService};
-use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use crate::fs::{ESFileService, msg::*, scan::*};
+use crate::service::{ESInner, ESM, ESMReceiver, ESMSender, EntanglementService, ServiceType};
 use api::library::{LibraryScanJob, LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
 

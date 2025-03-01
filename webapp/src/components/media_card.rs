@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::stream::thumbnail_link, Route};
+use crate::{Route, common::stream::thumbnail_link};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -31,7 +31,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                 Some(Ok(info)) => {
                     rsx! {
                         Link {
-                            to: Route::ModernGalleryDetail {
+                            to: Route::GalleryDetail {
                                 media_uuid: media_uuid.to_string(),
                             },
                             onclick: move |_| {

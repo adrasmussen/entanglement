@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::common::{
     local_time,
-    modal::{modal_err, MODAL_STACK},
+    modal::{MODAL_STACK, modal_err},
 };
 use api::album::*;
 
@@ -173,7 +173,7 @@ pub fn DeleteAlbumBox(props: DeleteAlbumBoxProps) -> Element {
         _ => {
             return rsx! {
                 span { "error fetching {album_uuid}" }
-            }
+            };
         }
     };
 

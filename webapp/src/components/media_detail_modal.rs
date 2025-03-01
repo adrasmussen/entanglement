@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{modal::MODAL_STACK, stream::full_link},
-    components::modal::{modal_footer_buttons, ModernModal},
+    components::modal::{ModernModal, modal_footer_buttons},
 };
 use api::media::*;
 
@@ -205,7 +205,7 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
                         p { "Failed to load media: {err}" }
                     }
                 }
-            }
+            };
         }
         None => {
             return rsx! {
@@ -225,7 +225,7 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
                         }
                     }
                 }
-            }
+            };
         }
     };
 }

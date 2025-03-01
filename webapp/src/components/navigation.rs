@@ -25,9 +25,9 @@ pub fn ModernNavBar() -> Element {
                 // Navigation links
                 nav { class: "nav-links",
                     Link {
-                        to: Route::ModernGallerySearch {},
-                        class: if current_path.is_child_of(&Route::ModernGallerySearch {})
-    || current_path == (Route::ModernGallerySearch {}) { "nav-link active" } else { "nav-link" },
+                        to: Route::GallerySearch {},
+                        class: if current_path.is_child_of(&Route::GallerySearch {})
+    || current_path == (Route::GallerySearch {}) { "nav-link active" } else { "nav-link" },
                         "Gallery"
                     }
                     Link {

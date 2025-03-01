@@ -51,7 +51,7 @@ pub trait EntanglementService: Send + Sync + 'static {
 #[async_trait]
 pub trait ESInner: Sized + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>)
-        -> anyhow::Result<Self>;
+    -> anyhow::Result<Self>;
 
     async fn message_handler(&self, esm: ESM) -> anyhow::Result<()>;
 

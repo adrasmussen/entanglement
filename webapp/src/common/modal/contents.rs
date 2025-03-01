@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::common::{
     local_time,
-    modal::{modal_err, MODAL_STACK},
+    modal::{MODAL_STACK, modal_err},
 };
 use api::{album::*, media::MediaUuid};
 

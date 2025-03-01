@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 use crate::{
-    album::{grid::MediaGrid, MEDIA_SEARCH_KEY},
+    album::{MEDIA_SEARCH_KEY, grid::MediaGrid},
     common::{
-        modal::{Modal, ModalBox, MODAL_STACK},
+        modal::{MODAL_STACK, Modal, ModalBox},
         storage::*,
         style,
     },
@@ -46,7 +46,7 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
                 div { class: "subnav",
                     span { "error fetching {album_uuid}" }
                 }
-            }
+            };
         }
     };
 
@@ -104,7 +104,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
         Err(_) => {
             return rsx! {
                 span { "failed to convert album_uuid" }
-            }
+            };
         }
     };
 

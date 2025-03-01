@@ -2,11 +2,11 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     common::{
-        modal::{Modal, MODAL_STACK},
+        modal::{MODAL_STACK, Modal},
         style,
     },
-    Route,
 };
 use api::album::*;
 
@@ -35,7 +35,7 @@ fn AlbumTableRow(props: AlbumTableRowProps) -> Element {
                 tr {
                     span { "error fetching {album_uuid}" }
                 }
-            }
+            };
         }
     };
 

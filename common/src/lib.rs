@@ -8,7 +8,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::{DashMap, mapref::entry::Entry};
 
 pub struct AwaitCache<K: Eq + Hash + Clone, V: Clone> {
     items: DashMap<K, Arc<AsyncCell<V>>>,

@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 use crate::{
-    album::{table::AlbumTable, ALBUM_SEARCH_KEY},
+    album::{ALBUM_SEARCH_KEY, table::AlbumTable},
     common::{
-        modal::{Modal, ModalBox, MODAL_STACK},
+        modal::{MODAL_STACK, Modal, ModalBox},
         storage::*,
         style,
     },

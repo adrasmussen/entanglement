@@ -106,7 +106,7 @@ pub fn DeleteCommentBox(props: DeleteCommentBoxProps) -> Element {
         _ => {
             return rsx! {
                 span { "error fetching {comment_uuid}" }
-            }
+            };
         }
     };
 

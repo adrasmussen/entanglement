@@ -7,14 +7,14 @@ use tokio::sync::Mutex;
 
 use api::media::MediaUuid;
 use common::{
-    auth::{proxy::ProxyAuth, yamlfile::YamlGroupFile, AuthnBackend, AuthzBackend},
-    config::ESConfig,
     AwaitCache,
+    auth::{AuthnBackend, AuthzBackend, proxy::ProxyAuth, yamlfile::YamlGroupFile},
+    config::ESConfig,
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{Level, debug, error, info, instrument};
 
-use crate::auth::msg::AuthMsg;
 use crate::auth::ESAuthService;
+use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::service::*;
 

@@ -37,7 +37,7 @@ pub fn ModernHome() -> Element {
                         }
                         div { class: "hero-actions",
                             Link {
-                                to: Route::ModernGallerySearch {},
+                                to: Route::GallerySearch {},
                                 class: "btn btn-primary btn-lg",
                                 "Browse Gallery"
                             }
@@ -72,7 +72,7 @@ pub fn ModernHome() -> Element {
                                 p { class: "stat-label", "Media Items" }
                             }
                             Link {
-                                to: Route::ModernGallerySearch {},
+                                to: Route::GallerySearch {},
                                 class: "stat-action",
                                 "Browse All"
                             }
@@ -179,7 +179,7 @@ pub fn ModernHome() -> Element {
 
                     div { class: "actions-grid",
                         Link {
-                            to: Route::ModernGallerySearch {},
+                            to: Route::GallerySearch {},
                             class: "quick-action-card",
                             div { class: "quick-action-icon browse-icon" }
                             span { "Browse Gallery" }

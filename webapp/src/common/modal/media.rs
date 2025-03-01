@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::common::{
-    modal::{modal_err, Modal, MODAL_STACK},
+    modal::{MODAL_STACK, Modal, modal_err},
     stream::*,
 };
 use api::media::*;

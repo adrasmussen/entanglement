@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{modal::MODAL_STACK, stream::full_link},
-    components::modal::{modal_footer_buttons, ModernModal},
+    components::modal::{ModernModal, modal_footer_buttons},
 };
 use api::media::*;
 

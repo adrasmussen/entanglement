@@ -8,7 +8,7 @@ use blockhash::blockhash256;
 use chrono::Local;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{Level, debug, error, info, instrument};
 use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;

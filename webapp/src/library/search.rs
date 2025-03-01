@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{storage::*, style},
-    library::{table::LibraryTable, LIBRARY_SEARCH_KEY},
+    library::{LIBRARY_SEARCH_KEY, table::LibraryTable},
 };
 use api::library::*;
 

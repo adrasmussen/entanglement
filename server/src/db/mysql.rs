@@ -7,7 +7,7 @@ use mysql_async::Pool;
 use tokio::sync::Mutex;
 
 use crate::auth::msg::*;
-use crate::db::{msg::DbMsg, ESDbService};
+use crate::db::{ESDbService, msg::DbMsg};
 use crate::service::*;
 use api::{album::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
@@ -57,7 +57,9 @@ impl EntanglementService for MySQLService {
 
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(err) => println!("mysql_service failed to reply to message!\nError: {err}\nMessage: {esmstr}"),
+                            Err(err) => println!(
+                                "mysql_service failed to reply to message!\nError: {err}\nMessage: {esmstr}"
+                            ),
                         }
                     });
                 }

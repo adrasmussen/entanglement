@@ -8,8 +8,8 @@ use async_trait::async_trait;
 
 use crate::service::*;
 use api::{
-    library::{LibraryScanJob, LibraryUuid},
     ORIGINAL_PATH,
+    library::{LibraryScanJob, LibraryUuid},
 };
 use common::config::ESConfig;
 

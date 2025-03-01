@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::style, Route};
+use crate::{Route, common::style};
 use api::library::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -29,7 +29,7 @@ fn LibraryTableRow(props: LibraryTableRowProps) -> Element {
                 tr {
                     span { "error fetching {library_uuid}" }
                 }
-            }
+            };
         }
     };
 

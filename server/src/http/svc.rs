@@ -7,12 +7,12 @@ use anyhow;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use axum::{
+    Router,
     extract::{Extension, Json, Path, Request, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
-    Router,
 };
 use chrono::Local;
 use tokio::sync::Mutex;
@@ -22,16 +22,16 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{Level, debug, error, info, instrument};
 
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::fs::msg::FsMsg;
 use crate::http::{
-    auth::{proxy_auth, CurrentUser},
     AppError,
+    auth::{CurrentUser, proxy_auth},
 };
-use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use crate::service::{ESInner, ESM, ESMReceiver, ESMSender, EntanglementService, ServiceType};
 use api::{album::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 

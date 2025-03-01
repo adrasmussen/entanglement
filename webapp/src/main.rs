@@ -13,7 +13,7 @@ mod home;
 use home::ModernHome;
 
 mod gallery;
-use gallery::{Gallery, ModernGalleryDetail, ModernGallerySearch};
+use gallery::{Gallery, GalleryDetail, GallerySearch};
 
 mod album;
 use album::{AlbumDetail, AlbumSearch, Albums};
@@ -43,9 +43,9 @@ enum Route {
         #[nest("/gallery")]
             #[layout(Gallery)]
                 #[route("/")]
-                ModernGallerySearch {},
+                GallerySearch {},
                 #[route("/:media_uuid")]
-                ModernGalleryDetail { media_uuid: String },
+                GalleryDetail { media_uuid: String },
             #[end_layout]
         #[end_nest]
         #[nest("/albums")]

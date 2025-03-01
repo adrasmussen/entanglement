@@ -1,100 +1,106 @@
 use dioxus::prelude::*;
-use tracing::debug;
 
 use crate::{
-    common::{storage::*, style},
-    gallery::{grid::MediaGrid, MEDIA_SEARCH_KEY},
+    common::{
+        modal::{MODAL_STACK, Modal, ModalBox},
+        storage::try_local_storage,
+    },
+    components::{media_card::MediaCard, search_bar::SearchBar},
+    gallery::MEDIA_SEARCH_KEY,
 };
 use api::media::*;
 
-// GalleryList elements
-//
-// this group of elements allows users to search all media that they
-// can access by calling search_media(), and displays the results in
-// a MediaGrid
-//
-// clicking on a grid tile jumps to GalleryDetail
-#[derive(Clone, PartialEq, Props)]
-struct GallerySearchBarProps {
-    media_search_signal: Signal<String>,
-    status: String,
-}
-
-#[component]
-fn GallerySearchBar(props: GallerySearchBarProps) -> Element {
-    let mut media_search_signal = props.media_search_signal;
-    let status = props.status;
-
-    rsx! {
-        div {
-            style { "{style::SUBNAV}" }
-            div { class: "subnav",
-                form {
-                    onsubmit: move |event| async move {
-                        let filter = match event.values().get("search_filter") {
-                            Some(val) => val.as_value(),
-                            None => String::from(""),
-                        };
-                        debug!("updating media_search_signal");
-                        media_search_signal.set(filter.clone());
-                        set_local_storage(MEDIA_SEARCH_KEY, filter);
-                    },
-                    input {
-                        name: "search_filter",
-                        r#type: "text",
-                        value: "{media_search_signal}",
-                    }
-                    input { r#type: "submit", value: "Search" }
-                }
-                span { "{status}" }
-                span { "TODO: bulk select bar" }
-            }
-        }
-    }
-}
-
-//
-// ROUTE TARGET
-//
 #[component]
 pub fn GallerySearch() -> Element {
-    // this signal must only be set in an onclick or similar, and never by the component
-    // functions lest we trigger an infinite loop
+    let update_signal = use_signal(|| ());
+
+    // Get search signal from local storage
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
-    // use_resource() automatically subscribes to updates from hooks that it reads, so setting
-    // a new search signal re-runs the future...
+    // Fetch media data
     let media_future = use_resource(move || async move {
-        let filter = media_search_signal;
-
-        search_media(&SearchMediaReq { filter: filter() }).await
+        let filter = media_search_signal();
+        search_media(&SearchMediaReq { filter }).await
     });
 
-    // ... which in turn re-renders the whole component because it is subscribed to that hook
-    match &*media_future.read_unchecked() {
-        Some(Ok(resp)) => {
-            return rsx! {
-                GallerySearchBar {
-                    media_search_signal,
-                    status: format!("Found {} results", resp.media.len()),
-                }
-                // this clone is not great -- in principle, there may be quite a lot of stuff
-                // in the vec, especially at this call site
-                MediaGrid { media: resp.media.clone() }
-            };
+    // Create action button for search bar
+    let action_button = rsx! {
+        button {
+            class: "btn btn-secondary",
+            onclick: move |_| {
+                MODAL_STACK.with_mut(|v| v.push(Modal::ShowAlbum(1)));
+            },
+            "View Albums"
         }
-        Some(Err(err)) => {
-            return rsx! {
-                GallerySearchBar {
-                    media_search_signal,
-                    status: String::from("Error from search_media"),
-                }
-                span { "{err}" }
+    };
+
+    rsx! {
+        div { class: "container",
+            // Modal container for popups
+            ModalBox { update_signal }
+
+            // Page header
+            div { class: "page-header",
+                h1 { class: "section-title", "Photo Gallery" }
+                p { "Browse and search all accessible media" }
             }
-        }
-        None => {
-            return rsx! {
-                span { "loading..." }
+
+            // Search controls
+            SearchBar {
+                search_signal: media_search_signal,
+                storage_key: MEDIA_SEARCH_KEY,
+                placeholder: "Search by date or description...",
+                status: match &*media_future.read() {
+                    Some(Ok(resp)) => format!("Found {} results", resp.media.len()),
+                    Some(Err(_)) => String::from("Error searching media"),
+                    None => String::from("Loading..."),
+                },
+                action_button,
+            }
+
+            // Media grid
+            match &*media_future.read() {
+                Some(Ok(resp)) => {
+                    rsx! {
+                        if resp.media.is_empty() {
+                            div { class: "empty-state",
+                                p { "No media found matching your search criteria." }
+                            }
+                        } else {
+                            div { class: "media-grid",
+                                for media_uuid in resp.media.iter() {
+                                    MediaCard {
+                                        key: "{media_uuid}",
+                                        media_uuid: *media_uuid,
+                                        show_actions: true,
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Some(Err(err)) => rsx! {
+                    div { class: "error-state",
+                        p { "Error: {err}" }
+                    }
+                },
+                None => rsx! {
+                    div { class: "loading-state media-grid",
+                        for _ in 0..8 {
+                            div { class: "skeleton-card",
+                                div { class: "skeleton", style: "height: 200px;" }
+                                div {
+                                    class: "skeleton",
+                                    style: "height: 24px; width: 40%; margin-top: 12px;",
+                                }
+                                div {
+                                    class: "skeleton",
+                                    style: "height: 18px; width: 80%; margin-top: 8px;",
+                                }
+                            }
+                        }
+                    }
+                },
             }
         }
     }

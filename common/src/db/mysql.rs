@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use chrono::Local;
 
-use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
+use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
 
 use crate::auth::{Group, User};
 use api::album::{Album, AlbumUpdate, AlbumUuid};
@@ -350,7 +350,7 @@ pub async fn get_media(
                 _ => {
                     return Err(anyhow::Error::msg(format!(
                         "invalid media record for {media_uuid}"
-                    )))
+                    )));
                 }
             },
         },

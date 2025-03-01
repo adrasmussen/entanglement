@@ -41,7 +41,7 @@ impl AuthzBackend for YamlGroupFile {
             _ => {
                 return Err(anyhow::Error::msg(
                     "invalid yaml format, expected a hash map in the first document",
-                ))
+                ));
             }
         };
 
