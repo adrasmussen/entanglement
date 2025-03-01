@@ -89,7 +89,14 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
                             match media.metadata {
                                 MediaMetadata::Image => {
                                     rsx! {
-                                        img { src: full_link(media_uuid), alt: media.note.clone(), loading: "lazy" }
+                                        div { class: "fullsize-image-container",
+                                            img {
+                                                src: full_link(media_uuid),
+                                                alt: media.note.clone(),
+                                                class: "fullsize-image",
+                                                // Optional: Add event listeners for pan/zoom functionality
+                                            }
+                                        }
                                     }
                                 }
                                 MediaMetadata::Video => {

@@ -1,10 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{
-    common::stream::thumbnail_link,
-    Route,
-};
+use crate::{common::stream::thumbnail_link, Route};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -25,9 +22,8 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     let album_context = props.album_uuid.map(|uuid| uuid.to_string());
 
     // Fetch media info to show preview metadata
-    let media_info = use_resource(move || async move {
-        get_media(&GetMediaReq { media_uuid }).await
-    });
+    let media_info =
+        use_resource(move || async move { get_media(&GetMediaReq { media_uuid }).await });
 
     rsx! {
         div { class: "media-card",
@@ -64,7 +60,6 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                 }
                             }
                         }
-                        
                         // Optional action buttons
                         if props.show_actions {
                             div { class: "media-card-actions",

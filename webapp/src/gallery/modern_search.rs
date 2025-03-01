@@ -5,10 +5,7 @@ use crate::{
         modal::{Modal, ModalBox, MODAL_STACK},
         storage::try_local_storage,
     },
-    components::{
-        search_bar::SearchBar,
-        media_card::MediaCard,
-    },
+    components::{media_card::MediaCard, search_bar::SearchBar},
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::media::*;

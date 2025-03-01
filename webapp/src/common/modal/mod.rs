@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::components::{
+    enhanced_media_modal::EnhancedMediaModal, media_detail_modal::MediaDetailModal,
     modal::ModernModal,
-    media_detail_modal::MediaDetailModal,
 };
 
 use crate::common::style;
@@ -28,6 +28,7 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 // trigger the ModalBox, below
 pub enum Modal {
     ShowMedia(MediaUuid),
+    EnhancedImageView(MediaUuid),
     ShowAlbum(AlbumUuid),
     CreateAlbum,
     DeleteAlbum(AlbumUuid),
@@ -61,6 +62,9 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             match *val {
                 Modal::ShowMedia(media_uuid) => rsx! {
                     MediaDetailModal { media_uuid, update_signal }
+                },
+                Modal::EnhancedImageView(media_uuid) => rsx! {
+                    EnhancedMediaModal { media_uuid }
                 },
                 Modal::ShowAlbum(album_uuid) => rsx! {
                     ModernModal {
@@ -140,6 +144,9 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                                             Modal::DeleteComment(comment_uuid) => rsx! {
                                                 DeleteCommentBox { update_signal, comment_uuid }
                                             },
+                                            _ => rsx! {
+                                                ModalErr { err: "not implemented" }
+                                            },
                                         }
                                     }
                                     None => return rsx! {},
@@ -150,7 +157,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                 },
             }
         }
-        None => rsx! {}
+        None => rsx! {},
     }
 }
 

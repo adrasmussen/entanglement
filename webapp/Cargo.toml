@@ -23,3 +23,4 @@ dioxus-logger = "0.6.2"
 getrandom = { version = "0.2.15", features = ["js"] }
 chrono = "0.4.39"
 constcat = "0.6.0"
+web-sys = { version = "0.3.77", features = ["Window"] }

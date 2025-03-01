@@ -168,6 +168,134 @@ pub const BASE_COMPONENTS: &str = r#"
   -webkit-box-orient: vertical;
 }
 
+/* Standard image display in detail view */
+.media-detail-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.media-detail-image {
+  max-width: 100%;
+  max-height: 80vh; /* Limit height to 80% of viewport height */
+  object-fit: contain; /* Maintain aspect ratio */
+  border-radius: var(--radius-lg);
+  cursor: zoom-in;
+  transition: transform var(--transition-normal) var(--easing-standard);
+}
+
+.media-detail-image:hover {
+  transform: scale(1.02);
+}
+
+.image-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.image-controls .btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.875rem;
+}
+
+/* Full size image in modal */
+.fullsize-image-container {
+  position: relative;
+  width: 100%;
+  height: 85vh;
+  overflow: hidden;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fullsize-image {
+  /* Initial state */
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: grab;
+}
+
+.fullsize-image.panning {
+  cursor: grabbing;
+}
+
+.fullsize-image.zoomed {
+  /* Override contain when zoomed */
+  object-fit: none;
+}
+
+/* Zoom controls */
+.zoom-controls {
+  position: absolute;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.zoom-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--surface);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.25rem;
+  border: none;
+  outline: none;
+}
+
+.zoom-button:hover {
+  background-color: var(--primary-light);
+  color: var(--text-inverse);
+}
+
+.zoom-level {
+  color: white;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.875rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .media-detail-image {
+    max-height: 70vh;
+  }
+
+  .fullsize-image-container {
+    height: 75vh;
+  }
+
+  .zoom-controls {
+    bottom: var(--space-2);
+    right: var(--space-2);
+  }
+
+  .zoom-button {
+    width: 36px;
+    height: 36px;
+  }
+}
+
 /* Skeleton loader */
 .skeleton {
   background: linear-gradient(

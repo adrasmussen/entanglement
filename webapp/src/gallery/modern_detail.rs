@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
+use web_sys::window;
 
 use crate::{
     common::{
@@ -78,17 +79,55 @@ pub fn ModernGalleryDetail(props: ModernGalleryDetailProps) -> Element {
                             div { class: "media-detail-view",
                                 match media.metadata {
                                     MediaMetadata::Image => rsx! {
-                                        img {
-                                            src: full_link(media_uuid),
-                                            alt: media.note.clone(),
-                                            class: "media-detail-image",
-                                            onclick: move |_| {
-                                                MODAL_STACK.with_mut(|v| v.push(Modal::ShowMedia(media_uuid)));
-                                            },
+                                        div { class: "media-detail-view",
+                                            img {
+                                                src: full_link(media_uuid),
+                                                alt: media.note.clone(),
+                                                class: "media-detail-image",
+                                                onclick: move |_| {
+                                                    MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid)));
+                                                },
+                                            }
+                                            div { class: "image-controls",
+                                                span { "Click image for full view" }
+                                                button {
+                                                    class: "btn btn-sm btn-secondary",
+                                                    onclick: move |_| {
+                                                        let link = full_link(media_uuid);
+                                                        let window = web_sys::window().expect("no global window exists");
+                                                        let _ = window.open_with_url_and_target(&format!("{}?download=true", link), "_blank");
+                                                    },
+                                                    "Download Original"
+                                                }
+                                            }
                                         }
                                     },
                                     MediaMetadata::Video => rsx! {
-                                        video { controls: true, src: full_link(media_uuid), class: "media-detail-video" }
+                                        div { class: "media-detail-view",
+                                            video {
+                                                controls: true,
+                                                src: full_link(media_uuid),
+                                                class: "media-detail-video",
+                                            }
+                                            div { class: "image-controls",
+                                                button {
+                                                    class: "btn btn-sm btn-secondary",
+                                                    onclick: move |_| {
+                                                        MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid)));
+                                                    },
+                                                    "Open Fullscreen"
+                                                }
+                                                button {
+                                                    class: "btn btn-sm btn-secondary",
+                                                    onclick: move |_| {
+                                                        let link = full_link(media_uuid);
+                                                        let window = web_sys::window().expect("no global window exists");
+                                                        let _ = window.open_with_url_and_target(&format!("{}?download=true", link), "_blank");
+                                                    },
+                                                    "Download Original"
+                                                }
+                                            }
+                                        }
                                     },
                                     _ => rsx! {
                                         div { class: "unsupported-media", "This media type is not supported for preview" }
@@ -278,7 +317,7 @@ pub fn ModernGalleryDetail(props: ModernGalleryDetailProps) -> Element {
                     }
                 }
             }
-        },
+        }
         Some(Err(err)) => {
             rsx! {
                 div { class: "container error-state",
@@ -291,7 +330,7 @@ pub fn ModernGalleryDetail(props: ModernGalleryDetailProps) -> Element {
                     }
                 }
             }
-        },
+        }
         None => {
             rsx! {
                 div { class: "container loading-state",
