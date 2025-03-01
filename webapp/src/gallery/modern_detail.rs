@@ -95,7 +95,8 @@ pub fn ModernGalleryDetail(props: ModernGalleryDetailProps) -> Element {
                                                     onclick: move |_| {
                                                         let link = full_link(media_uuid);
                                                         let window = web_sys::window().expect("no global window exists");
-                                                        let _ = window.open_with_url_and_target(&format!("{}?download=true", link), "_blank");
+                                                        let _ = window
+                                                            .open_with_url_and_target(&format!("{}?download=true", link), "_blank");
                                                     },
                                                     "Download Original"
                                                 }
@@ -122,7 +123,8 @@ pub fn ModernGalleryDetail(props: ModernGalleryDetailProps) -> Element {
                                                     onclick: move |_| {
                                                         let link = full_link(media_uuid);
                                                         let window = web_sys::window().expect("no global window exists");
-                                                        let _ = window.open_with_url_and_target(&format!("{}?download=true", link), "_blank");
+                                                        let _ = window
+                                                            .open_with_url_and_target(&format!("{}?download=true", link), "_blank");
                                                     },
                                                     "Download Original"
                                                 }

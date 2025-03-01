@@ -1,11 +1,13 @@
 use constcat::concat;
 
+mod home;
 mod components;
 mod variables;
 
 // Export new design system
 pub use components::BASE_COMPONENTS;
 pub use variables::CSS_VARIABLES;
+pub use home::HOME_STYLES;
 
 // Modern style bundling
 pub const MODERN_STYLES: &str = concat!(

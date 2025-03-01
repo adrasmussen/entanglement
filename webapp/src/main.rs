@@ -10,7 +10,7 @@ use common::style;
 mod components;
 
 mod home;
-use home::Home;
+use home::ModernHome;
 
 mod gallery;
 use gallery::{Gallery, ModernGalleryDetail, ModernGallerySearch};
@@ -39,7 +39,7 @@ fn main() {
 enum Route {
     #[layout(NavBar)]
         #[route("/")]
-        Home {},
+        ModernHome {},
         #[nest("/gallery")]
             #[layout(Gallery)]
                 #[route("/")]
@@ -68,6 +68,7 @@ enum Route {
 pub fn App() -> Element {
     rsx! {
         style { "{common::style::MODERN_STYLES}" }
+        style { "{common::style::HOME_STYLES}" }
         Router::<Route> { config: move || RouterConfig::default() }
     }
 }

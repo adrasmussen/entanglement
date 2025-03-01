@@ -12,7 +12,7 @@ pub fn ModernNavBar() -> Element {
             div { class: "nav-container",
                 // Logo area
                 div { class: "logo",
-                    Link { to: Route::Home {}, class: "flex items-center",
+                    Link { to: Route::ModernHome {}, class: "flex items-center",
                         img {
                             src: "/entanglement/app/assets/header.svg",
                             alt: "Entanglement",
