@@ -82,7 +82,7 @@ pub fn MediaInfo(props: MediaInfoProps) -> Element {
                     display: "grid",
                     grid_template_columns: "1fr 1fr 1fr",
                     button {
-                        onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAlbum(media_uuid))) },
+                        onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAnyAlbum(media_uuid))) },
                         r#type: "button",
                         "Add to album"
                     }

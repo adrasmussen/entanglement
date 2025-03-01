@@ -12,6 +12,8 @@ use album::{CreateAlbumBox, DeleteAlbumBox, ShowAlbumBox};
 mod comment;
 use comment::{AddCommentBox, DeleteCommentBox};
 
+mod contents;
+
 pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
 
 // Modal
@@ -25,7 +27,8 @@ pub enum Modal {
     CreateAlbum,
     DeleteAlbum(AlbumUuid),
     UpdateAlbum(AlbumUuid),
-    AddMediaToAlbum(MediaUuid),
+    AddMediaToAlbum(MediaUuid, AlbumUuid),
+    AddMediaToAnyAlbum(MediaUuid),
     RmMediaFromAlbum(MediaUuid, AlbumUuid),
     ShowLibrary(LibraryUuid),
     AddLibrary,
@@ -79,9 +82,16 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                                 Modal::UpdateAlbum(album_uuid) => rsx! {
                                     ModalErr { err: "not implemented" }
                                 },
-                                Modal::AddMediaToAlbum(media_uuid) => rsx! {
-                                    ModalErr { err: "not implemented" }
-                                },
+                                Modal::AddMediaToAlbum(media_uuid, album_uuid) => {
+                                    rsx! {
+                                        ModalErr { err: "not implemented" }
+                                    }
+                                }
+                                Modal::AddMediaToAnyAlbum(media_uuid) => {
+                                    rsx! {
+                                        ModalErr { err: "not implemented" }
+                                    }
+                                }
                                 Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
                                     rsx! {
                                         ModalErr { err: "not implemented" }

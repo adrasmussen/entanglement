@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use tracing::debug;
 
 use crate::common::{local_time, modal::MODAL_STACK};
 use api::{comment::*, media::MediaUuid};

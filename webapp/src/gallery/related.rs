@@ -92,7 +92,7 @@ fn AlbumTable(props: AlbumTableProps) -> Element {
                 }
 
                 for album_uuid in albums.iter() {
-                    AlbumTableRow { media_uuid, album_uuid: *album_uuid }
+                    AlbumTableRow { key: "{album_uuid}", media_uuid, album_uuid: *album_uuid }
                 }
             }
         }
@@ -182,7 +182,7 @@ fn CommentTable(props: CommentTableProps) -> Element {
                 }
 
                 for comment_uuid in comments.iter() {
-                    CommentTableRow { comment_uuid: *comment_uuid }
+                    CommentTableRow { key: "{comment_uuid}", comment_uuid: *comment_uuid }
                 }
             }
         }

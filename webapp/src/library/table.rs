@@ -10,7 +10,7 @@ struct LibraryTableRowProps {
 }
 
 #[component]
-fn LibraryListEntry(props: LibraryTableRowProps) -> Element {
+fn LibraryTableRow(props: LibraryTableRowProps) -> Element {
     let library_uuid = props.library_uuid;
 
     let library = use_resource(move || async move {
@@ -69,7 +69,7 @@ pub fn LibraryTable(props: LibaryTableProps) -> Element {
                 }
 
                 for library_uuid in props.libraries.iter() {
-                    LibraryListEntry { library_uuid: *library_uuid }
+                    LibraryTableRow { key: "{library_uuid}", library_uuid: *library_uuid }
                 }
             }
         }

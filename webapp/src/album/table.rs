@@ -88,7 +88,7 @@ pub fn AlbumTable(props: AlbumListProps) -> Element {
                 }
 
                 for album_uuid in props.albums.iter() {
-                    AlbumTableRow { album_uuid: *album_uuid }
+                    AlbumTableRow { key: "{album_uuid}", album_uuid: *album_uuid }
                 }
             }
         }
