@@ -25,7 +25,6 @@ pub fn AddMediaToAlbumBox(props: AddMediaToAlbumBoxProps) -> Element {
                 h3 { "Add media to an album" }
                 span { "not implemented" }
             }
-
         }
         div { class: "modal-footer",
             span { "{status_signal}" }
@@ -50,7 +49,6 @@ pub fn AddMediaToAnyAlbum(props: AddMediaToAnyAlbumBoxProps) -> Element {
                 h3 { "Add media to any album" }
                 span { "not implemented" }
             }
-
         }
         div { class: "modal-footer",
             span { "{status_signal}" }
@@ -77,7 +75,6 @@ pub fn RmMediaFromAlbum(props: RmMediaFromAlbumBoxProps) -> Element {
                 h3 { "Remove media from an album" }
                 span { "not implemented" }
             }
-
         }
         div { class: "modal-footer",
             span { "{status_signal}" }

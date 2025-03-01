@@ -92,7 +92,11 @@ fn AlbumTable(props: AlbumTableProps) -> Element {
                 }
 
                 for album_uuid in albums.iter() {
-                    AlbumTableRow { key: "{album_uuid}", media_uuid, album_uuid: *album_uuid }
+                    AlbumTableRow {
+                        key: "{album_uuid}",
+                        media_uuid,
+                        album_uuid: *album_uuid,
+                    }
                 }
             }
         }

@@ -7,11 +7,13 @@ use tracing::Level;
 mod common;
 use common::style;
 
+mod components;
+
 mod home;
 use home::Home;
 
 mod gallery;
-use gallery::{Gallery, GalleryDetail, GallerySearch};
+use gallery::{Gallery, ModernGalleryDetail, ModernGallerySearch};
 
 mod album;
 use album::{AlbumDetail, AlbumSearch, Albums};
@@ -41,9 +43,9 @@ enum Route {
         #[nest("/gallery")]
             #[layout(Gallery)]
                 #[route("/")]
-                GallerySearch {},
+                ModernGallerySearch {},
                 #[route("/:media_uuid")]
-                GalleryDetail { media_uuid: String },
+                ModernGalleryDetail { media_uuid: String },
             #[end_layout]
         #[end_nest]
         #[nest("/albums")]
@@ -65,37 +67,16 @@ enum Route {
 #[component]
 pub fn App() -> Element {
     rsx! {
+        style { "{common::style::MODERN_STYLES}" }
         Router::<Route> { config: move || RouterConfig::default() }
     }
 }
 
-#[component]
-fn NavBarButton(target: Route, text: String) -> Element {
-    let current_path: Route = use_route();
-
-    let active_class = if current_path.is_child_of(&target) || current_path == target {
-        "active"
-    } else {
-        ""
-    };
-
-    rsx! {
-        Link { class: active_class, to: target, "{text}" }
-    }
-}
-
+// Replace the NavBar component with our modern version
 #[component]
 fn NavBar() -> Element {
     rsx! {
-        div {
-            style { "{style::TOPNAV}" }
-            div { class: "topnav",
-                Link { active_class: "active", to: Route::Home {}, "Home" }
-                NavBarButton { target: Route::GallerySearch {}, text: "Gallery" }
-                NavBarButton { target: Route::AlbumSearch {}, text: "Albums" }
-                NavBarButton { target: Route::LibrarySearch {}, text: "Libraries" }
-            }
-        }
+        components::navigation::ModernNavBar {}
         Outlet::<Route> {}
     }
 }

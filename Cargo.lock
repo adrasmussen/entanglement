@@ -540,6 +540,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "constcat"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ffb5df6dd5dadb422897e8132f415d7a054e3cd757e5070b663f75bea1840fb"
+
+[[package]]
 name = "convert_case"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3656,6 +3662,7 @@ dependencies = [
  "anyhow",
  "api",
  "chrono",
+ "constcat",
  "dioxus",
  "dioxus-logger",
  "dioxus-router",

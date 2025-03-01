@@ -27,7 +27,7 @@ fn MediaTile(props: MediaTileProps) -> Element {
         div {
             Link {
                 class: "media-tile",
-                to: Route::GalleryDetail {
+                to: Route::ModernGalleryDetail {
                     media_uuid: media_uuid.to_string(),
                 },
                 img { src: thumbnail_link(media_uuid) }

@@ -3,6 +3,12 @@ use dioxus_router::prelude::*;
 
 use crate::Route;
 
+mod modern_search;
+pub use modern_search::ModernGallerySearch;
+
+mod modern_detail;
+pub use modern_detail::ModernGalleryDetail;
+
 mod grid;
 mod info;
 mod media;

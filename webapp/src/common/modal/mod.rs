@@ -1,5 +1,10 @@
 use dioxus::prelude::*;
 
+use crate::components::{
+    modal::ModernModal,
+    media_detail_modal::MediaDetailModal,
+};
+
 use crate::common::style;
 use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
 
@@ -50,72 +55,102 @@ pub struct ModalBoxProps {
 #[component]
 pub fn ModalBox(props: ModalBoxProps) -> Element {
     let update_signal = props.update_signal;
-    rsx! {
-        div {
-            style { "{style::MODAL}" }
-            div { class: "modal",
-                div { class: "modal-content",
-                    div { class: "modal-header",
-                        span {
-                            class: "close",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.pop());
-                            },
-                            "X"
-                        }
+
+    match MODAL_STACK.read().last() {
+        Some(val) => {
+            match *val {
+                Modal::ShowMedia(media_uuid) => rsx! {
+                    MediaDetailModal { media_uuid, update_signal }
+                },
+                Modal::ShowAlbum(album_uuid) => rsx! {
+                    ModernModal {
+                        title: "Album Details",
+
+                        // Album details content here...
+
+                        footer: rsx! {
+                            button {
+                                class: "btn btn-secondary",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.pop());
+                                },
+                                "Close"
+                            }
+                        },
                     }
-                    match MODAL_STACK.read().last() {
-                        Some(val) => {
-                            match *val {
-                                Modal::ShowMedia(media_uuid) => rsx! {
-                                    ShowMediaBox { media_uuid }
-                                },
-                                Modal::ShowAlbum(album_uuid) => rsx! {
-                                    ShowAlbumBox { album_uuid }
-                                },
-                                Modal::CreateAlbum => rsx! {
-                                    CreateAlbumBox {}
-                                },
-                                Modal::DeleteAlbum(album_uuid) => rsx! {
-                                    DeleteAlbumBox { update_signal, album_uuid }
-                                },
-                                Modal::UpdateAlbum(album_uuid) => rsx! {
-                                    ModalErr { err: "not implemented" }
-                                },
-                                Modal::AddMediaToAlbum(media_uuid, album_uuid) => {
-                                    rsx! {
-                                        ModalErr { err: "not implemented" }
+                },
+                // Continue with remaining modal types...
+                _ => rsx! {
+                    // Legacy modal rendering as fallback
+                    div {
+                        style { "{style::MODAL}" }
+                        div { class: "modal",
+                            div { class: "modal-content",
+                                div { class: "modal-header",
+                                    span {
+                                        class: "close",
+                                        onclick: move |_| {
+                                            MODAL_STACK.with_mut(|v| v.pop());
+                                        },
+                                        "X"
                                     }
                                 }
-                                Modal::AddMediaToAnyAlbum(media_uuid) => {
-                                    rsx! {
-                                        ModalErr { err: "not implemented" }
+                                match MODAL_STACK.read().last() {
+                                    Some(val) => {
+                                        match *val {
+                                            Modal::ShowMedia(media_uuid) => rsx! {
+                                                ShowMediaBox { media_uuid }
+                                            },
+                                            Modal::ShowAlbum(album_uuid) => rsx! {
+                                                ShowAlbumBox { album_uuid }
+                                            },
+                                            Modal::CreateAlbum => rsx! {
+                                                CreateAlbumBox {}
+                                            },
+                                            Modal::DeleteAlbum(album_uuid) => rsx! {
+                                                DeleteAlbumBox { update_signal, album_uuid }
+                                            },
+                                            Modal::UpdateAlbum(album_uuid) => rsx! {
+                                                ModalErr { err: "not implemented" }
+                                            },
+                                            Modal::AddMediaToAlbum(media_uuid, album_uuid) => {
+                                                rsx! {
+                                                    ModalErr { err: "not implemented" }
+                                                }
+                                            }
+                                            Modal::AddMediaToAnyAlbum(media_uuid) => {
+                                                rsx! {
+                                                    ModalErr { err: "not implemented" }
+                                                }
+                                            }
+                                            Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
+                                                rsx! {
+                                                    ModalErr { err: "not implemented" }
+                                                }
+                                            }
+                                            Modal::ShowLibrary(library_uuid) => rsx! {
+                                                ModalErr { err: "not implemented" }
+                                            },
+                                            Modal::AddLibrary => rsx! {
+                                                ModalErr { err: "not implemented" }
+                                            },
+                                            Modal::AddComment(media_uuid) => rsx! {
+                                                AddCommentBox { update_signal, media_uuid }
+                                            },
+                                            Modal::DeleteComment(comment_uuid) => rsx! {
+                                                DeleteCommentBox { update_signal, comment_uuid }
+                                            },
+                                        }
                                     }
+                                    None => return rsx! {},
                                 }
-                                Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
-                                    rsx! {
-                                        ModalErr { err: "not implemented" }
-                                    }
-                                }
-                                Modal::ShowLibrary(library_uuid) => rsx! {
-                                    ModalErr { err: "not implemented" }
-                                },
-                                Modal::AddLibrary => rsx! {
-                                    ModalErr { err: "not implemented" }
-                                },
-                                Modal::AddComment(media_uuid) => rsx! {
-                                    AddCommentBox { update_signal, media_uuid }
-                                },
-                                Modal::DeleteComment(comment_uuid) => rsx! {
-                                    DeleteCommentBox { update_signal, comment_uuid }
-                                },
                             }
                         }
-                        None => return rsx! {},
                     }
-                }
+                },
             }
         }
+        None => rsx! {}
     }
 }
 
