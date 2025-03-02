@@ -6,14 +6,14 @@ use api::{comment::*, media::MediaUuid};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CommentsListProps {
-    comment_uuids: Vec<CommentUuid>,
+    comment_uuids: Signal<Vec<CommentUuid>>,
     media_uuid: MediaUuid,
     update_signal: Signal<()>,
 }
 
 #[component]
 pub fn CommentsList(props: CommentsListProps) -> Element {
-    let comment_uuids = props.comment_uuids.clone();
+    let comment_uuids = props.comment_uuids;
     let media_uuid = props.media_uuid;
     let mut update_signal = props.update_signal;
 
@@ -22,14 +22,10 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
 
     // Fetch each comment
     let comments_future = use_resource(move || {
-        update_signal.read();
-
-        let comment_uuids = comment_uuids.clone();
-
         async move {
             let mut comments = Vec::new();
 
-            for comment_uuid in comment_uuids {
+            for comment_uuid in comment_uuids() {
                 match get_comment(&GetCommentReq {
                     comment_uuid: comment_uuid,
                 })
@@ -51,6 +47,13 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
     // unlike the GalleryDetail, the future.read() happens on the inside of the element
     let comments = &*comments_future.read();
     let comments = comments.clone();
+
+    let uuids = match comments {
+        Some(ref v) => v.iter().map(|e| e.0).collect::<Vec<CommentUuid>>(),
+        None => Vec::new()
+    };
+
+    tracing::info!({comments = ?uuids}, "rendering for comments");
 
     rsx! {
         div { class: "comments-container",

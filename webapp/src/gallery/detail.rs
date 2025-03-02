@@ -5,9 +5,11 @@ use crate::{
     common::{
         modal::{Modal, ModalBox, MODAL_STACK},
         stream::full_link,
-    }, components::comments::CommentsList, Route
+    },
+    components::comments::CommentsList,
+    Route,
 };
-use api::media::*;
+use api::{album::AlbumUuid, comment::CommentUuid, media::*};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {
@@ -41,11 +43,16 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
 
     let media_data = &*media_future.read();
 
+    // send the data to the child nodes via signals to ensure correct behavior
+    let mut album_uuids = use_signal(|| Vec::<AlbumUuid>::new());
+    let mut comment_uuids = use_signal(|| Vec::<CommentUuid>::new());
+
     match media_data {
         Some(Ok(media_data)) => {
             let media = media_data.media.clone();
-            let albums = media_data.albums.clone();
-            let comments = media_data.comments.clone();
+
+            album_uuids.set(media_data.albums.clone());
+            comment_uuids.set(media_data.comments.clone());
 
             // Format metadata for display
             let date_formatted = if media.date.is_empty() {
@@ -311,7 +318,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
 
                             // Use our new comments component
                             CommentsList {
-                                comment_uuids: comments,
+                                comment_uuids,
                                 media_uuid,
                                 update_signal,
                             }
