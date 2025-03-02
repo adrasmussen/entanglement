@@ -4,3 +4,4 @@ pub mod media_detail_modal;
 pub mod modal;
 pub mod navigation;
 pub mod search_bar;
+pub mod comments;

@@ -61,7 +61,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
         translate_y.set(0.0);
     };
 
-    let out = match &*media_future.read() {
+    let element = match &*media_future.read() {
         Some(Ok(media_data)) => {
             let media = media_data.media.clone();
 
@@ -234,5 +234,5 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
         }
     };
 
-    out
+    element
 }
