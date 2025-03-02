@@ -1,10 +1,13 @@
 use dioxus::prelude::*;
 
 use crate::components::{
-    enhanced_media_modal::EnhancedMediaModal, media_detail_modal::MediaDetailModal,
+    confirmation_modal::RemoveFromAlbumConfirmation, enhanced_media_modal::EnhancedMediaModal,
+    media_detail_modal::MediaDetailModal,
 };
 
 use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
+
+use super::confirmation_modal::DeleteCommentConfirmation;
 
 pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
 
@@ -16,17 +19,9 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 pub enum Modal {
     ShowMedia(MediaUuid),
     EnhancedImageView(MediaUuid),
+    RmMediaFromAlbumConfirmation(MediaUuid, AlbumUuid),
+    DeleteCommentConfirmation(CommentUuid, MediaUuid),
     ShowAlbum(AlbumUuid),
-    CreateAlbum,
-    DeleteAlbum(AlbumUuid),
-    UpdateAlbum(AlbumUuid),
-    AddMediaToAlbum(MediaUuid, AlbumUuid),
-    AddMediaToAnyAlbum(MediaUuid),
-    RmMediaFromAlbum(MediaUuid, AlbumUuid),
-    ShowLibrary(LibraryUuid),
-    AddLibrary,
-    AddComment(MediaUuid),
-    DeleteComment(CommentUuid),
 }
 
 // ModalBox
@@ -48,7 +43,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
         Some(val) => {
             match *val {
                 Modal::ShowMedia(media_uuid) => rsx! {
-                    MediaDetailModal { media_uuid, update_signal }
+                    MediaDetailModal { update_signal, media_uuid }
                 },
                 Modal::EnhancedImageView(media_uuid) => rsx! {
                     EnhancedMediaModal { media_uuid }
@@ -70,6 +65,24 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                         },
                     }
                 },
+                Modal::DeleteCommentConfirmation(comment_uuid, media_uuid) => {
+                    rsx! {
+                        DeleteCommentConfirmation {
+                            update_signal,
+                            comment_uuid,
+                            media_uuid,
+                        }
+                    }
+                }
+                Modal::RmMediaFromAlbumConfirmation(media_uuid, album_uuid) => {
+                    rsx! {
+                        RemoveFromAlbumConfirmation {
+                            update_signal,
+                            media_uuid,
+                            album_uuid,
+                        }
+                    }
+                }
                 _ => rsx! {
                     span { "not implemented" }
                 },

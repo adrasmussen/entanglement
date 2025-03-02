@@ -44,7 +44,7 @@ fn AlbumSearchBar(props: AlbumSearchBarProps) -> Element {
                 }
                 span { "{status}" }
                 button {
-                    onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum)) },
+                    //onclick: move |_| { MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum)) },
                     r#type: "button",
                     "Create album"
                 }

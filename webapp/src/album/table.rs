@@ -50,13 +50,7 @@ fn AlbumTableRow(props: AlbumTableRowProps) -> Element {
             td { "{result.mtime}" }
             td {
                 button { float: "right", onclick: move |_| async move {}, "Update" }
-                button {
-                    float: "right",
-                    onclick: move |_| async move {
-                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid)))
-                    },
-                    "Delete"
-                }
+                button { float: "right", onclick: move |_| async move {}, "Delete" }
             }
         }
     }

@@ -66,8 +66,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                 button {
                                     class: "btn btn-sm btn-secondary",
                                     onclick: move |_| {
-                                        MODAL_STACK
-                                            .with_mut(|v| v.push(Modal::ShowMedia(media_uuid)));
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::ShowMedia(media_uuid)));
                                     },
                                     "View"
                                 }

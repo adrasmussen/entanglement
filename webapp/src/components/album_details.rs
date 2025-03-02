@@ -53,13 +53,7 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                 class: "section-header",
                 style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);",
                 h2 { "Albums" }
-                button {
-                    class: "btn btn-sm btn-secondary",
-                    onclick: move |_| {
-                        MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAnyAlbum(media_uuid)));
-                    },
-                    "Add to Album"
-                }
+                button { class: "btn btn-sm btn-secondary", onclick: move |_| {}, "Add to Album" }
             }
 
             match albums {
@@ -112,7 +106,10 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                                                     button {
                                                         class: "btn btn-sm btn-danger",
                                                         onclick: move |_| {
-                                                            MODAL_STACK.with_mut(|v| v.push(Modal::RmMediaFromAlbum(media_uuid, album_id)));
+                                                            MODAL_STACK
+                                                                .with_mut(|v| {
+                                                                    v.push(Modal::RmMediaFromAlbumConfirmation(media_uuid, album_id))
+                                                                });
                                                         },
                                                         "Remove"
                                                     }

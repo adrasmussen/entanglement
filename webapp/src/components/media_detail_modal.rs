@@ -8,8 +8,8 @@ use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaDetailModalProps {
-    media_uuid: MediaUuid,
     update_signal: Signal<()>,
+    media_uuid: MediaUuid,
 }
 
 #[component]

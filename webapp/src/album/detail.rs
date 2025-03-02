@@ -55,12 +55,7 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
                 span { "Owner: {album_result.uid}" }
                 span { "Group: {album_result.gid}" }
                 button { onclick: move |_| async move {}, "Update" }
-                button {
-                    onclick: move |_| async move {
-                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid)))
-                    },
-                    "Delete"
-                }
+                button { onclick: move |_| async move {}, "Delete" }
             }
         }
         div {

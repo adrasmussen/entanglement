@@ -190,12 +190,7 @@ pub fn ModernHome() -> Element {
                             div { class: "quick-action-icon albums-icon" }
                             span { "View Albums" }
                         }
-                        button {
-                            class: "quick-action-card",
-                            onclick: move |_| {
-                                MODAL_STACK
-                                    .with_mut(|v| v.push(Modal::CreateAlbum));
-                            },
+                        button { class: "quick-action-card", onclick: move |_| {},
                             div { class: "quick-action-icon new-album-icon" }
                             span { "Create Album" }
                         }

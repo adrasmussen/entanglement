@@ -150,22 +150,16 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
                                             style: "display: flex; justify-content: flex-end; margin-top: var(--space-2);",
                                             button {
                                                 class: "btn btn-sm btn-danger",
-                                                onclick: move |_| async move {
-                                                    match delete_comment(
-                                                            &DeleteCommentReq {
-                                                                comment_uuid: comment_uuid,
-                                                            },
-                                                        )
-                                                        .await
-                                                    {
-                                                        Ok(_) => {
-                                                            status_signal.set("Comment deleted".into());
-                                                            update_signal.set(());
-                                                        }
-                                                        Err(err) => {
-                                                            status_signal.set(format!("Error: {}", err));
-                                                        }
-                                                    }
+                                                onclick: move |_| {
+                                                    crate::components::modal::MODAL_STACK
+                                                        .with_mut(|v| {
+                                                            v.push(
+                                                                crate::components::modal::Modal::DeleteCommentConfirmation(
+                                                                    comment_uuid,
+                                                                    media_uuid,
+                                                                ),
+                                                            )
+                                                        });
                                                 },
                                                 "Delete"
                                             }
