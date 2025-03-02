@@ -9,6 +9,9 @@ pub use search::GallerySearch;
 mod detail;
 pub use detail::GalleryDetail;
 
+pub mod comments;
+pub mod album_details;
+
 const MEDIA_SEARCH_KEY: &str = "media_search";
 
 // since we can't use a query path in a nested route, we instead use this key
