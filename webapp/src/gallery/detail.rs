@@ -35,10 +35,13 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
     // Fetch media data
     let media_future = use_resource(move || async move {
         update_signal.read();
+
         get_media(&GetMediaReq { media_uuid }).await
     });
 
-    let element = match &*media_future.read() {
+    let media_data = &*media_future.read();
+
+    match media_data {
         Some(Ok(media_data)) => {
             let media = media_data.media.clone();
             let albums = media_data.albums.clone();
@@ -306,12 +309,12 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                 }
                             }
 
-                                // Use our new comments component
-                                CommentsList {
-                                    comment_uuids: comments.clone(),
-                                    media_uuid,
-                                    update_signal
-                                }
+                            // Use our new comments component
+                            CommentsList {
+                                comment_uuids: comments,
+                                media_uuid,
+                                update_signal,
+                            }
                         }
                     }
                 }
@@ -368,7 +371,5 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                 }
             }
         }
-    };
-
-    element
+    }
 }

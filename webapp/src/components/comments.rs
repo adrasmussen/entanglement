@@ -22,7 +22,10 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
 
     // Fetch each comment
     let comments_future = use_resource(move || {
+        update_signal.read();
+
         let comment_uuids = comment_uuids.clone();
+
         async move {
             let mut comments = Vec::new();
 
