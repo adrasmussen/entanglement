@@ -6,7 +6,7 @@ use crate::{
         modal::{Modal, ModalBox, MODAL_STACK},
         stream::full_link,
     },
-    components::comments::CommentsList,
+    components::{album_details::AlbumDetailsTable, comments::CommentsList},
     Route,
 };
 use api::{album::AlbumUuid, comment::CommentUuid, media::*};
@@ -266,54 +266,11 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                 }
                             }
 
-                            // Albums section
-                            div {
-                                class: "detail-section",
-                                style: "background-color: var(--surface); padding: var(--space-4); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);",
-                                div {
-                                    class: "section-header",
-                                    style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);",
-                                    h2 { "Albums" }
-                                    button {
-                                        class: "btn btn-sm btn-secondary",
-                                        onclick: move |_| {
-                                            MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAnyAlbum(media_uuid)));
-                                        },
-                                        "Add to Album"
-                                    }
-                                }
-
-                                if albums.is_empty() {
-                                    div {
-                                        class: "empty-state",
-                                        style: "padding: var(--space-3); text-align: center; color: var(--text-tertiary);",
-                                        "This media is not in any albums."
-                                    }
-                                } else {
-                                    div {
-                                        class: "albums-list",
-                                        style: "display: flex; flex-direction: column; gap: var(--space-2);",
-                                        for album_id in albums {
-                                            div {
-                                                class: "album-item",
-                                                style: "display: flex; justify-content: space-between; align-items: center; padding: var(--space-2); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                                                Link {
-                                                    to: Route::AlbumDetail {
-                                                        album_uuid: album_id.to_string(),
-                                                    },
-                                                    "Album #{album_id}"
-                                                }
-                                                button {
-                                                    class: "btn btn-sm btn-danger",
-                                                    onclick: move |_| {
-                                                        MODAL_STACK.with_mut(|v| v.push(Modal::RmMediaFromAlbum(media_uuid, album_id)));
-                                                    },
-                                                    "Remove"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                            // Albums section - using our new component
+                            AlbumDetailsTable {
+                                album_uuids,
+                                media_uuid,
+                                update_signal,
                             }
 
                             // Use our new comments component
