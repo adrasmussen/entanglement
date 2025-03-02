@@ -2,11 +2,12 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    common::{
+    common::stream::full_link,
+    components::{
+        album_details::AlbumDetailsTable,
+        comments::CommentsList,
         modal::{Modal, ModalBox, MODAL_STACK},
-        stream::full_link,
     },
-    components::{album_details::AlbumDetailsTable, comments::CommentsList},
     Route,
 };
 use api::{album::AlbumUuid, comment::CommentUuid, media::*};

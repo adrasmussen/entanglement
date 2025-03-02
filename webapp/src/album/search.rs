@@ -1,12 +1,9 @@
 use dioxus::prelude::*;
 
+use crate::components::modal::{Modal, ModalBox, MODAL_STACK};
 use crate::{
-    album::{ALBUM_SEARCH_KEY, table::AlbumTable},
-    common::{
-        modal::{MODAL_STACK, Modal, ModalBox},
-        storage::*,
-        style,
-    },
+    album::{table::AlbumTable, ALBUM_SEARCH_KEY},
+    common::{storage::*, style},
 };
 use api::album::*;
 
@@ -28,7 +25,6 @@ fn AlbumSearchBar(props: AlbumSearchBarProps) -> Element {
 
     rsx! {
         div {
-            style { "{style::SUBNAV}" }
             div { class: "subnav",
                 form {
                     onsubmit: move |event| async move {

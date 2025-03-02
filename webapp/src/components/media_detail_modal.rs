@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
 use crate::{
-    common::{modal::MODAL_STACK, stream::full_link},
-    components::modal::ModernModal,
+    common::stream::full_link,
+    components::modal::{ModernModal, MODAL_STACK},
 };
 use api::media::*;
 

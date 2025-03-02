@@ -1,13 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{
-    Route,
-    common::{
-        modal::{MODAL_STACK, Modal},
-        style,
-    },
-};
+use crate::components::modal::{Modal, MODAL_STACK};
+use crate::{common::style, Route};
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -76,7 +71,6 @@ pub struct AlbumListProps {
 pub fn AlbumTable(props: AlbumListProps) -> Element {
     rsx! {
         div {
-            style { "{style::TABLE}" }
             table {
                 tr {
                     th { "Name" }

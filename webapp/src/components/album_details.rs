@@ -3,7 +3,7 @@ use dioxus_router::prelude::*;
 
 use crate::{
     Route,
-    common::modal::{MODAL_STACK, Modal},
+    components::modal::{MODAL_STACK, Modal},
 };
 use api::album::*;
 use api::media::MediaUuid;
@@ -77,10 +77,8 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                             div {
                                 class: "table-container",
                                 style: "max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
-                                table {
-                                    style: "border-collapse: separate; border-spacing: 0;",
-                                    thead {
-                                        style: "position: sticky; top: 0; z-index: 1; background-color: var(--primary);",
+                                table { style: "border-collapse: separate; border-spacing: 0;",
+                                    thead { style: "position: sticky; top: 0; z-index: 1; background-color: var(--primary);",
                                         tr {
                                             th { "Name" }
                                             th { "Group" }
@@ -89,22 +87,18 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                                         }
                                     }
                                     tbody {
-                                        for (album_id, album) in albums.clone() {
+                                        for (album_id , album) in albums.clone() {
                                             tr {
-                                                td {
-                                                    style: "padding: var(--space-2) var(--space-3);",
+                                                td { style: "padding: var(--space-2) var(--space-3);",
                                                     Link {
                                                         to: Route::AlbumDetail {
-                                                            album_uuid: album_id.to_string()
+                                                            album_uuid: album_id.to_string(),
                                                         },
                                                         style: "font-weight: 500; color: var(--primary);",
                                                         "{album.name}"
                                                     }
                                                 }
-                                                td {
-                                                    style: "padding: var(--space-2) var(--space-3);",
-                                                    "{album.gid}"
-                                                }
+                                                td { style: "padding: var(--space-2) var(--space-3);", "{album.gid}" }
                                                 td {
                                                     style: "max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: var(--space-2) var(--space-3);",
                                                     title: "{album.note}",
@@ -114,14 +108,11 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                                                         "{album.note}"
                                                     }
                                                 }
-                                                td {
-                                                    style: "text-align: right; padding: var(--space-2) var(--space-3);",
+                                                td { style: "text-align: right; padding: var(--space-2) var(--space-3);",
                                                     button {
                                                         class: "btn btn-sm btn-danger",
                                                         onclick: move |_| {
-                                                            MODAL_STACK.with_mut(|v|
-                                                                v.push(Modal::RmMediaFromAlbum(media_uuid, album_id))
-                                                            );
+                                                            MODAL_STACK.with_mut(|v| v.push(Modal::RmMediaFromAlbum(media_uuid, album_id)));
                                                         },
                                                         "Remove"
                                                     }
@@ -131,23 +122,22 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                                     }
                                 }
                             }
-                            div {
-                                style: "text-align: right; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
-                                "Showing {albums.len()} album",
-                                if albums.len() != 1 { "s" } else { "" }
+                            div { style: "text-align: right; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
+                                "Showing {albums.len()} album"
+                                if albums.len() != 1 {
+                                    "s"
+                                } else {
+                                    ""
+                                }
                             }
                         }
                     }
                 }
                 None => {
-                    // Loading state
                     rsx! {
                         div { class: "loading-state",
                             for _ in 0..3 {
-                                div {
-                                    class: "skeleton",
-                                    style: "height: 36px; margin-bottom: 8px;",
-                                }
+                                div { class: "skeleton", style: "height: 36px; margin-bottom: 8px;" }
                             }
                         }
                     }

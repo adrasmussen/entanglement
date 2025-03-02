@@ -1,6 +1,83 @@
 use dioxus::prelude::*;
 
-use crate::common::modal::MODAL_STACK;
+use crate::components::{
+    enhanced_media_modal::EnhancedMediaModal, media_detail_modal::MediaDetailModal,
+};
+
+use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
+
+pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
+
+// Modal
+//
+// this enumerates all of the modal boxes we can display, and what the relevant
+// data is to show the correct box.  pushing this onto the modal stack will
+// trigger the ModalBox, below
+pub enum Modal {
+    ShowMedia(MediaUuid),
+    EnhancedImageView(MediaUuid),
+    ShowAlbum(AlbumUuid),
+    CreateAlbum,
+    DeleteAlbum(AlbumUuid),
+    UpdateAlbum(AlbumUuid),
+    AddMediaToAlbum(MediaUuid, AlbumUuid),
+    AddMediaToAnyAlbum(MediaUuid),
+    RmMediaFromAlbum(MediaUuid, AlbumUuid),
+    ShowLibrary(LibraryUuid),
+    AddLibrary,
+    AddComment(MediaUuid),
+    DeleteComment(CommentUuid),
+}
+
+// ModalBox
+//
+// this is the struct that, once included into another element, actually displays
+// the modal on the top of the stack (from the global signal).  the meaning of
+// the update_signal is dependent on the calling component, and is intended to be
+// a more targeted way to know when to re-run use_resource() hooks.
+#[derive(Clone, PartialEq, Props)]
+pub struct ModalBoxProps {
+    update_signal: Signal<()>,
+}
+
+#[component]
+pub fn ModalBox(props: ModalBoxProps) -> Element {
+    let update_signal = props.update_signal;
+
+    match MODAL_STACK.read().last() {
+        Some(val) => {
+            match *val {
+                Modal::ShowMedia(media_uuid) => rsx! {
+                    MediaDetailModal { media_uuid, update_signal }
+                },
+                Modal::EnhancedImageView(media_uuid) => rsx! {
+                    EnhancedMediaModal { media_uuid }
+                },
+                Modal::ShowAlbum(album_uuid) => rsx! {
+                    ModernModal {
+                        title: "Album Details",
+
+                        // Album details content here...
+
+                        footer: rsx! {
+                            button {
+                                class: "btn btn-secondary",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.pop());
+                                },
+                                "Close"
+                            }
+                        },
+                    }
+                },
+                _ => rsx! {
+                    span { "not implemented" }
+                },
+            }
+        }
+        None => rsx! {},
+    }
+}
 
 #[derive(Clone, PartialEq, Props)]
 pub struct ModalProps {

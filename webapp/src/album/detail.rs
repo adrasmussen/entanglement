@@ -1,12 +1,9 @@
 use dioxus::prelude::*;
 
+use crate::components::modal::{Modal, ModalBox, MODAL_STACK};
 use crate::{
-    album::{MEDIA_SEARCH_KEY, grid::MediaGrid},
-    common::{
-        modal::{MODAL_STACK, Modal, ModalBox},
-        storage::*,
-        style,
-    },
+    album::{grid::MediaGrid, MEDIA_SEARCH_KEY},
+    common::{storage::*, style},
 };
 use api::album::*;
 
@@ -52,7 +49,7 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
 
     rsx! {
         div {
-            style { "{style::SUBNAV}" }
+
             div { class: "subnav",
                 span { "Album: {album_result.name}" }
                 span { "Owner: {album_result.uid}" }
@@ -67,7 +64,7 @@ fn AlbumDetailBar(props: AlbumDetailBarProps) -> Element {
             }
         }
         div {
-            style { "{style::SUBNAV}" }
+
             div { class: "subnav",
                 form {
                     onsubmit: move |event| async move {

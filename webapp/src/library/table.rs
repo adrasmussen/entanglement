@@ -59,7 +59,7 @@ pub struct LibaryTableProps {
 pub fn LibraryTable(props: LibaryTableProps) -> Element {
     rsx! {
         div {
-            style { "{style::TABLE}" }
+
             table {
                 tr {
                     th { "Path" }

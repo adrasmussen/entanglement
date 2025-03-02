@@ -1,11 +1,12 @@
 use dioxus::prelude::*;
 
 use crate::{
-    common::{
-        modal::{MODAL_STACK, Modal, ModalBox},
-        storage::try_local_storage,
+    common::storage::try_local_storage,
+    components::{
+        media_card::MediaCard,
+        modal::{Modal, ModalBox, MODAL_STACK},
+        search_bar::SearchBar,
     },
-    components::{media_card::MediaCard, search_bar::SearchBar},
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::media::*;

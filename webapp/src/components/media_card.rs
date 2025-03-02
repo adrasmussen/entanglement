@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{Route, common::stream::thumbnail_link};
+use crate::{common::stream::thumbnail_link, components::modal::{Modal, MODAL_STACK}, Route};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -66,8 +66,8 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                 button {
                                     class: "btn btn-sm btn-secondary",
                                     onclick: move |_| {
-                                        crate::common::modal::MODAL_STACK
-                                            .with_mut(|v| v.push(crate::common::modal::Modal::ShowMedia(media_uuid)));
+                                        MODAL_STACK
+                                            .with_mut(|v| v.push(Modal::ShowMedia(media_uuid)));
                                     },
                                     "View"
                                 }

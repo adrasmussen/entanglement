@@ -1,4 +1,3 @@
-pub mod modal;
 pub mod storage;
 pub mod stream;
 pub mod style;
@@ -11,8 +10,3 @@ pub fn local_time(secs: i64) -> String {
         |dt| dt.to_string(),
     )
 }
-// preserved for reference later
-
-/*
-pub mod sidebar;
-*/

@@ -20,7 +20,7 @@ fn MediaTile(props: MediaTileProps) -> Element {
     let media_uuid = props.media_uuid;
 
     rsx! {
-        style { "{style::MEDIA_GRID}" }
+
         div {
             Link {
                 class: "media-tile",
@@ -48,7 +48,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
 
     rsx! {
         div {
-            style { "{style::MEDIA_GRID}" }
+
             div { class: "media-grid",
                 for media_uuid in props.media.iter() {
                     MediaTile { album_uuid, media_uuid: *media_uuid }

@@ -19,7 +19,7 @@ fn LibrarySearchBar(props: LibrarySearchBarProps) -> Element {
 
     rsx! {
         div {
-            style { "{style::SUBNAV}" }
+
             div { class: "subnav",
                 form {
                     onsubmit: move |event| async move {

@@ -41,7 +41,7 @@ fn LibraryDetailBar(props: LibraryDetailBarProps) -> Element {
 
     rsx! {
         div {
-            style { "{style::SUBNAV}" }
+
             div { class: "subnav",
                 span { "library: {library_result.path}" }
                 span { "Group: {library_result.gid}" }
@@ -49,7 +49,7 @@ fn LibraryDetailBar(props: LibraryDetailBarProps) -> Element {
             }
         }
         div {
-            style { "{style::SUBNAV}" }
+
             div { class: "subnav",
                 form {
                     onsubmit: move |event| async move {

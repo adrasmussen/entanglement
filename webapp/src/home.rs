@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::Route;
+use crate::{components::modal::{Modal, MODAL_STACK}, Route};
 
 #[component]
 pub fn ModernHome() -> Element {
@@ -193,8 +193,8 @@ pub fn ModernHome() -> Element {
                         button {
                             class: "quick-action-card",
                             onclick: move |_| {
-                                crate::common::modal::MODAL_STACK
-                                    .with_mut(|v| v.push(crate::common::modal::Modal::CreateAlbum));
+                                MODAL_STACK
+                                    .with_mut(|v| v.push(Modal::CreateAlbum));
                             },
                             div { class: "quick-action-icon new-album-icon" }
                             span { "Create Album" }
