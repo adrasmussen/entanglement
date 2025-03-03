@@ -1,3 +1,5 @@
+// webapp/src/album/search.rs
+
 use dioxus::prelude::*;
 
 use crate::{
@@ -19,6 +21,8 @@ pub fn AlbumSearch() -> Element {
 
     // Fetch albums data
     let album_future = use_resource(move || async move {
+        // Read the update signal to trigger a refresh when needed
+        update_signal.read();
         let filter = album_search_signal();
         search_albums(&SearchAlbumsReq { filter }).await
     });
@@ -26,7 +30,13 @@ pub fn AlbumSearch() -> Element {
     // Create action button for search bar - positioned on the right
     let action_button = rsx! {
         div { style: "margin-left: auto;", // This will push the button to the right
-            button { class: "btn btn-primary", onclick: move |_| {}, "Create Album" }
+            button {
+                class: "btn btn-primary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
+                },
+                "Create Album"
+            }
         }
     };
 
@@ -68,13 +78,13 @@ pub fn AlbumSearch() -> Element {
                     div {
                         class: "error-state",
                         style: "
-                                                padding: var(--space-4);
-                                                background-color: var(--surface);
-                                                border-radius: var(--radius-lg);
-                                                margin-top: var(--space-4);
-                                                color: var(--error);
-                                                text-align: center;
-                                            ",
+                                                                                        padding: var(--space-4);
+                                                                                        background-color: var(--surface);
+                                                                                        border-radius: var(--radius-lg);
+                                                                                        margin-top: var(--space-4);
+                                                                                        color: var(--error);
+                                                                                        text-align: center;
+                                                                                    ",
                         "Error: {err}"
                     }
                 },
@@ -82,42 +92,36 @@ pub fn AlbumSearch() -> Element {
                     div {
                         class: "loading-state albums-grid",
                         style: "
-                                                display: grid;
-                                                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                                                gap: var(--space-4);
-                                                margin-top: var(--space-4);
-                                            ",
+                                                                                        display: grid;
+                                                                                        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                                                                                        gap: var(--space-4);
+                                                                                        margin-top: var(--space-4);
+                                                                                    ",
                         for _ in 0..6 {
                             div {
                                 class: "album-card loading",
                                 style: "
-                                                        background-color: var(--surface);
-                                                        border-radius: var(--radius-lg);
-                                                        overflow: hidden;
-                                                        box-shadow: var(--shadow-sm);
-                                                        height: 100%;
-                                                    ",
-
+                                                                                                background-color: var(--surface);
+                                                                                                border-radius: var(--radius-lg);
+                                                                                                overflow: hidden;
+                                                                                                box-shadow: var(--shadow-sm);
+                                                                                                height: 100%;
+                                                                                            ",
                                 // Skeleton loading UI
                                 div { class: "skeleton", style: "height: 180px;" }
-
                                 div { style: "padding: var(--space-3);",
-
                                     div {
                                         class: "skeleton",
                                         style: "width: 70%; height: 24px; margin-bottom: var(--space-2);",
                                     }
-
                                     div {
                                         class: "skeleton",
                                         style: "width: 100%; height: 16px; margin-bottom: var(--space-1);",
                                     }
-
                                     div {
                                         class: "skeleton",
                                         style: "width: 90%; height: 16px; margin-bottom: var(--space-3);",
                                     }
-
                                     div { style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
                                         div {
                                             class: "skeleton",

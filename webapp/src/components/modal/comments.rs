@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use gloo_timers::callback::Timeout;
 
 use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal};
 use api::{
@@ -44,7 +45,13 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
                         Ok(_) => {
                             status_message.set("Comment deleted".into());
                             update_signal.set(());
-                            MODAL_STACK.with_mut(|v| v.pop());
+                            let task = Timeout::new(
+                                1500,
+                                move || {
+                                    MODAL_STACK.with_mut(|v| v.pop());
+                                },
+                            );
+                            task.forget();
                         }
                         Err(err) => {
                             status_message.set(format!("Error: {}", err));

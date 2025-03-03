@@ -1,3 +1,5 @@
+// webapp/src/components/modal/mod.rs
+
 use dioxus::prelude::*;
 
 use api::{album::AlbumUuid, comment::CommentUuid, media::MediaUuid};
@@ -6,7 +8,7 @@ mod comments;
 use comments::DeleteCommentModal;
 
 mod albums;
-use albums::RmFromAlbumModal;
+use albums::{CreateAlbumModal, RmFromAlbumModal};
 
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
@@ -31,6 +33,7 @@ pub enum Modal {
     RmMediaFromAlbumConfirmation(MediaUuid, AlbumUuid),
     DeleteCommentConfirmation(CommentUuid, MediaUuid),
     ShowAlbum(AlbumUuid),
+    CreateAlbum, // New variant for album creation
 }
 
 // ModalBox
@@ -90,6 +93,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                             media_uuid,
                             album_uuid,
                         }
+                    }
+                }
+                Modal::CreateAlbum => {
+                    rsx! {
+                        CreateAlbumModal { update_signal }
                     }
                 }
                 _ => rsx! {

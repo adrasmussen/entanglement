@@ -1,4 +1,7 @@
+// webapp/src/album/grid.rs
+
 use crate::album::card::AlbumCard;
+use crate::components::modal::{MODAL_STACK, Modal};
 use api::album::AlbumUuid;
 use dioxus::prelude::*;
 
@@ -60,7 +63,9 @@ pub fn AlbumGrid(props: AlbumGridProps) -> Element {
                 button {
                     class: "btn btn-primary",
                     style: "margin-top: var(--space-4);",
-                    onclick: move |_| {},
+                    onclick: move |_| {
+                        MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
+                    },
                     "Create New Album"
                 }
             }
