@@ -22,8 +22,19 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
 
     rsx! {
         div { class: "search-bar",
+            style: "
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                margin-bottom: var(--space-6);
+                background-color: var(--surface);
+                padding: var(--space-3);
+                border-radius: var(--radius-lg);
+                box-shadow: var(--shadow-sm);
+            ",
             form {
-                class: "flex items-center flex-grow",
+                class: "flex items-center",
+                style: "flex: 1; display: flex; align-items: center;", // Make the form take up available space
                 onsubmit: move |event| async move {
                     let filter = match event.values().get("search_filter") {
                         Some(val) => val.as_value(),
@@ -32,9 +43,12 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
                     search_signal.set(filter.clone());
                     set_local_storage(storage_key, filter);
                 },
-                div { class: "search-input flex-grow",
+                div {
+                    class: "search-input",
+                    style: "flex: 1; margin-right: var(--space-2);", // Make input field fill available space
                     input {
                         class: "form-input",
+                        style: "width: 100%;", // Full width input
                         name: "search_filter",
                         r#type: "text",
                         placeholder: "{placeholder}",
@@ -45,11 +59,18 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
             }
 
             if !status.is_empty() {
-                span { class: "search-status", "{status}" }
+                span {
+                    class: "search-status",
+                    style: "margin-left: var(--space-4); color: var(--text-tertiary);",
+                    "{status}"
+                }
             }
 
             if let Some(action_button) = props.action_button {
-                div { class: "search-actions", {action_button} }
+                div {
+                    class: "search-actions",
+                    {action_button}
+                }
             }
         }
     }
