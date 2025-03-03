@@ -8,7 +8,7 @@ mod comments;
 use comments::DeleteCommentModal;
 
 mod albums;
-use albums::{CreateAlbumModal, RmFromAlbumModal};
+use albums::{CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal};
 
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
@@ -30,10 +30,12 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 pub enum Modal {
     ShowMedia(MediaUuid),
     EnhancedImageView(MediaUuid),
-    RmMediaFromAlbumConfirmation(MediaUuid, AlbumUuid),
-    DeleteCommentConfirmation(CommentUuid, MediaUuid),
+    RmMediaFromAlbum(MediaUuid, AlbumUuid),
+    DeleteComment(CommentUuid, MediaUuid),
     ShowAlbum(AlbumUuid),
-    CreateAlbum, // New variant for album creation
+    CreateAlbum,
+    EditAlbum(AlbumUuid),
+    DeleteAlbum(AlbumUuid),
 }
 
 // ModalBox
@@ -77,7 +79,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                         },
                     }
                 },
-                Modal::DeleteCommentConfirmation(comment_uuid, media_uuid) => {
+                Modal::DeleteComment(comment_uuid, media_uuid) => {
                     rsx! {
                         DeleteCommentModal {
                             update_signal,
@@ -86,7 +88,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                         }
                     }
                 }
-                Modal::RmMediaFromAlbumConfirmation(media_uuid, album_uuid) => {
+                Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
                     rsx! {
                         RmFromAlbumModal {
                             update_signal,
@@ -98,6 +100,16 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                 Modal::CreateAlbum => {
                     rsx! {
                         CreateAlbumModal { update_signal }
+                    }
+                }
+                Modal::EditAlbum(album_uuid) => {
+                    rsx! {
+                        EditAlbumModal { update_signal, album_uuid }
+                    }
+                }
+                Modal::DeleteAlbum(album_uuid) => {
+                    rsx! {
+                        DeleteAlbumModal { update_signal, album_uuid }
                     }
                 }
                 _ => rsx! {

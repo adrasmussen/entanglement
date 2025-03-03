@@ -154,7 +154,7 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
                                                     crate::components::modal::MODAL_STACK
                                                         .with_mut(|v| {
                                                             v.push(
-                                                                crate::components::modal::Modal::DeleteCommentConfirmation(
+                                                                crate::components::modal::Modal::DeleteComment(
                                                                     comment_uuid,
                                                                     media_uuid,
                                                                 ),

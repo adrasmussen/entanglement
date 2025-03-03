@@ -127,12 +127,16 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                             div { style: "display: flex; gap: var(--space-2);",
                                 button {
                                     class: "btn btn-secondary",
-                                    onclick: move |_| {},
+                                    onclick: move |_| {
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::EditAlbum(album_uuid)));
+                                    },
                                     "Edit Album"
                                 }
                                 button {
                                     class: "btn btn-danger",
-                                    onclick: move |_| {},
+                                    onclick: move |_| {
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid)));
+                                    },
                                     "Delete Album"
                                 }
                             }

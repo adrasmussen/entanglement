@@ -107,9 +107,7 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                                                         class: "btn btn-sm btn-danger",
                                                         onclick: move |_| {
                                                             MODAL_STACK
-                                                                .with_mut(|v| {
-                                                                    v.push(Modal::RmMediaFromAlbumConfirmation(media_uuid, album_id))
-                                                                });
+                                                                .with_mut(|v| { v.push(Modal::RmMediaFromAlbum(media_uuid, album_id)) });
                                                         },
                                                         "Remove"
                                                     }
