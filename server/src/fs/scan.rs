@@ -8,7 +8,7 @@ use blockhash::blockhash256;
 use chrono::Local;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{Level, debug, error, info, instrument};
+use tracing::{Level, debug, error, info, warn, instrument};
 use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
@@ -31,7 +31,9 @@ pub struct ScanContext {
 
 impl ScanContext {
     async fn error(&self, path: impl Debug, msg: impl Display, error: impl Debug) -> () {
-        error!({path = ?path, error = ?error}, "{msg}");
+        // a scan error will not stop the scanner thread, nevermind the fs service or main,
+        // so we record these errors as warnings
+        warn!({path = ?path, error = ?error}, "{msg}");
 
         let mut status = self.job_status.write().await;
 
@@ -52,8 +54,6 @@ struct MediaData {
 }
 
 // concurrent file scanner
-//
-//
 #[instrument(level=Level::DEBUG, skip(context))]
 pub async fn run_scan(context: Arc<ScanContext>) -> () {
     let context = context.clone();
@@ -227,7 +227,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         }
     };
 
-    // async closures haven't stabilized yet
+    // async closures have stabilized, but i don't remember where we wanted to use it
     let mediadata: MediaData = match mediadata {
         Ok(val) => val,
         Err(err) => {

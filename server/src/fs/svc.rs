@@ -113,6 +113,8 @@ impl ESFileService for FileScanner {
         // rather than start another thread to listen for the jobs status, we create this shared
         // struct that will be arc'd into the scan context, modified over the couse of the scan,
         // and read back later to send the status/library update
+        //
+        // TODO -- convert this to a channel or clarify the ownership scheme
         let job = Arc::new(RwLock::new(LibraryScanJob {
             start_time: Local::now().timestamp(),
             file_count: 0,

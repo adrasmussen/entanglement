@@ -10,6 +10,20 @@ use std::sync::Arc;
 use async_cell::sync::AsyncCell;
 use dashmap::{DashMap, mapref::entry::Entry};
 
+// awaitable cache
+//
+// this is loosely inspired by the WaitCache crate, except that we want to have requests await
+// the result of the initial set operation instead of blocking.  for simplicity, we build it
+// out of an AsyncCell, and just clone the contents instead of trying to manipulate the
+// lifetimes of everything involved.
+//
+// since by construction, we write infrequently, it suffices to check that the things we are
+// cloning (small HashSets) are not too big/costly
+//
+// it still uses a DashMap... which is problematic because there are weird issues holding the
+// lock across an await, which is exactly what we do here with init.await
+//
+// before this is goes into production, we should check this carefully
 pub struct AwaitCache<K: Eq + Hash + Clone, V: Clone> {
     items: DashMap<K, Arc<AsyncCell<V>>>,
 }
