@@ -50,7 +50,7 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
 
     let uuids = match comments {
         Some(ref v) => v.iter().map(|e| e.0).collect::<Vec<CommentUuid>>(),
-        None => Vec::new()
+        None => Vec::new(),
     };
 
     tracing::info!({comments = ?uuids}, "rendering for comments");

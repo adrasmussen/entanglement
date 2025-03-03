@@ -2,10 +2,10 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    common::stream::full_link,
-    components::modal::{Modal, ModalBox, MODAL_STACK},
-    gallery::{album_details::AlbumDetailsTable, comments::CommentsList},
     Route,
+    common::stream::full_link,
+    components::modal::{MODAL_STACK, Modal, ModalBox},
+    gallery::{album_details::AlbumDetailsTable, comments::CommentsList},
 };
 use api::{album::AlbumUuid, comment::CommentUuid, media::*};
 
@@ -26,7 +26,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                     p { "The provided media ID could not be parsed." }
                     Link { to: Route::GallerySearch {}, class: "btn btn-primary", "Return to Gallery" }
                 }
-            }
+            };
         }
     };
 
@@ -44,6 +44,10 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
     // send the data to the child nodes via signals to ensure correct behavior
     let mut album_uuids = use_signal(|| Vec::<AlbumUuid>::new());
     let mut comment_uuids = use_signal(|| Vec::<CommentUuid>::new());
+
+    // This will be populated by the API in the future
+    // For now, we'll initialize it as an empty vector
+    let similar_media = Vec::<MediaUuid>::new();
 
     match media_data {
         Some(Ok(media_data)) => {
@@ -72,15 +76,28 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                         span { "Media Details" }
                     }
 
-                    // New side-by-side layout
+                    // New side-by-side layout with independent scrolling
                     div {
                         class: "media-detail-page",
-                        style: "display: flex; gap: var(--space-6);",
+                        style: "
+                            display: flex;
+                            gap: var(--space-6);
+                            position: relative;
+                            height: calc(100vh - 160px);
+                        ",
 
-                        // Left column - Media display (now narrower)
+                        // Left column - Media display (fixed position)
                         div {
                             class: "media-detail-main",
-                            style: "flex: 0 0 50%; max-width: 50%;",
+                            style: "
+                                flex: 0 0 50%;
+                                max-width: 50%;
+                                position: sticky;
+                                top: var(--header-height);
+                                height: fit-content;
+                                max-height: calc(100vh - 140px);
+                                overflow: hidden;
+                            ",
 
                             // Image display
                             div { class: "media-detail-view",
@@ -90,7 +107,13 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                             src: full_link(media_uuid),
                                             alt: media.note.clone(),
                                             class: "media-detail-image",
-                                            style: "width: 100%; border-radius: var(--radius-lg); cursor: pointer;",
+                                            style: "
+                                                                                        width: 100%;
+                                                                                        border-radius: var(--radius-lg);
+                                                                                        cursor: pointer;
+                                                                                        max-height: calc(100vh - 280px);
+                                                                                        object-fit: contain;
+                                                                                    ",
                                             onclick: move |_| {
                                                 MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid)));
                                             },
@@ -101,7 +124,11 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                             controls: true,
                                             src: full_link(media_uuid),
                                             class: "media-detail-video",
-                                            style: "width: 100%; border-radius: var(--radius-lg);",
+                                            style: "
+                                                                                        width: 100%;
+                                                                                        border-radius: var(--radius-lg);
+                                                                                        max-height: calc(100vh - 280px);
+                                                                                    ",
                                         }
                                     },
                                     _ => rsx! {
@@ -109,12 +136,78 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                     },
                                 }
                             }
+
+                            // Similar Media section
+                            div {
+                                class: "similar-media-section",
+                                style: "
+                                    margin-top: var(--space-4);
+                                    padding: var(--space-3);
+                                    background-color: var(--surface);
+                                    border-radius: var(--radius-lg);
+                                    box-shadow: var(--shadow-sm);
+                                ",
+
+                                h3 { style: "
+                                        font-size: 1.125rem;
+                                        margin-bottom: var(--space-3);
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                    ",
+                                    span { "Similar Media" }
+                                    span { style: "
+                                            font-size: 0.875rem;
+                                            color: var(--text-tertiary);
+                                            font-weight: normal;
+                                        ",
+                                        "Coming soon"
+                                    }
+                                }
+
+                                // Placeholder grid for similar media
+                                // This will be populated when similar_media field is available in the API
+                                div {
+                                    class: "similar-media-grid",
+                                    style: "
+                                        display: grid;
+                                        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                                        gap: var(--space-2);
+                                    ",
+
+                                    // Placeholder items
+                                    for _ in 0..6 {
+                                        div {
+                                            class: "similar-media-placeholder",
+                                            style: "
+                                                background-color: var(--neutral-100);
+                                                border-radius: var(--radius-md);
+                                                aspect-ratio: 1;
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                color: var(--text-tertiary);
+                                                font-size: 1.5rem;
+                                            ",
+                                            "🖼️"
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        // Right column - All metadata, albums, and comments
+                        // Right column - All metadata, albums, and comments (scrollable)
                         div {
                             class: "media-detail-sidebar",
-                            style: "flex: 1; display: flex; flex-direction: column; gap: var(--space-6);",
+                            style: "
+                                flex: 1;
+                                display: flex;
+                                flex-direction: column;
+                                gap: var(--space-6);
+                                overflow-y: auto;
+                                max-height: calc(100vh - 140px);
+                                padding-right: var(--space-2);
+                            ",
 
                             // Media metadata form
                             div { class: "detail-section",
@@ -277,6 +370,9 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                 media_uuid,
                                 update_signal,
                             }
+
+                            // Add some padding at the bottom to ensure good scrolling
+                            div { style: "height: var(--space-4);" }
                         }
                     }
                 }

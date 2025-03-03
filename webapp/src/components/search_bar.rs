@@ -21,7 +21,8 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
     let status = props.status.clone();
 
     rsx! {
-        div { class: "search-bar",
+        div {
+            class: "search-bar",
             style: "
                 display: flex;
                 align-items: center;
@@ -67,10 +68,7 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
             }
 
             if let Some(action_button) = props.action_button {
-                div {
-                    class: "search-actions",
-                    {action_button}
-                }
+                div { class: "search-actions", {action_button} }
             }
         }
     }

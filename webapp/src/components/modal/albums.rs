@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 
-use crate::components::modal::{ModernModal, MODAL_STACK, ModalSize};
+use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal};
 use api::{
-    album::{get_album, rm_media_from_album, AlbumUuid, GetAlbumReq, RmMediaFromAlbumReq},
+    album::{AlbumUuid, GetAlbumReq, RmMediaFromAlbumReq, get_album, rm_media_from_album},
     media::MediaUuid,
 };
 

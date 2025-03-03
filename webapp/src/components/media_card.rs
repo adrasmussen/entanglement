@@ -1,7 +1,11 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::stream::thumbnail_link, components::modal::{Modal, MODAL_STACK}, Route};
+use crate::{
+    Route,
+    common::stream::thumbnail_link,
+    components::modal::{MODAL_STACK, Modal},
+};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]

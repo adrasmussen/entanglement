@@ -3,7 +3,10 @@ use dioxus::prelude::*;
 use crate::{
     album::{ALBUM_SEARCH_KEY, grid::AlbumGrid},
     common::storage::*,
-    components::{modal::{Modal, ModalBox, MODAL_STACK}, search_bar::SearchBar},
+    components::{
+        modal::{MODAL_STACK, Modal, ModalBox},
+        search_bar::SearchBar,
+    },
 };
 use api::album::*;
 
@@ -23,14 +26,7 @@ pub fn AlbumSearch() -> Element {
     // Create action button for search bar - positioned on the right
     let action_button = rsx! {
         div { style: "margin-left: auto;", // This will push the button to the right
-            button {
-                class: "btn btn-primary",
-                onclick: move |_| {
-                    // Create album functionality would go here
-                    // MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
-                },
-                "Create Album"
-            }
+            button { class: "btn btn-primary", onclick: move |_| {}, "Create Album" }
         }
     };
 
@@ -47,8 +43,7 @@ pub fn AlbumSearch() -> Element {
             ModalBox { update_signal }
 
             // Page header
-            div { class: "page-header",
-                style: "margin-bottom: var(--space-4);",
+            div { class: "page-header", style: "margin-bottom: var(--space-4);",
                 h1 { class: "section-title", "Albums" }
                 p { "Organize and browse your media collections" }
             }
@@ -58,7 +53,7 @@ pub fn AlbumSearch() -> Element {
                 search_signal: album_search_signal,
                 storage_key: ALBUM_SEARCH_KEY,
                 placeholder: "Search by album name or description...",
-                status: status,
+                status,
                 action_button,
             }
 
@@ -70,69 +65,67 @@ pub fn AlbumSearch() -> Element {
                     }
                 }
                 Some(Err(err)) => rsx! {
-                    div { class: "error-state",
+                    div {
+                        class: "error-state",
                         style: "
-                            padding: var(--space-4);
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            margin-top: var(--space-4);
-                            color: var(--error);
-                            text-align: center;
-                        ",
+                                                padding: var(--space-4);
+                                                background-color: var(--surface);
+                                                border-radius: var(--radius-lg);
+                                                margin-top: var(--space-4);
+                                                color: var(--error);
+                                                text-align: center;
+                                            ",
                         "Error: {err}"
                     }
                 },
                 None => rsx! {
-                    div { class: "loading-state albums-grid",
+                    div {
+                        class: "loading-state albums-grid",
                         style: "
-                            display: grid;
-                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                            gap: var(--space-4);
-                            margin-top: var(--space-4);
-                        ",
+                                                display: grid;
+                                                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                                                gap: var(--space-4);
+                                                margin-top: var(--space-4);
+                                            ",
                         for _ in 0..6 {
-                            div { class: "album-card loading",
+                            div {
+                                class: "album-card loading",
                                 style: "
-                                    background-color: var(--surface);
-                                    border-radius: var(--radius-lg);
-                                    overflow: hidden;
-                                    box-shadow: var(--shadow-sm);
-                                    height: 100%;
-                                ",
+                                                        background-color: var(--surface);
+                                                        border-radius: var(--radius-lg);
+                                                        overflow: hidden;
+                                                        box-shadow: var(--shadow-sm);
+                                                        height: 100%;
+                                                    ",
 
                                 // Skeleton loading UI
-                                div {
-                                    class: "skeleton",
-                                    style: "height: 180px;"
-                                }
+                                div { class: "skeleton", style: "height: 180px;" }
 
-                                div {
-                                    style: "padding: var(--space-3);",
+                                div { style: "padding: var(--space-3);",
 
                                     div {
                                         class: "skeleton",
-                                        style: "width: 70%; height: 24px; margin-bottom: var(--space-2);"
+                                        style: "width: 70%; height: 24px; margin-bottom: var(--space-2);",
                                     }
 
                                     div {
                                         class: "skeleton",
-                                        style: "width: 100%; height: 16px; margin-bottom: var(--space-1);"
+                                        style: "width: 100%; height: 16px; margin-bottom: var(--space-1);",
                                     }
 
                                     div {
                                         class: "skeleton",
-                                        style: "width: 90%; height: 16px; margin-bottom: var(--space-3);"
+                                        style: "width: 90%; height: 16px; margin-bottom: var(--space-3);",
                                     }
 
-                                    div {
-                                        style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
+                                    div { style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
                                         div {
                                             class: "skeleton",
-                                            style: "width: 40px; height: 24px;"
+                                            style: "width: 40px; height: 24px;",
                                         }
                                         div {
                                             class: "skeleton",
-                                            style: "width: 40px; height: 24px;"
+                                            style: "width: 40px; height: 24px;",
                                         }
                                     }
                                 }

@@ -9,8 +9,8 @@ pub use search::GallerySearch;
 mod detail;
 pub use detail::GalleryDetail;
 
-pub mod comments;
 pub mod album_details;
+pub mod comments;
 
 const MEDIA_SEARCH_KEY: &str = "media_search";
 

@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{Route, components::modal::{Modal, MODAL_STACK}};
+use crate::{
+    Route,
+    components::modal::{MODAL_STACK, Modal},
+};
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -60,8 +63,7 @@ pub fn AlbumCard(props: AlbumCardProps) -> Element {
                                 transition: background-color var(--transition-normal) var(--easing-standard);
                             ",
                             // Placeholder icon
-                            div {
-                                style: "
+                            div { style: "
                                     width: 64px;
                                     height: 64px;
                                     border-radius: var(--radius-lg);
@@ -137,7 +139,7 @@ pub fn AlbumCard(props: AlbumCardProps) -> Element {
                     }
                 }
             }
-        },
+        }
         Some(Err(_)) => {
             rsx! {
                 div {
@@ -157,7 +159,7 @@ pub fn AlbumCard(props: AlbumCardProps) -> Element {
                     "Error loading album {album_uuid}"
                 }
             }
-        },
+        }
         None => {
             rsx! {
                 div {
@@ -171,38 +173,33 @@ pub fn AlbumCard(props: AlbumCardProps) -> Element {
                     ",
 
                     // Skeleton loading UI
-                    div {
-                        class: "skeleton",
-                        style: "height: 180px;"
-                    }
+                    div { class: "skeleton", style: "height: 180px;" }
 
-                    div {
-                        style: "padding: var(--space-3);",
+                    div { style: "padding: var(--space-3);",
 
                         div {
                             class: "skeleton",
-                            style: "width: 70%; height: 24px; margin-bottom: var(--space-2);"
+                            style: "width: 70%; height: 24px; margin-bottom: var(--space-2);",
                         }
 
                         div {
                             class: "skeleton",
-                            style: "width: 100%; height: 16px; margin-bottom: var(--space-1);"
+                            style: "width: 100%; height: 16px; margin-bottom: var(--space-1);",
                         }
 
                         div {
                             class: "skeleton",
-                            style: "width: 90%; height: 16px; margin-bottom: var(--space-3);"
+                            style: "width: 90%; height: 16px; margin-bottom: var(--space-3);",
                         }
 
-                        div {
-                            style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
+                        div { style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
                             div {
                                 class: "skeleton",
-                                style: "width: 40px; height: 24px;"
+                                style: "width: 40px; height: 24px;",
                             }
                             div {
                                 class: "skeleton",
-                                style: "width: 40px; height: 24px;"
+                                style: "width: 40px; height: 24px;",
                             }
                         }
                     }

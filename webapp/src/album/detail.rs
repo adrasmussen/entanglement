@@ -2,14 +2,14 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     album::MEDIA_SEARCH_KEY,
     common::{local_time, storage::*},
     components::{
         media_card::MediaCard,
-        modal::{Modal, ModalBox, MODAL_STACK},
+        modal::{MODAL_STACK, Modal, ModalBox},
         search_bar::SearchBar,
     },
-    Route,
 };
 use api::album::*;
 use api::media::*;
@@ -31,7 +31,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                     p { "The provided album ID could not be parsed." }
                     Link { to: Route::AlbumSearch {}, class: "btn btn-primary", "Return to Albums" }
                 }
-            }
+            };
         }
     };
 
@@ -53,14 +53,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
     // Create action button for search bar - positioned on the right
     let action_button = rsx! {
         div { style: "margin-left: auto;", // This will push the button to the right
-            button {
-                class: "btn btn-secondary",
-                onclick: move |_| {
-                    // Add media to album functionality would go here
-                    // MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToAlbum(album_uuid)));
-                },
-                "Add Media"
-            }
+            button { class: "btn btn-secondary", onclick: move |_| {}, "Add Media" }
         }
     };
 
@@ -81,7 +74,8 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                     ModalBox { update_signal }
 
                     // Breadcrumb navigation
-                    div { class: "breadcrumb",
+                    div {
+                        class: "breadcrumb",
                         style: "margin-bottom: var(--space-4);",
                         Link { to: Route::AlbumSearch {}, "Albums" }
                         span { " / " }
@@ -98,14 +92,12 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                             margin-bottom: var(--space-4);
                             box-shadow: var(--shadow-sm);
                         ",
-                        div {
-                            style: "display: flex; justify-content: space-between; align-items: flex-start;",
+                        div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
 
                             // Album info
                             div {
                                 h1 { style: "margin: 0 0 var(--space-2) 0;", "{album.name}" }
-                                div {
-                                    style: "
+                                div { style: "
                                         display: flex;
                                         gap: var(--space-4);
                                         margin-bottom: var(--space-3);
@@ -118,8 +110,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                                 }
 
                                 if !album.note.is_empty() {
-                                    p {
-                                        style: "
+                                    p { style: "
                                             padding: var(--space-3);
                                             background-color: var(--neutral-50);
                                             border-radius: var(--radius-md);
@@ -133,20 +124,15 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                             }
 
                             // Action buttons
-                            div {
-                                style: "display: flex; gap: var(--space-2);",
+                            div { style: "display: flex; gap: var(--space-2);",
                                 button {
                                     class: "btn btn-secondary",
-                                    onclick: move |_| {
-                                        // Edit album functionality
-                                    },
+                                    onclick: move |_| {},
                                     "Edit Album"
                                 }
                                 button {
                                     class: "btn btn-danger",
-                                    onclick: move |_| {
-                                        // Delete album functionality
-                                    },
+                                    onclick: move |_| {},
                                     "Delete Album"
                                 }
                             }
@@ -173,23 +159,20 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                                 border-radius: var(--radius-lg);
                                 margin-top: var(--space-4);
                             ",
-                            div {
-                                style: "
+                            div { style: "
                                     font-size: 4rem;
                                     margin-bottom: var(--space-4);
                                     color: var(--neutral-400);
                                 ",
                                 "🖼️"
                             }
-                            h3 {
-                                style: "
+                            h3 { style: "
                                     margin-bottom: var(--space-2);
                                     color: var(--text-primary);
                                 ",
                                 "No Media in This Album"
                             }
-                            p {
-                                style: "
+                            p { style: "
                                     color: var(--text-secondary);
                                     max-width: 500px;
                                     margin: 0 auto;
@@ -199,9 +182,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                             button {
                                 class: "btn btn-primary",
                                 style: "margin-top: var(--space-4);",
-                                onclick: move |_| {
-                                    // Add media modal would go here
-                                },
+                                onclick: move |_| {},
                                 "Add Media to Album"
                             }
                         }
@@ -261,17 +242,13 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                         class: "skeleton",
                         style: "height: 60px; margin-bottom: 16px;",
                     }
-                    div {
-                        style: "
+                    div { style: "
                             display: grid;
                             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
                             gap: var(--space-4);
                         ",
                         for _ in 0..6 {
-                            div {
-                                class: "skeleton",
-                                style: "height: 200px;",
-                            }
+                            div { class: "skeleton", style: "height: 200px;" }
                         }
                     }
                 }

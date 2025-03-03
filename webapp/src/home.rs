@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{components::modal::{Modal, MODAL_STACK}, Route};
+use crate::{
+    Route,
+    components::modal::{MODAL_STACK, Modal},
+};
 
 #[component]
 pub fn ModernHome() -> Element {
