@@ -1,14 +1,23 @@
 use dioxus::prelude::*;
 
-use crate::components::{
-    confirmation_modal::RemoveFromAlbumConfirmation, enhanced_media_modal::EnhancedMediaModal,
-    media_detail_modal::MediaDetailModal,
-};
+use api::{album::AlbumUuid, comment::CommentUuid, media::MediaUuid};
 
-use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
+mod comments;
+use comments::DeleteCommentModal;
 
-use super::confirmation_modal::DeleteCommentConfirmation;
+mod albums;
+use albums::RmFromAlbumModal;
 
+mod enhanced_media_modal;
+use enhanced_media_modal::EnhancedMediaModal;
+
+mod media_detail_modal;
+use media_detail_modal::MediaDetailModal;
+
+// global modal signal
+//
+// rather than having each page have its own modal signal logic, we define a global
+// signal so that moving between pages via modal works
 pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
 
 // Modal
@@ -67,7 +76,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                 },
                 Modal::DeleteCommentConfirmation(comment_uuid, media_uuid) => {
                     rsx! {
-                        DeleteCommentConfirmation {
+                        DeleteCommentModal {
                             update_signal,
                             comment_uuid,
                             media_uuid,
@@ -76,7 +85,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                 }
                 Modal::RmMediaFromAlbumConfirmation(media_uuid, album_uuid) => {
                     rsx! {
-                        RemoveFromAlbumConfirmation {
+                        RmFromAlbumModal {
                             update_signal,
                             media_uuid,
                             album_uuid,

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::stream::full_link,
-    components::modal::{ModernModal, MODAL_STACK},
+    components::modal::{ModalSize, ModernModal, MODAL_STACK},
 };
 use api::media::*;
 
@@ -80,7 +80,7 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
             return rsx! {
                 ModernModal {
                     title: "Media Details",
-                    size: crate::components::modal::ModalSize::Large,
+                    size: ModalSize::Large,
                     footer,
 
                     div { class: "media-detail-layout",
@@ -189,7 +189,7 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
             return rsx! {
                 ModernModal {
                     title: "Error",
-                    size: crate::components::modal::ModalSize::Small,
+                    size: ModalSize::Small,
 
                     footer: rsx! {
                         button {
@@ -209,9 +209,7 @@ pub fn MediaDetailModal(props: MediaDetailModalProps) -> Element {
         }
         None => {
             return rsx! {
-                ModernModal {
-                    title: "Loading...",
-                    size: crate::components::modal::ModalSize::Medium,
+                ModernModal { title: "Loading...", size: ModalSize::Medium,
 
                     div { class: "skeleton-loader",
                         div { class: "skeleton", style: "height: 300px;" }
