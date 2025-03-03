@@ -1,57 +1,67 @@
+use crate::album::card::AlbumCard;
+use api::album::AlbumUuid;
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
-
-use crate::{
-    Route,
-    common::{storage::set_local_storage, stream::*, style},
-    gallery::GALLERY_ALBUM_KEY,
-};
-use api::{album::AlbumUuid, media::*};
 
 #[derive(Clone, PartialEq, Props)]
-struct MediaTileProps {
-    album_uuid: AlbumUuid,
-    media_uuid: MediaUuid,
+pub struct AlbumGridProps {
+    albums: Vec<AlbumUuid>,
 }
 
 #[component]
-fn MediaTile(props: MediaTileProps) -> Element {
-    let album_uuid = props.album_uuid;
-    let media_uuid = props.media_uuid;
+pub fn AlbumGrid(props: AlbumGridProps) -> Element {
+    let has_albums = !props.albums.is_empty();
 
     rsx! {
-
-        div {
-            Link {
-                class: "media-tile",
-                to: Route::GalleryDetail {
-                    media_uuid: media_uuid.to_string(),
-                },
-                onclick: move |_| {
-                    set_local_storage(GALLERY_ALBUM_KEY, album_uuid.to_string());
-                },
-                img { src: thumbnail_link(media_uuid) }
+        if has_albums {
+            div {
+                class: "albums-grid",
+                style: "
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                    gap: var(--space-4);
+                    margin-top: var(--space-4);
+                ",
+                for album_uuid in props.albums.iter() {
+                    div { key: "{album_uuid}",
+                        AlbumCard { album_uuid: *album_uuid }
+                    }
+                }
             }
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Props)]
-pub struct MediaGridProps {
-    album_uuid: AlbumUuid,
-    media: Vec<MediaUuid>,
-}
-
-#[component]
-pub fn MediaGrid(props: MediaGridProps) -> Element {
-    let album_uuid = props.album_uuid;
-
-    rsx! {
-        div {
-
-            div { class: "media-grid",
-                for media_uuid in props.media.iter() {
-                    MediaTile { album_uuid, media_uuid: *media_uuid }
+        } else {
+            div {
+                class: "empty-state",
+                style: "
+                    padding: var(--space-8) var(--space-4);
+                    text-align: center;
+                    background-color: var(--surface);
+                    border-radius: var(--radius-lg);
+                    margin-top: var(--space-4);
+                ",
+                div { style: "
+                        font-size: 4rem;
+                        margin-bottom: var(--space-4);
+                        color: var(--neutral-400);
+                    ",
+                    "📂"
+                }
+                h3 { style: "
+                        margin-bottom: var(--space-2);
+                        color: var(--text-primary);
+                    ",
+                    "No Albums Found"
+                }
+                p { style: "
+                        color: var(--text-secondary);
+                        max-width: 500px;
+                        margin: 0 auto;
+                    ",
+                    "No albums match your search criteria. Try adjusting your search or create a new album to get started."
+                }
+                button {
+                    class: "btn btn-primary",
+                    style: "margin-top: var(--space-4);",
+                    onclick: move |_| {},
+                    "Create New Album"
                 }
             }
         }

@@ -3,8 +3,8 @@ use dioxus_router::prelude::*;
 
 use crate::Route;
 
-mod grid;
-mod table;
+pub mod card;
+pub mod grid;
 
 mod detail;
 pub use detail::AlbumDetail;
