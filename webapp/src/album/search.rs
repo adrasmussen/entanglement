@@ -78,13 +78,13 @@ pub fn AlbumSearch() -> Element {
                     div {
                         class: "error-state",
                         style: "
-                                                                                                            padding: var(--space-4);
-                                                                                                            background-color: var(--surface);
-                                                                                                            border-radius: var(--radius-lg);
-                                                                                                            margin-top: var(--space-4);
-                                                                                                            color: var(--error);
-                                                                                                            text-align: center;
-                                                                                                        ",
+                                                                                                                                padding: var(--space-4);
+                                                                                                                                background-color: var(--surface);
+                                                                                                                                border-radius: var(--radius-lg);
+                                                                                                                                margin-top: var(--space-4);
+                                                                                                                                color: var(--error);
+                                                                                                                                text-align: center;
+                                                                                                                            ",
                         "Error: {err}"
                     }
                 },
@@ -92,21 +92,21 @@ pub fn AlbumSearch() -> Element {
                     div {
                         class: "loading-state albums-grid",
                         style: "
-                                                                                                            display: grid;
-                                                                                                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                                                                                                            gap: var(--space-4);
-                                                                                                            margin-top: var(--space-4);
-                                                                                                        ",
+                                                                                                                                display: grid;
+                                                                                                                                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                                                                                                                                gap: var(--space-4);
+                                                                                                                                margin-top: var(--space-4);
+                                                                                                                            ",
                         for _ in 0..6 {
                             div {
                                 class: "album-card loading",
                                 style: "
-                                                                                                                    background-color: var(--surface);
-                                                                                                                    border-radius: var(--radius-lg);
-                                                                                                                    overflow: hidden;
-                                                                                                                    box-shadow: var(--shadow-sm);
-                                                                                                                    height: 100%;
-                                                                                                                ",
+                                                                                                                                        background-color: var(--surface);
+                                                                                                                                        border-radius: var(--radius-lg);
+                                                                                                                                        overflow: hidden;
+                                                                                                                                        box-shadow: var(--shadow-sm);
+                                                                                                                                        height: 100%;
+                                                                                                                                    ",
                                 // Skeleton loading UI
                                 div { class: "skeleton", style: "height: 180px;" }
                                 div { style: "padding: var(--space-3);",

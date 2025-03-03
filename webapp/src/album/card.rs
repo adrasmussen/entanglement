@@ -1,10 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{
-    Route,
-    components::modal::{MODAL_STACK, Modal},
-};
+use crate::Route;
 use api::album::*;
 
 #[derive(Clone, PartialEq, Props)]

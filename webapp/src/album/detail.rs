@@ -204,7 +204,6 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                                     key: "{media_uuid}",
                                     media_uuid: *media_uuid,
                                     album_uuid: Some(album_uuid),
-                                    show_actions: true,
                                 }
                             }
                         }

@@ -1,11 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{
-    Route,
-    common::stream::thumbnail_link,
-    components::modal::{MODAL_STACK, Modal},
-};
+use crate::{Route, common::stream::thumbnail_link};
 use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -14,8 +10,6 @@ pub struct MediaCardProps {
     // Optional props for additional features
     #[props(default)]
     album_uuid: Option<i64>,
-    #[props(default)]
-    show_actions: bool,
 }
 
 #[component]
@@ -61,18 +55,6 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                     } else {
                                         {info.media.note.clone()}
                                     }
-                                }
-                            }
-                        }
-                        // Optional action buttons
-                        if props.show_actions {
-                            div { class: "media-card-actions",
-                                button {
-                                    class: "btn btn-sm btn-secondary",
-                                    onclick: move |_| {
-                                        MODAL_STACK.with_mut(|v| v.push(Modal::ShowMedia(media_uuid)));
-                                    },
-                                    "View"
                                 }
                             }
                         }

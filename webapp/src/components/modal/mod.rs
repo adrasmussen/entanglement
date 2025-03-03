@@ -1,5 +1,3 @@
-// webapp/src/components/modal/mod.rs
-
 use dioxus::prelude::*;
 
 use api::{album::AlbumUuid, comment::CommentUuid, media::MediaUuid};
@@ -14,7 +12,6 @@ mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
 
 mod media_detail_modal;
-use media_detail_modal::MediaDetailModal;
 
 // global modal signal
 //
@@ -28,11 +25,9 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 // data is to show the correct box.  pushing this onto the modal stack will
 // trigger the ModalBox, below
 pub enum Modal {
-    ShowMedia(MediaUuid),
     EnhancedImageView(MediaUuid),
     RmMediaFromAlbum(MediaUuid, AlbumUuid),
     DeleteComment(CommentUuid, MediaUuid),
-    ShowAlbum(AlbumUuid),
     CreateAlbum,
     EditAlbum(AlbumUuid),
     DeleteAlbum(AlbumUuid),
@@ -54,69 +49,36 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
     let update_signal = props.update_signal;
 
     match MODAL_STACK.read().last() {
-        Some(val) => {
-            match *val {
-                Modal::ShowMedia(media_uuid) => rsx! {
-                    MediaDetailModal { update_signal, media_uuid }
-                },
-                Modal::EnhancedImageView(media_uuid) => rsx! {
-                    EnhancedMediaModal { media_uuid }
-                },
-                Modal::ShowAlbum(album_uuid) => rsx! {
-                    ModernModal {
-                        title: "Album Details",
-
-                        // Album details content here...
-
-                        footer: rsx! {
-                            button {
-                                class: "btn btn-secondary",
-                                onclick: move |_| {
-                                    MODAL_STACK.with_mut(|v| v.pop());
-                                },
-                                "Close"
-                            }
-                        },
-                    }
-                },
-                Modal::DeleteComment(comment_uuid, media_uuid) => {
-                    rsx! {
-                        DeleteCommentModal {
-                            update_signal,
-                            comment_uuid,
-                            media_uuid,
-                        }
-                    }
+        Some(val) => match *val {
+            Modal::EnhancedImageView(media_uuid) => rsx! {
+                EnhancedMediaModal { media_uuid }
+            },
+            Modal::DeleteComment(comment_uuid, media_uuid) => {
+                rsx! {
+                    DeleteCommentModal { update_signal, comment_uuid, media_uuid }
                 }
-                Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
-                    rsx! {
-                        RmFromAlbumModal {
-                            update_signal,
-                            media_uuid,
-                            album_uuid,
-                        }
-                    }
-                }
-                Modal::CreateAlbum => {
-                    rsx! {
-                        CreateAlbumModal { update_signal }
-                    }
-                }
-                Modal::EditAlbum(album_uuid) => {
-                    rsx! {
-                        EditAlbumModal { update_signal, album_uuid }
-                    }
-                }
-                Modal::DeleteAlbum(album_uuid) => {
-                    rsx! {
-                        DeleteAlbumModal { update_signal, album_uuid }
-                    }
-                }
-                _ => rsx! {
-                    span { "not implemented" }
-                },
             }
-        }
+            Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
+                rsx! {
+                    RmFromAlbumModal { update_signal, media_uuid, album_uuid }
+                }
+            }
+            Modal::CreateAlbum => {
+                rsx! {
+                    CreateAlbumModal { update_signal }
+                }
+            }
+            Modal::EditAlbum(album_uuid) => {
+                rsx! {
+                    EditAlbumModal { update_signal, album_uuid }
+                }
+            }
+            Modal::DeleteAlbum(album_uuid) => {
+                rsx! {
+                    DeleteAlbumModal { update_signal, album_uuid }
+                }
+            }
+        },
         None => rsx! {},
     }
 }

@@ -2,11 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::storage::try_local_storage,
-    components::{
-        media_card::MediaCard,
-        modal::{MODAL_STACK, Modal, ModalBox},
-        search_bar::SearchBar,
-    },
+    components::{media_card::MediaCard, modal::ModalBox, search_bar::SearchBar},
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::media::*;
@@ -69,28 +65,28 @@ pub fn GallerySearch() -> Element {
                         div {
                             class: "advanced-search-options",
                             style: "
-                                                                                                                                margin-top: -16px;
-                                                                                                                                margin-bottom: var(--space-6);
-                                                                                                                                padding: var(--space-4);
-                                                                                                                                background-color: var(--neutral-50);
-                                                                                                                                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-                                                                                                                                box-shadow: var(--shadow-sm);
-                                                                                                                                border-top: 1px solid var(--neutral-200);
-                                                                                                                                animation: slide-down 0.2s ease-out;
-                                                                                                                            ",
+                                                                                                                                                        margin-top: -16px;
+                                                                                                                                                        margin-bottom: var(--space-6);
+                                                                                                                                                        padding: var(--space-4);
+                                                                                                                                                        background-color: var(--neutral-50);
+                                                                                                                                                        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+                                                                                                                                                        box-shadow: var(--shadow-sm);
+                                                                                                                                                        border-top: 1px solid var(--neutral-200);
+                                                                                                                                                        animation: slide-down 0.2s ease-out;
+                                                                                                                                                    ",
                             h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Search Options" }
                             div {
                                 class: "coming-soon",
                                 style: "
-                                                                                                                                    display: flex;
-                                                                                                                                    align-items: center;
-                                                                                                                                    justify-content: center;
-                                                                                                                                    padding: var(--space-6);
-                                                                                                                                    background-color: var(--surface);
-                                                                                                                                    border-radius: var(--radius-md);
-                                                                                                                                    color: var(--text-secondary);
-                                                                                                                                    font-style: italic;
-                                                                                                                                ",
+                                                                                                                                                            display: flex;
+                                                                                                                                                            align-items: center;
+                                                                                                                                                            justify-content: center;
+                                                                                                                                                            padding: var(--space-6);
+                                                                                                                                                            background-color: var(--surface);
+                                                                                                                                                            border-radius: var(--radius-md);
+                                                                                                                                                            color: var(--text-secondary);
+                                                                                                                                                            font-style: italic;
+                                                                                                                                                        ",
                                 "Advanced search options coming soon..."
                             }
                         }
@@ -111,11 +107,7 @@ pub fn GallerySearch() -> Element {
                         } else {
                             div { class: "media-grid",
                                 for media_uuid in resp.media.iter() {
-                                    MediaCard {
-                                        key: "{media_uuid}",
-                                        media_uuid: *media_uuid,
-                                        show_actions: true,
-                                    }
+                                    MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
                                 }
                             }
                         }
