@@ -7,12 +7,12 @@ use anyhow;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use axum::{
-    Router,
     extract::{Extension, Json, Path, Request, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
+    Router,
 };
 use chrono::Local;
 use tokio::sync::Mutex;
@@ -22,17 +22,17 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{Level, debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::fs::msg::FsMsg;
 use crate::http::{
+    auth::{proxy_auth, CurrentUser},
     AppError,
-    auth::{CurrentUser, proxy_auth},
 };
-use crate::service::{ESInner, ESM, ESMReceiver, ESMSender, EntanglementService, ServiceType};
-use api::{album::*, comment::*, library::*, media::*};
+use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use api::{album::*, auth::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
 // http service
@@ -220,6 +220,7 @@ impl HttpEndpoint {
 
         // it would be nice to come up with a macro to automate some of this...
         let api_router: Router<()> = Router::new()
+            .route("/GetUsersInGroup", post(get_users_in_group))
             .route("/GetMedia", post(get_media))
             .route("/UpdateMedia", post(update_media))
             .route("/SearchMedia", post(search_media))
@@ -526,6 +527,32 @@ async fn stream_media(
     let reader_stream = ReaderStream::new(file_handle);
 
     Ok(axum::body::Body::from_stream(reader_stream).into_response())
+}
+
+// auth handlers
+async fn get_users_in_group(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<GetUsersInGroupReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .auth_svc_sender
+        .send(
+            AuthMsg::UsersInGroup {
+                resp: tx,
+                gid: message.gid,
+            }
+            .into(),
+        )
+        .await?;
+
+    let result = rx.await??;
+
+    Ok(Json(GetUsersInGroupResp { uids: result }).into_response())
 }
 
 // media handlers

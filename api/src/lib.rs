@@ -2,6 +2,7 @@ pub mod album;
 pub mod comment;
 pub mod library;
 pub mod media;
+pub mod auth;
 
 pub const ORIGINAL_PATH: &str = "originals";
 pub const THUMBNAIL_PATH: &str = "thumbnails";

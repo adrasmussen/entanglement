@@ -230,6 +230,7 @@ impl ESAuthService for AuthCache {
     }
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
+        // note that this should return a sensible error if the group does not exist
         Ok(HashSet::new())
     }
 

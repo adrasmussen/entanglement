@@ -1,8 +1,10 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
 use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal};
-use api::{album::*, media::MediaUuid};
+use api::{album::*, media::MediaUuid, auth::*};
 
 // Confirmation modal for removing media from albums
 #[derive(Clone, PartialEq, Props)]
@@ -112,6 +114,21 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
     // Form validation state
     let mut name_error = use_signal(|| String::new());
     let mut group_error = use_signal(|| String::new());
+
+    // Display the users of the given group
+    let group_future = use_resource(move || async move {
+        let gid = album_group();
+
+        match get_users_in_group(&GetUsersInGroupReq { gid }).await {
+            Ok(resp) => {
+                return resp.uids
+            }
+            Err(err) => {
+                group_error.set(err.to_string());
+                return HashSet::new()
+            }
+        }
+    });
 
     // Handle submission
     let handle_submit = move |_| async move {
@@ -353,7 +370,7 @@ pub fn EditAlbumModal(props: EditAlbumModalProps) -> Element {
                                     }
                                 }
                             }
-                            
+
                             div { class: "form-group",
                                 label { class: "form-label", "Description (optional)" }
                                 textarea {
