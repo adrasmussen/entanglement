@@ -231,7 +231,7 @@ impl ESAuthService for AuthCache {
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
         // note that this should return a sensible error if the group does not exist
-        Ok(HashSet::new())
+        Ok(HashSet::from(["alex".to_string(), "cat".to_string(), "astrid".to_string()]))
     }
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {

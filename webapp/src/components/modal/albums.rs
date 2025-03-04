@@ -100,7 +100,7 @@ pub fn RmFromAlbumModal(props: RmFromAlbumModalProps) -> Element {
 pub struct CreateAlbumModalProps {
     update_signal: Signal<()>,
 }
-
+// Enhanced CreateAlbumModal component
 #[component]
 pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
     let mut update_signal = props.update_signal;
@@ -118,6 +118,10 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
     // Display the users of the given group
     let group_future = use_resource(move || async move {
         let gid = album_group();
+
+        if gid.trim().is_empty() {
+            return HashSet::new();
+        }
 
         match get_users_in_group(&GetUsersInGroupReq { gid }).await {
             Ok(resp) => {
@@ -193,6 +197,13 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
         }
     };
 
+    // Check if we have group members to display
+    let group_members = &*group_future.read();
+    let has_members = match group_members {
+        Some(members) => !members.is_empty(),
+        None => false,
+    };
+
     rsx! {
         ModernModal { title: "Create New Album", size: ModalSize::Medium, footer,
             div { class: "create-album-form",
@@ -216,12 +227,16 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
 
                 div { class: "form-group",
                     label { class: "form-label", "Group ID" }
-                    input {
-                        class: "form-input",
-                        r#type: "text",
-                        value: "{album_group}",
-                        oninput: move |evt| album_group.set(evt.value().clone()),
-                        placeholder: "users",
+                    div {
+                        style: "display: flex; gap: var(--space-2);",
+                        input {
+                            class: "form-input",
+                            r#type: "text",
+                            value: "{album_group}",
+                            oninput: move |evt| album_group.set(evt.value().clone()),
+                            placeholder: "users",
+                            style: "flex: 1;",
+                        }
                     }
                     if !group_error().is_empty() {
                         div {
@@ -234,6 +249,115 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
                         class: "form-help",
                         style: "color: var(--text-tertiary); font-size: 0.875rem; margin-top: 0.25rem;",
                         "Group ID determines who can access this album"
+                    }
+                }
+
+                // Group members display
+                if has_members {
+                    div {
+                        class: "group-members-container",
+                        style: "
+                            margin-top: var(--space-3);
+                            margin-bottom: var(--space-3);
+                            padding: var(--space-3);
+                            background-color: var(--neutral-50);
+                            border-radius: var(--radius-md);
+                            border: 1px solid var(--neutral-200);
+                        ",
+                        h4 {
+                            style: "
+                                font-size: 0.875rem;
+                                margin-bottom: var(--space-2);
+                                color: var(--text-secondary);
+                                display: flex;
+                                align-items: center;
+                                gap: var(--space-2);
+                            ",
+                            svg {
+                                width: "16",
+                                height: "16",
+                                view_box: "0 0 24 24",
+                                fill: "none",
+                                stroke: "currentColor",
+                                stroke_width: "2",
+                                stroke_linecap: "round",
+                                stroke_linejoin: "round",
+                                "class": "feather feather-users",
+                                path {
+                                    d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
+                                }
+                                circle {
+                                    cx: "9",
+                                    cy: "7",
+                                    r: "4"
+                                }
+                                path {
+                                    d: "M23 21v-2a4 4 0 0 0-3-3.87"
+                                }
+                                path {
+                                    d: "M16 3.13a4 4 0 0 1 0 7.75"
+                                }
+                            }
+                            "Group Members"
+                        }
+                        match group_members {
+                            Some(members) => {
+                                rsx! {
+                                    div {
+                                        class: "members-list",
+                                        style: "
+                                            display: flex;
+                                            flex-wrap: wrap;
+                                            gap: var(--space-2);
+                                        ",
+                                        for member in members.iter() {
+                                            div {
+                                                class: "member-badge",
+                                                style: "
+                                                    display: inline-flex;
+                                                    align-items: center;
+                                                    padding: var(--space-1) var(--space-2);
+                                                    background-color: var(--primary-light);
+                                                    color: white;
+                                                    border-radius: var(--radius-full);
+                                                    font-size: 0.75rem;
+                                                ",
+                                                "{member}"
+                                            }
+                                        }
+                                    }
+                                    div {
+                                        style: "
+                                            margin-top: var(--space-2);
+                                            font-size: 0.75rem;
+                                            color: var(--text-tertiary);
+                                        ",
+                                        "Total members: {members.len()}"
+                                    }
+                                }
+                            }
+                            None => {
+                                rsx! {
+                                    div { class: "skeleton", style: "height: 1.5rem; width: 100%;" }
+                                }
+                            }
+                        }
+                    }
+                } else if !album_group().is_empty() {
+                    div {
+                        class: "group-members-container",
+                        style: "
+                            margin-top: var(--space-3);
+                            margin-bottom: var(--space-3);
+                            padding: var(--space-3);
+                            background-color: var(--neutral-50);
+                            border-radius: var(--radius-md);
+                            border: 1px solid var(--neutral-200);
+                            color: var(--text-tertiary);
+                            text-align: center;
+                            font-style: italic;
+                        ",
+                        "No members found in this group"
                     }
                 }
 
