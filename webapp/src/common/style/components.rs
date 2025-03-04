@@ -439,8 +439,14 @@ td {
   padding: var(--space-4);
   border-top: 1px solid var(--border);
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-buttons {
+  display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 @keyframes fade-in {

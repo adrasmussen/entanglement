@@ -24,7 +24,9 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
 
     let footer = rsx! {
         span { class: "status-message", "{status_message}" }
-        div { class: "modal-buttons",
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {

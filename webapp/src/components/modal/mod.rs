@@ -161,31 +161,12 @@ pub fn ModernModal(props: ModalProps) -> Element {
                 div { class: "modal-body", {props.children} }
 
                 if let Some(footer) = &props.footer {
-                    div { class: "modal-footer", {footer.clone()} }
+                    div {
+                        class: "modal-footer",
+                        style: "display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);",
+                        {footer.clone()}
+                    }
                 }
-            }
-        }
-    }
-}
-
-// Helper function to create a standardized footer with common actions
-pub fn _modal_footer_buttons(
-    primary_text: &str,
-    primary_action: EventHandler<MouseEvent>,
-    secondary_text: &str,
-    secondary_action: EventHandler<MouseEvent>,
-) -> Element {
-    rsx! {
-        div { class: "modal-buttons",
-            button {
-                class: "btn btn-secondary",
-                onclick: move |evt| secondary_action.call(evt),
-                "{secondary_text}"
-            }
-            button {
-                class: "btn btn-primary",
-                onclick: move |evt| primary_action.call(evt),
-                "{primary_text}"
             }
         }
     }

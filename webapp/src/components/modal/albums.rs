@@ -36,7 +36,9 @@ pub fn RmFromAlbumModal(props: RmFromAlbumModalProps) -> Element {
 
     let footer = rsx! {
         span { class: "status-message", "{status_message}" }
-        div { class: "modal-buttons",
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -185,7 +187,9 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
 
     let footer = rsx! {
         span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
-        div { class: "modal-buttons",
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -227,8 +231,7 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
 
                 div { class: "form-group",
                     label { class: "form-label", "Group ID" }
-                    div {
-                        style: "display: flex; gap: var(--space-2);",
+                    div { style: "display: flex; gap: var(--space-2);",
                         input {
                             class: "form-input",
                             r#type: "text",
@@ -264,8 +267,7 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
                             border-radius: var(--radius-md);
                             border: 1px solid var(--neutral-200);
                         ",
-                        h4 {
-                            style: "
+                        h4 { style: "
                                 font-size: 0.875rem;
                                 margin-bottom: var(--space-2);
                                 color: var(--text-secondary);
@@ -283,20 +285,10 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
                                 stroke_linecap: "round",
                                 stroke_linejoin: "round",
                                 "class": "feather feather-users",
-                                path {
-                                    d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-                                }
-                                circle {
-                                    cx: "9",
-                                    cy: "7",
-                                    r: "4"
-                                }
-                                path {
-                                    d: "M23 21v-2a4 4 0 0 0-3-3.87"
-                                }
-                                path {
-                                    d: "M16 3.13a4 4 0 0 1 0 7.75"
-                                }
+                                path { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }
+                                circle { cx: "9", cy: "7", r: "4" }
+                                path { d: "M23 21v-2a4 4 0 0 0-3-3.87" }
+                                path { d: "M16 3.13a4 4 0 0 1 0 7.75" }
                             }
                             "Group Members"
                         }
@@ -306,32 +298,31 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                            display: flex;
-                                            flex-wrap: wrap;
-                                            gap: var(--space-2);
-                                        ",
+                                                                                                                    display: flex;
+                                                                                                                    flex-wrap: wrap;
+                                                                                                                    gap: var(--space-2);
+                                                                                                                ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                    display: inline-flex;
-                                                    align-items: center;
-                                                    padding: var(--space-1) var(--space-2);
-                                                    background-color: var(--primary-light);
-                                                    color: white;
-                                                    border-radius: var(--radius-full);
-                                                    font-size: 0.75rem;
-                                                ",
+                                                                                                                            display: inline-flex;
+                                                                                                                            align-items: center;
+                                                                                                                            padding: var(--space-1) var(--space-2);
+                                                                                                                            background-color: var(--primary-light);
+                                                                                                                            color: white;
+                                                                                                                            border-radius: var(--radius-full);
+                                                                                                                            font-size: 0.75rem;
+                                                                                                                        ",
                                                 "{member}"
                                             }
                                         }
                                     }
-                                    div {
-                                        style: "
-                                            margin-top: var(--space-2);
-                                            font-size: 0.75rem;
-                                            color: var(--text-tertiary);
-                                        ",
+                                    div { style: "
+                                                                                                                    margin-top: var(--space-2);
+                                                                                                                    font-size: 0.75rem;
+                                                                                                                    color: var(--text-tertiary);
+                                                                                                                ",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -459,7 +450,9 @@ pub fn EditAlbumModal(props: EditAlbumModalProps) -> Element {
 
     let footer = rsx! {
         span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
-        div { class: "modal-buttons",
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -494,7 +487,6 @@ pub fn EditAlbumModal(props: EditAlbumModalProps) -> Element {
                                     }
                                 }
                             }
-
                             div { class: "form-group",
                                 label { class: "form-label", "Description (optional)" }
                                 textarea {
@@ -555,7 +547,9 @@ pub fn DeleteAlbumModal(props: DeleteAlbumModalProps) -> Element {
 
     let footer = rsx! {
         span { class: "status-message", "{status_message}" }
-        div { class: "modal-buttons",
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
