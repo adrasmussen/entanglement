@@ -298,31 +298,31 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                                                                                                    display: flex;
-                                                                                                                    flex-wrap: wrap;
-                                                                                                                    gap: var(--space-2);
-                                                                                                                ",
+                                            display: flex;
+                                            flex-wrap: wrap;
+                                            gap: var(--space-2);
+                                        ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                                                            display: inline-flex;
-                                                                                                                            align-items: center;
-                                                                                                                            padding: var(--space-1) var(--space-2);
-                                                                                                                            background-color: var(--primary-light);
-                                                                                                                            color: white;
-                                                                                                                            border-radius: var(--radius-full);
-                                                                                                                            font-size: 0.75rem;
-                                                                                                                        ",
+                                                    display: inline-flex;
+                                                    align-items: center;
+                                                    padding: var(--space-1) var(--space-2);
+                                                    background-color: var(--primary-light);
+                                                    color: white;
+                                                    border-radius: var(--radius-full);
+                                                    font-size: 0.75rem;
+                                                ",
                                                 "{member}"
                                             }
                                         }
                                     }
                                     div { style: "
-                                                                                                                    margin-top: var(--space-2);
-                                                                                                                    font-size: 0.75rem;
-                                                                                                                    color: var(--text-tertiary);
-                                                                                                                ",
+                                            margin-top: var(--space-2);
+                                            font-size: 0.75rem;
+                                            color: var(--text-tertiary);
+                                        ",
                                         "Total members: {members.len()}"
                                     }
                                 }
