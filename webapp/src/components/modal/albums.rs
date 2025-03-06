@@ -535,15 +535,14 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
     let mut status_message = use_signal(|| String::new());
 
     // Search state
-    let mut search_term = use_signal(|| String::new());
+    let mut album_search_signal = use_signal(|| String::new());
     let mut selected_album = use_signal(|| None::<AlbumUuid>);
 
     // Fetch albums based on search term
     let albums_future = use_resource(move || async move {
-        search_albums(&SearchAlbumsReq {
-            filter: search_term(),
-        })
-        .await
+        let filter = album_search_signal();
+
+        search_albums(&SearchAlbumsReq { filter }).await
     });
 
     // Handle submission
@@ -606,20 +605,40 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
 
     rsx! {
         ModernModal { title: "Add to Album", size: ModalSize::Medium, footer,
-
-            div { class: "add-to-album-form",
-                // Search input
-                div { class: "form-group",
-                    label { class: "form-label", "Search Albums" }
-                    div { style: "display: flex; gap: var(--space-2);",
-                        input {
-                            class: "form-input",
-                            r#type: "text",
-                            value: "{search_term}",
-                            oninput: move |evt| search_term.set(evt.value().clone()),
-                            placeholder: "Enter album name or description...",
-                            style: "flex: 1;",
+            div {
+                div {
+                    class: "search-bar",
+                    style: "
+                    display: flex;
+                    align-items: center;
+                    gap: var(--space-2);
+                    margin-bottom: var(--space-6);
+                    background-color: var(--surface);
+                    padding: var(--space-3);
+                    border-radius: var(--radius-lg);
+                    box-shadow: var(--shadow-sm);
+                ",
+                    form {
+                        class: "form-group",
+                        onsubmit: move |event| async move {
+                            let filter = match event.values().get("search_filter") {
+                                Some(val) => val.as_value(),
+                                None => String::from(""),
+                            };
+                            album_search_signal.set(filter.clone());
+                        },
+                        label { class: "form-label", "Search Albums" }
+                        div { style: "display: flex; gap: var(--space-2);",
+                            input {
+                                class: "form-input",
+                                r#type: "text",
+                                name: "search_filter",
+                                value: "{album_search_signal()}",
+                                placeholder: "Enter album name or description...",
+                                style: "flex: 1;",
+                            }
                         }
+                        button { class: "btn btn-primary", r#type: "submit", "Search" }
                     }
                 }
 
@@ -641,10 +660,10 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                                     div {
                                         class: "empty-state",
                                         style: "
-                                                                                padding: var(--space-6);
-                                                                                text-align: center;
-                                                                                color: var(--text-tertiary);
-                                                                            ",
+                                                                                                                                                        padding: var(--space-6);
+                                                                                                                                                        text-align: center;
+                                                                                                                                                        color: var(--text-tertiary);
+                                                                                                                                                    ",
                                         "No albums found. Try a different search term or create a new album."
                                     }
                                 }
@@ -652,6 +671,7 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                                 rsx! {
                                     for album_uuid in albums {
                                         AlbumSelectionItem {
+                                            key: "{album_uuid}",
                                             album_uuid,
                                             is_selected: selected_album() == Some(album_uuid),
                                             on_select: move |_| selected_album.set(Some(album_uuid)),
@@ -712,19 +732,24 @@ fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
     match album {
         Some(Ok(result)) => {
             let album = result.album.clone();
+            let description = if album.note.is_empty() {
+                "No description"
+            } else {
+                &album.note
+            };
 
             rsx! {
                 div {
                     class: if is_selected { "album-item selected" } else { "album-item" },
                     style: {
                         let base_style = "
-                                            padding: var(--space-3);
-                                            border-bottom: 1px solid var(--border);
-                                            display: flex;
-                                            align-items: center;
-                                            cursor: pointer;
-                                            transition: background-color var(--transition-fast) var(--easing-standard);
-                                        ";
+                            padding: var(--space-3);
+                            border-bottom: 1px solid var(--border);
+                            display: flex;
+                            align-items: center;
+                            cursor: pointer;
+                            transition: background-color var(--transition-fast) var(--easing-standard);
+                        ";
                         if is_selected {
                             format!(
                                 "{}background-color: var(--primary-light); color: white;",
@@ -743,25 +768,25 @@ fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
                                 format!(
                                     "
-                                                            width: 18px;
-                                                            height: 18px;
-                                                            border-radius: 50%;
-                                                            border: 2px solid {};
-                                                            display: flex;
-                                                            align-items: center;
-                                                            justify-content: center;
-                                                        ",
+                                    width: 18px;
+                                    height: 18px;
+                                    border-radius: 50%;
+                                    border: 2px solid {};
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                ",
                                     border_color,
                                 )
                             },
                             if is_selected {
 
                                 div { style: "
-                                            width: 10px;
-                                            height: 10px;
-                                            border-radius: 50%;
-                                            background-color: white;
-                                        " }
+                                        width: 10px;
+                                        height: 10px;
+                                        border-radius: 50%;
+                                        background-color: white;
+                                    " }
                             }
                         }
                     }
@@ -777,14 +802,7 @@ fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
                                     "font-size: 0.875rem; color: var(--text-tertiary);"
                                 }
                             },
-                            {
-                                let description = if album.note.is_empty() {
-                                    "No description"
-                                } else {
-                                    &album.note
-                                };
-                                "Group: #{album.gid} • #{description}"
-                            }
+                            "Group: {album.gid} • {description}"
                         }
                     }
                 }
