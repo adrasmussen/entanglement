@@ -12,7 +12,6 @@ use crate::{
     },
 };
 use api::album::*;
-use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct AlbumDetailProps {

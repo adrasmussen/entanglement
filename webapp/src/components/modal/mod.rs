@@ -6,7 +6,7 @@ mod comments;
 use comments::DeleteCommentModal;
 
 mod albums;
-use albums::{CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal};
+use albums::{AddMediaToAlbumModal, CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal};
 
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
@@ -26,11 +26,12 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 // trigger the ModalBox, below
 pub enum Modal {
     EnhancedImageView(MediaUuid),
-    RmMediaFromAlbum(MediaUuid, AlbumUuid),
     DeleteComment(CommentUuid, MediaUuid),
     CreateAlbum,
     EditAlbum(AlbumUuid),
     DeleteAlbum(AlbumUuid),
+    AddMediaToAlbum(MediaUuid),
+    RmMediaFromAlbum(MediaUuid, AlbumUuid),
 }
 
 // ModalBox
@@ -58,11 +59,6 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     DeleteCommentModal { update_signal, comment_uuid, media_uuid }
                 }
             }
-            Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
-                rsx! {
-                    RmFromAlbumModal { update_signal, media_uuid, album_uuid }
-                }
-            }
             Modal::CreateAlbum => {
                 rsx! {
                     CreateAlbumModal { update_signal }
@@ -76,6 +72,16 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             Modal::DeleteAlbum(album_uuid) => {
                 rsx! {
                     DeleteAlbumModal { update_signal, album_uuid }
+                }
+            }
+            Modal::AddMediaToAlbum(media_uuid) => {
+                rsx! {
+                    AddMediaToAlbumModal { update_signal, media_uuid }
+                }
+            }
+            Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
+                rsx! {
+                    RmFromAlbumModal { update_signal, media_uuid, album_uuid }
                 }
             }
         },

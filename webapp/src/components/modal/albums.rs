@@ -3,106 +3,14 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal};
-use api::{album::*, media::MediaUuid, auth::*};
+use crate::components::modal::{ModalSize, ModernModal, MODAL_STACK};
+use api::{album::*, auth::*, media::MediaUuid};
 
-// Confirmation modal for removing media from albums
-#[derive(Clone, PartialEq, Props)]
-pub struct RmFromAlbumModalProps {
-    update_signal: Signal<()>,
-    media_uuid: MediaUuid,
-    album_uuid: AlbumUuid,
-}
-
-#[component]
-pub fn RmFromAlbumModal(props: RmFromAlbumModalProps) -> Element {
-    let media_uuid = props.media_uuid;
-    let album_uuid = props.album_uuid;
-    let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
-
-    // Fetch album details to show the album name
-    let album_future = use_resource(move || async move {
-        get_album(&GetAlbumReq {
-            album_uuid: album_uuid,
-        })
-        .await
-    });
-
-    let album_name = match &*album_future.read() {
-        Some(Ok(result)) => result.album.name.clone(),
-        _ => format!("Album #{}", album_uuid),
-    };
-
-    let footer = rsx! {
-        span { class: "status-message", "{status_message}" }
-        div {
-            class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
-            button {
-                class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
-                "Cancel"
-            }
-            button {
-                class: "btn btn-danger",
-                onclick: move |_| async move {
-                    match rm_media_from_album(
-                            &RmMediaFromAlbumReq {
-                                album_uuid: album_uuid,
-                                media_uuid: media_uuid,
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            status_message.set("Media removed from album".into());
-                            update_signal.set(());
-                            let task = Timeout::new(
-                                1500,
-                                move || {
-                                    MODAL_STACK.with_mut(|v| v.pop());
-                                },
-                            );
-                            task.forget();
-                        }
-                        Err(err) => {
-                            status_message.set(format!("Error: {}", err));
-                        }
-                    }
-                },
-                "Remove from Album"
-            }
-        }
-    };
-
-    rsx! {
-        ModernModal { title: "Confirm Removal", size: ModalSize::Small, footer,
-
-            div { class: "confirmation-content",
-                p { class: "confirmation-message",
-                    "Are you sure you want to remove this media from \"{album_name}\"? The media will still exist in your library."
-                }
-
-                div {
-                    class: "media-info",
-                    style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                    p { "Media ID: {media_uuid}" }
-                    p { "Album: {album_name} (ID: {album_uuid})" }
-                }
-            }
-        }
-    }
-}
-
-// Create Album Modal
 #[derive(Clone, PartialEq, Props)]
 pub struct CreateAlbumModalProps {
     update_signal: Signal<()>,
 }
-// Enhanced CreateAlbumModal component
+
 #[component]
 pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
     let mut update_signal = props.update_signal;
@@ -126,12 +34,10 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
         }
 
         match get_users_in_group(&GetUsersInGroupReq { gid }).await {
-            Ok(resp) => {
-                return resp.uids
-            }
+            Ok(resp) => return resp.uids,
             Err(err) => {
                 group_error.set(err.to_string());
-                return HashSet::new()
+                return HashSet::new();
             }
         }
     });
@@ -367,7 +273,6 @@ pub fn CreateAlbumModal(props: CreateAlbumModalProps) -> Element {
     }
 }
 
-// Edit Album Modal
 #[derive(Clone, PartialEq, Props)]
 pub struct EditAlbumModalProps {
     update_signal: Signal<()>,
@@ -519,7 +424,6 @@ pub fn EditAlbumModal(props: EditAlbumModalProps) -> Element {
     }
 }
 
-// Delete Album Modal
 #[derive(Clone, PartialEq, Props)]
 pub struct DeleteAlbumModalProps {
     update_signal: Signal<()>,
@@ -611,6 +515,391 @@ pub fn DeleteAlbumModal(props: DeleteAlbumModalProps) -> Element {
                         color: var(--text-secondary);
                     ",
                     "Note: This will only delete the album. The media files within the album will remain in your library."
+                }
+            }
+        }
+    }
+}
+
+// Add to Album Modal component
+#[derive(Clone, PartialEq, Props)]
+pub struct AddMediaToAlbumModalProps {
+    update_signal: Signal<()>,
+    media_uuid: MediaUuid,
+}
+
+#[component]
+pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
+    let media_uuid = props.media_uuid;
+    let mut update_signal = props.update_signal;
+    let mut status_message = use_signal(|| String::new());
+
+    // Search state
+    let mut search_term = use_signal(|| String::new());
+    let mut selected_album = use_signal(|| None::<AlbumUuid>);
+
+    // Fetch albums based on search term
+    let albums_future = use_resource(move || async move {
+        search_albums(&SearchAlbumsReq {
+            filter: search_term(),
+        })
+        .await
+    });
+
+    // Handle submission
+    let handle_submit = move |_| async move {
+        if let Some(album_uuid) = selected_album() {
+            status_message.set("Adding media to album...".into());
+
+            match add_media_to_album(&AddMediaToAlbumReq {
+                album_uuid,
+                media_uuid,
+            })
+            .await
+            {
+                Ok(_) => {
+                    status_message.set("Media added to album successfully".into());
+                    update_signal.set(());
+
+                    // Close the modal after a short delay
+                    let task = Timeout::new(1500, move || {
+                        MODAL_STACK.with_mut(|v| v.pop());
+                    });
+                    task.forget();
+                }
+                Err(err) => {
+                    status_message.set(format!("Error: {}", err));
+                }
+            }
+        } else {
+            status_message.set("Please select an album first".into());
+        }
+    };
+
+    let footer = rsx! {
+        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Cancel"
+            }
+            button {
+                class: "btn btn-primary",
+                disabled: selected_album().is_none(),
+                onclick: handle_submit,
+                "Add to Album"
+            }
+        }
+    };
+
+    // Get albums data for display
+    let albums = match &*albums_future.read() {
+        Some(Ok(response)) => Some(response.albums.clone()),
+        Some(Err(_)) => None,
+        None => None,
+    };
+
+    rsx! {
+        ModernModal { title: "Add to Album", size: ModalSize::Medium, footer,
+
+            div { class: "add-to-album-form",
+                // Search input
+                div { class: "form-group",
+                    label { class: "form-label", "Search Albums" }
+                    div { style: "display: flex; gap: var(--space-2);",
+                        input {
+                            class: "form-input",
+                            r#type: "text",
+                            value: "{search_term}",
+                            oninput: move |evt| search_term.set(evt.value().clone()),
+                            placeholder: "Enter album name or description...",
+                            style: "flex: 1;",
+                        }
+                    }
+                }
+
+                // Albums list
+                div {
+                    class: "albums-list",
+                    style: "
+                        margin-top: var(--space-4);
+                        max-height: 300px;
+                        overflow-y: auto;
+                        border: 1px solid var(--border);
+                        border-radius: var(--radius-md);
+                    ",
+
+                    match albums {
+                        Some(albums) => {
+                            if albums.is_empty() {
+                                rsx! {
+                                    div {
+                                        class: "empty-state",
+                                        style: "
+                                                                                padding: var(--space-6);
+                                                                                text-align: center;
+                                                                                color: var(--text-tertiary);
+                                                                            ",
+                                        "No albums found. Try a different search term or create a new album."
+                                    }
+                                }
+                            } else {
+                                rsx! {
+                                    for album_uuid in albums {
+                                        AlbumSelectionItem {
+                                            album_uuid,
+                                            is_selected: selected_album() == Some(album_uuid),
+                                            on_select: move |_| selected_album.set(Some(album_uuid)),
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            rsx! {
+                                // Loading state
+                                for _ in 0..3 {
+                                    div { class: "skeleton", style: "height: 60px; margin-bottom: 8px;" }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Create new album button
+                div { style: "margin-top: var(--space-4); text-align: center;",
+                    button {
+                        class: "btn btn-secondary",
+                        onclick: move |_| {
+                            MODAL_STACK
+                                .with_mut(|v| {
+                                    v.pop();
+                                    v.push(crate::components::modal::Modal::CreateAlbum);
+                                });
+                        },
+                        "Create New Album"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper component for album selection items
+#[derive(Clone, PartialEq, Props)]
+struct AlbumSelectionItemProps {
+    album_uuid: AlbumUuid,
+    is_selected: bool,
+    on_select: EventHandler<MouseEvent>,
+}
+
+#[component]
+fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
+    let album_uuid = props.album_uuid;
+    let is_selected = props.is_selected;
+
+    // Fetch album details
+    let album_future =
+        use_resource(move || async move { get_album(&GetAlbumReq { album_uuid }).await });
+
+    let album = &*album_future.read();
+
+    match album {
+        Some(Ok(result)) => {
+            let album = result.album.clone();
+
+            rsx! {
+                div {
+                    class: if is_selected { "album-item selected" } else { "album-item" },
+                    style: {
+                        let base_style = "
+                                            padding: var(--space-3);
+                                            border-bottom: 1px solid var(--border);
+                                            display: flex;
+                                            align-items: center;
+                                            cursor: pointer;
+                                            transition: background-color var(--transition-fast) var(--easing-standard);
+                                        ";
+                        if is_selected {
+                            format!(
+                                "{}background-color: var(--primary-light); color: white;",
+                                base_style,
+                            )
+                        } else {
+                            base_style.to_string()
+                        }
+                    },
+                    onclick: move |evt| props.on_select.call(evt),
+
+                    // Radio button indicator
+                    div { style: "margin-right: var(--space-3);",
+                        div {
+                            style: {
+                                let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
+                                format!(
+                                    "
+                                                            width: 18px;
+                                                            height: 18px;
+                                                            border-radius: 50%;
+                                                            border: 2px solid {};
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ",
+                                    border_color,
+                                )
+                            },
+                            if is_selected {
+
+                                div { style: "
+                                            width: 10px;
+                                            height: 10px;
+                                            border-radius: 50%;
+                                            background-color: white;
+                                        " }
+                            }
+                        }
+                    }
+
+                    // Album info
+                    div { style: "flex: 1;",
+                        div { style: "font-weight: 500;", "{album.name}" }
+                        div {
+                            style: {
+                                if is_selected {
+                                    "font-size: 0.875rem; color: rgba(255, 255, 255, 0.9);"
+                                } else {
+                                    "font-size: 0.875rem; color: var(--text-tertiary);"
+                                }
+                            },
+                            {
+                                let description = if album.note.is_empty() {
+                                    "No description"
+                                } else {
+                                    &album.note
+                                };
+                                "Group: #{album.gid} • #{description}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some(Err(_)) => {
+            rsx! {
+                div {
+                    class: "album-item error",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border); color: var(--error);",
+                    "Error loading album #{album_uuid}"
+                }
+            }
+        }
+        None => {
+            rsx! {
+                div {
+                    class: "album-item loading",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border);",
+                    div {
+                        class: "skeleton",
+                        style: "height: 24px; width: 60%; margin-bottom: 4px;",
+                    }
+                    div { class: "skeleton", style: "height: 16px; width: 80%;" }
+                }
+            }
+        }
+    }
+}
+
+// Confirmation modal for removing media from albums
+#[derive(Clone, PartialEq, Props)]
+pub struct RmFromAlbumModalProps {
+    update_signal: Signal<()>,
+    media_uuid: MediaUuid,
+    album_uuid: AlbumUuid,
+}
+
+#[component]
+pub fn RmFromAlbumModal(props: RmFromAlbumModalProps) -> Element {
+    let media_uuid = props.media_uuid;
+    let album_uuid = props.album_uuid;
+    let mut update_signal = props.update_signal;
+    let mut status_message = use_signal(|| String::new());
+
+    // Fetch album details to show the album name
+    let album_future = use_resource(move || async move {
+        get_album(&GetAlbumReq {
+            album_uuid: album_uuid,
+        })
+        .await
+    });
+
+    let album_name = match &*album_future.read() {
+        Some(Ok(result)) => result.album.name.clone(),
+        _ => format!("Album #{}", album_uuid),
+    };
+
+    let footer = rsx! {
+        span { class: "status-message", "{status_message}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Cancel"
+            }
+            button {
+                class: "btn btn-danger",
+                onclick: move |_| async move {
+                    match rm_media_from_album(
+                            &RmMediaFromAlbumReq {
+                                album_uuid: album_uuid,
+                                media_uuid: media_uuid,
+                            },
+                        )
+                        .await
+                    {
+                        Ok(_) => {
+                            status_message.set("Media removed from album".into());
+                            update_signal.set(());
+                            let task = Timeout::new(
+                                1500,
+                                move || {
+                                    MODAL_STACK.with_mut(|v| v.pop());
+                                },
+                            );
+                            task.forget();
+                        }
+                        Err(err) => {
+                            status_message.set(format!("Error: {}", err));
+                        }
+                    }
+                },
+                "Remove from Album"
+            }
+        }
+    };
+
+    rsx! {
+        ModernModal { title: "Confirm Removal", size: ModalSize::Small, footer,
+
+            div { class: "confirmation-content",
+                p { class: "confirmation-message",
+                    "Are you sure you want to remove this media from \"{album_name}\"? The media will still exist in your library."
+                }
+
+                div {
+                    class: "media-info",
+                    style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                    p { "Media ID: {media_uuid}" }
+                    p { "Album: {album_name} (ID: {album_uuid})" }
                 }
             }
         }
