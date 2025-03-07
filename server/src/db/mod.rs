@@ -9,7 +9,7 @@ use api::{album::*, comment::*, library::*, media::*};
 
 // instead of service files, we have one per db connection type
 pub mod msg;
-pub mod mysql;
+pub mod mariadb;
 
 // these are the database RPC calls that any backend server must be able to process
 #[async_trait]

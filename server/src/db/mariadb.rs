@@ -18,22 +18,22 @@ use common::config::ESConfig;
 // and a desire to see what is going on under the hood
 //
 // needless to say, everything about this is terrible
-pub struct MySQLService {
+pub struct MariaDBService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
 
 #[async_trait]
-impl EntanglementService for MySQLService {
-    type Inner = MySQLState;
+impl EntanglementService for MariaDBService {
+    type Inner = MariaDBState;
 
     fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
         sender_map.insert(ServiceType::Db, tx);
 
-        MySQLService {
+        MariaDBService {
             config: config.clone(),
             receiver: Arc::new(Mutex::new(rx)),
             handle: AsyncCell::new(),
@@ -44,7 +44,7 @@ impl EntanglementService for MySQLService {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MySQLState::new(self.config.clone(), senders.clone())?);
+        let state = Arc::new(MariaDBState::new(self.config.clone(), senders.clone())?);
 
         let serve = {
             async move {
@@ -76,12 +76,12 @@ impl EntanglementService for MySQLService {
     }
 }
 
-pub struct MySQLState {
+pub struct MariaDBState {
     auth_svc_sender: ESMSender,
     pool: Pool,
 }
 
-impl MySQLState {
+impl MariaDBState {
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -101,30 +101,30 @@ impl MySQLState {
 
 // database RPC handler functions
 #[async_trait]
-impl ESDbService for MySQLState {
+impl ESDbService for MariaDBState {
     // auth queries
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
-        common::db::mysql::media_access_groups(self.pool.clone(), media_uuid).await
+        common::db::mariadb::media_access_groups(self.pool.clone(), media_uuid).await
     }
 
     // media queries
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
-        common::db::mysql::add_media(self.pool.clone(), media).await
+        common::db::mariadb::add_media(self.pool.clone(), media).await
     }
 
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
     ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
-        common::db::mysql::get_media(self.pool.clone(), media_uuid).await
+        common::db::mariadb::get_media(self.pool.clone(), media_uuid).await
     }
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
-        common::db::mysql::get_media_uuid_by_path(self.pool.clone(), path).await
+        common::db::mariadb::get_media_uuid_by_path(self.pool.clone(), path).await
     }
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()> {
-        common::db::mysql::update_media(self.pool.clone(), media_uuid, update).await
+        common::db::mariadb::update_media(self.pool.clone(), media_uuid, update).await
     }
 
     async fn search_media(
@@ -133,20 +133,20 @@ impl ESDbService for MySQLState {
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media(self.pool.clone(), uid, gid, filter).await
+        common::db::mariadb::search_media(self.pool.clone(), uid, gid, filter).await
     }
 
     // comment queries
     async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid> {
-        common::db::mysql::add_comment(self.pool.clone(), comment).await
+        common::db::mariadb::add_comment(self.pool.clone(), comment).await
     }
 
     async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>> {
-        common::db::mysql::get_comment(self.pool.clone(), comment_uuid).await
+        common::db::mariadb::get_comment(self.pool.clone(), comment_uuid).await
     }
 
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<()> {
-        common::db::mysql::delete_comment(self.pool.clone(), comment_uuid).await
+        common::db::mariadb::delete_comment(self.pool.clone(), comment_uuid).await
     }
 
     async fn update_comment(
@@ -154,26 +154,26 @@ impl ESDbService for MySQLState {
         comment_uuid: CommentUuid,
         text: Option<String>,
     ) -> anyhow::Result<()> {
-        common::db::mysql::update_comment(self.pool.clone(), comment_uuid, text).await
+        common::db::mariadb::update_comment(self.pool.clone(), comment_uuid, text).await
     }
 
     // album queries
     async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
-        common::db::mysql::add_album(self.pool.clone(), album).await
+        common::db::mariadb::add_album(self.pool.clone(), album).await
     }
 
     async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
-        common::db::mysql::get_album(self.pool.clone(), album_uuid).await
+        common::db::mariadb::get_album(self.pool.clone(), album_uuid).await
     }
 
     async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
-        common::db::mysql::delete_album(self.pool.clone(), album_uuid).await
+        common::db::mariadb::delete_album(self.pool.clone(), album_uuid).await
 
         // should the function return a list of affected media to clear the cache?
     }
 
     async fn update_album(&self, album_uuid: AlbumUuid, update: AlbumUpdate) -> anyhow::Result<()> {
-        common::db::mysql::update_album(self.pool.clone(), album_uuid, update).await
+        common::db::mariadb::update_album(self.pool.clone(), album_uuid, update).await
     }
 
     async fn add_media_to_album(
@@ -181,7 +181,7 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        common::db::mysql::add_media_to_album(self.pool.clone(), media_uuid, album_uuid).await?;
+        common::db::mariadb::add_media_to_album(self.pool.clone(), media_uuid, album_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -194,7 +194,7 @@ impl ESDbService for MySQLState {
         media_uuid: MediaUuid,
         album_uuid: AlbumUuid,
     ) -> anyhow::Result<()> {
-        common::db::mysql::rm_media_from_album(self.pool.clone(), media_uuid, album_uuid).await?;
+        common::db::mariadb::rm_media_from_album(self.pool.clone(), media_uuid, album_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -208,7 +208,7 @@ impl ESDbService for MySQLState {
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<AlbumUuid>> {
-        common::db::mysql::search_albums(self.pool.clone(), uid, gid, filter).await
+        common::db::mariadb::search_albums(self.pool.clone(), uid, gid, filter).await
     }
 
     async fn search_media_in_album(
@@ -218,17 +218,17 @@ impl ESDbService for MySQLState {
         album_uuid: AlbumUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media_in_album(self.pool.clone(), uid, gid, album_uuid, filter)
+        common::db::mariadb::search_media_in_album(self.pool.clone(), uid, gid, album_uuid, filter)
             .await
     }
 
     // library queries
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
-        common::db::mysql::add_library(self.pool.clone(), library).await
+        common::db::mariadb::add_library(self.pool.clone(), library).await
     }
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
-        common::db::mysql::get_library(self.pool.clone(), library_uuid).await
+        common::db::mariadb::get_library(self.pool.clone(), library_uuid).await
     }
 
     async fn update_library(
@@ -236,7 +236,7 @@ impl ESDbService for MySQLState {
         library_uuid: LibraryUuid,
         update: LibraryUpdate,
     ) -> anyhow::Result<()> {
-        common::db::mysql::update_library(self.pool.clone(), library_uuid, update).await
+        common::db::mariadb::update_library(self.pool.clone(), library_uuid, update).await
     }
 
     async fn search_libraries(
@@ -245,7 +245,7 @@ impl ESDbService for MySQLState {
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<LibraryUuid>> {
-        common::db::mysql::search_libraries(self.pool.clone(), uid, gid, filter).await
+        common::db::mariadb::search_libraries(self.pool.clone(), uid, gid, filter).await
     }
 
     async fn search_media_in_library(
@@ -256,7 +256,7 @@ impl ESDbService for MySQLState {
         filter: String,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mysql::search_media_in_library(
+        common::db::mariadb::search_media_in_library(
             self.pool.clone(),
             uid,
             gid,
@@ -269,14 +269,14 @@ impl ESDbService for MySQLState {
 }
 
 #[async_trait]
-impl ESInner for MySQLState {
+impl ESInner for MariaDBState {
     fn new(
         config: Arc<ESConfig>,
         senders: HashMap<ServiceType, ESMSender>,
     ) -> anyhow::Result<Self> {
-        Ok(MySQLState {
+        Ok(MariaDBState {
             auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
-            pool: Pool::new(config.mysql_url.clone().as_str()),
+            pool: Pool::new(config.mariadb_url.clone().as_str()),
         })
     }
 

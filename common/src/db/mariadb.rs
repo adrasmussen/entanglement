@@ -1,19 +1,22 @@
 use std::collections::HashSet;
 
 use chrono::Local;
-
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
+use tracing::{debug, instrument, Level};
 
 use crate::auth::{Group, User};
 use api::album::{Album, AlbumUpdate, AlbumUuid};
-use api::comment::{Comment, CommentUuid};
+use api::comment::{self, Comment, CommentUuid};
 use api::library::{Library, LibraryUpdate, LibraryUuid};
-use api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
+use api::media::{self, Media, MediaMetadata, MediaUpdate, MediaUuid};
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn media_access_groups(
     pool: Pool,
     media_uuid: MediaUuid,
 ) -> anyhow::Result<HashSet<String>> {
+    debug!({ media_uuid = media_uuid }, "finding media access groups");
+
     // for a given media_uuid, find all gids that match either:
     //  * if the media is not hidden, any album that contains the media
     //  * the library that contains that media
@@ -53,6 +56,8 @@ pub async fn media_access_groups(
         .into_iter()
         .map(|row| from_row_opt::<String>(row))
         .collect::<Result<HashSet<_>, FromRowError>>()?;
+
+    debug!({media_uuid = media_uuid, groups = ?data}, "found groups");
 
     Ok(data)
 }
@@ -239,14 +244,36 @@ pub async fn rm_user_from_group(pool: Pool, uid: String, gid: String) -> anyhow:
     Ok(())
 }
 
+// media queries
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_media(pool: Pool, media: Media) -> anyhow::Result<MediaUuid> {
+    debug!({ media_path = media.path }, "adding media");
+
     let mut result = r"
         INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, date, note, media_type)
-        VALUES (UUID_SHORT(), :library_uuid, :path, :hash, :mtime, :hidden, :date, :note, :media_type)
+        SELECT
+            UUID_SHORT(),
+            :library_uuid,
+            :path,
+            :hash,
+            :mtime,
+            :hidden,
+            :date,
+            :note,
+            :media_type
+        FROM
+            DUAL
+        WHERE NOT EXISTS(
+            SELECT 1
+            FROM media
+            WHERE
+                library_uuid = :library_uuid
+                AND path = :path
+        )
         RETURNING media_uuid"
         .with(params! {
             "library_uuid" => media.library_uuid,
-            "path" => media.path,
+            "path" => media.path.clone(),
             "hash" => media.hash,
             "mtime" => Local::now().timestamp(),
             "hidden" => media.hidden,
@@ -266,19 +293,24 @@ pub async fn add_media(pool: Pool, media: Media) -> anyhow::Result<MediaUuid> {
 
     let row = result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_media"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add media"))?;
 
     let data = from_row_opt::<MediaUuid>(row)?;
+
+    debug!({media_path = media.path, media_uuid = data}, "added media");
 
     // TODO -- add in the missing INSERT statements for the metadata tables
 
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn get_media(
     pool: Pool,
     media_uuid: MediaUuid,
 ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
+    debug!({ media_uuid = media_uuid }, "getting media details");
+
     let mut media_result = r"
         SELECT library_uuid, path, hash, mtime, hidden, date, note, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
@@ -333,6 +365,8 @@ pub async fn get_media(
         .map(|row| from_row_opt::<CommentUuid>(row))
         .collect::<Result<Vec<_>, FromRowError>>()?;
 
+    debug!({ media_uuid = media_uuid }, "found media details");
+
     Ok(Some((
         Media {
             library_uuid: media_data.0,
@@ -359,7 +393,10 @@ pub async fn get_media(
     )))
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn get_media_uuid_by_path(pool: Pool, path: String) -> anyhow::Result<Option<MediaUuid>> {
+    debug!({ media_path = path }, "searching for media by path");
+
     let mut result = r"
         SELECT media_uuid FROM media WHERE path = :path"
         .with(params! {
@@ -380,11 +417,14 @@ pub async fn get_media_uuid_by_path(pool: Pool, path: String) -> anyhow::Result<
     Ok(Some(data))
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn update_media(
     pool: Pool,
     media_uuid: MediaUuid,
     update: MediaUpdate,
 ) -> anyhow::Result<()> {
+    debug!({ media_uuid = media_uuid }, "updating media details");
+
     if let Some(val) = update.hidden {
         r"
         UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
@@ -418,9 +458,12 @@ pub async fn update_media(
             .await?;
     }
 
+    debug!({ media_uuid = media_uuid }, "updated media details");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn search_media(
     pool: Pool,
     uid: String,
@@ -483,16 +526,35 @@ pub async fn search_media(
     Ok(data)
 }
 
+// album queries
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
+    debug!({ album_name = album.name }, "adding album");
+
     let mut result = r"
         INSERT INTO albums (album_uuid, uid, gid, mtime, name, note)
-        VALUES (UUID_SHORT(), :uid, :gid, :mtime, :name, :note)
+        SELECT
+            UUID_SHORT(),
+            :uid,
+            :gid,
+            :mtime,
+            :name,
+            :note
+        FROM
+            DUAL
+        WHERE NOT EXISTS(
+            SELECT 1
+            FROM albums
+            WHERE
+                uid = :uid
+                AND name = :name
+        )
         RETURNING album_uuid"
         .with(params! {
             "uid" => album.uid,
             "gid" => album.gid,
             "mtime" => album.mtime,
-            "name" => album.name,
+            "name" => album.name.clone(),
             "note" => album.note,
         })
         .run(pool.get_conn().await?)
@@ -502,14 +564,19 @@ pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
 
     let row = result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("Failed to return result for create_album"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add album to the database"))?;
 
     let data = from_row_opt::<AlbumUuid>(row)?;
+
+    debug!({album_name = album.name, album_uuid = data}, "added album");
 
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
+    debug!({ album_uuid = album_uuid }, "getting album details");
+
     let mut result = r"
         SELECT uid, gid, mtime, name, note FROM albums WHERE album_uuid = :album_uuid"
         .with(params! {
@@ -527,6 +594,8 @@ pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Opti
 
     let data = from_row_opt::<(String, String, i64, String, String)>(row)?;
 
+    debug!({ album_uuid = album_uuid }, "found album details");
+
     Ok(Some(Album {
         uid: data.0,
         gid: data.1,
@@ -537,6 +606,8 @@ pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Opti
 }
 
 pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<()> {
+    debug!({ album_uuid = album_uuid }, "deleting media from album");
+
     r"
         DELETE FROM album_contents WHERE album_uuid = :album_uuid"
         .with(params! {
@@ -544,6 +615,8 @@ pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<(
         })
         .run(pool.get_conn().await?)
         .await?;
+
+    debug!({ album_uuid = album_uuid }, "deleting album");
 
     r"
         DELETE FROM albums WHERE album_uuid = :album_uuid"
@@ -553,14 +626,19 @@ pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<(
         .run(pool.get_conn().await?)
         .await?;
 
+    debug!({ album_uuid = album_uuid }, "deleted album");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn update_album(
     pool: Pool,
     album_uuid: AlbumUuid,
     update: AlbumUpdate,
 ) -> anyhow::Result<()> {
+    debug!({ album_uuid = album_uuid }, "updating album");
+
     if let Some(val) = update.name {
         r"
         UPDATE albums SET name = :name WHERE album_uuid = :album_uuid"
@@ -583,32 +661,60 @@ pub async fn update_album(
             .await?;
     }
 
+    debug!({ album_uuid = album_uuid }, "updated album");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_media_to_album(
     pool: Pool,
     media_uuid: MediaUuid,
     album_uuid: AlbumUuid,
 ) -> anyhow::Result<()> {
-    r"
+    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "adding media to album");
+
+    let mut result = r"
         INSERT INTO album_contents (media_uuid, album_uuid)
-        VALUES (:media_uuid, :album_uuid)"
+        SELECT
+            :media_uuid,
+            :album_uuid
+        FROM
+            DUAL
+        WHERE NOT EXISTS(
+            SELECT 1
+            FROM album_contents
+            WHERE
+                media_uuid = :media_uuid
+                AND album_uuid = :album_uuid
+        )
+        RETURNING id"
         .with(params! {
             "media_uuid" => media_uuid,
             "album_uuid" => album_uuid,
         })
         .run(pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
         .await?;
+
+    result
+        .pop()
+        .ok_or_else(|| anyhow::Error::msg("failed to add media to album"))?;
+
+    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "added media to album");
 
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn rm_media_from_album(
     pool: Pool,
     media_uuid: MediaUuid,
     album_uuid: AlbumUuid,
 ) -> anyhow::Result<()> {
+    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "removing media to album");
+
     r"
         DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
         .with(params! {
@@ -618,9 +724,12 @@ pub async fn rm_media_from_album(
         .run(pool.get_conn().await?)
         .await?;
 
+    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "removed media from album");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn search_albums(
     pool: Pool,
     uid: String,
@@ -653,6 +762,7 @@ pub async fn search_albums(
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn search_media_in_album(
     pool: Pool,
     uid: String,
@@ -702,13 +812,33 @@ pub async fn search_media_in_album(
     Ok(data)
 }
 
+// library queries
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<LibraryUuid> {
+    // since we require that libraries have unique paths, it might seem like we want
+    // to use that as the primary key.  but those strings might be arbitrarily complex,
+    // so instead using an i64 as a handle is much simpler
+    debug!({ library_path = library.path }, "adding library");
+
     let mut result = r"
         INSERT INTO libraries (library_uuid, path, gid, mtime, count)
-        VALUES (UUID_SHORT(), :path, :gid, :mtime, :count)
+        SELECT
+            UUID_SHORT()
+            :path,
+            :gid,
+            :mtime,
+            :count
+        FROM
+            DUAL
+        WHERE NOT EXISTS(
+            SELECT 1
+            FROM libraries
+            WHERE
+                path = :path
+        )
         RETURNING library_uuid"
         .with(params! {
-            "path" => library.path,
+            "path" => library.path.clone(),
             "gid" => library.gid,
             "mtime" => library.mtime,
             "count" => library.count,
@@ -720,14 +850,19 @@ pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<Library
 
     let row = result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_library"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add library to the database"))?;
 
     let data = from_row_opt::<LibraryUuid>(row)?;
+
+    debug!({library_path = library.path, library_uuid = data}, "adding library");
 
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
+    debug!({ library_uuid = library_uuid }, "getting library details");
+
     let mut result = r"
         SELECT path, uid, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
         .with(params! {
@@ -745,6 +880,8 @@ pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Resul
 
     let data = from_row_opt::<(String, String, String, i64, i64)>(row)?;
 
+    debug!({ library_uuid = library_uuid }, "found library details");
+
     Ok(Some(Library {
         path: data.0,
         uid: data.1,
@@ -754,11 +891,14 @@ pub async fn get_library(pool: Pool, library_uuid: LibraryUuid) -> anyhow::Resul
     }))
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn update_library(
     pool: Pool,
     library_uuid: LibraryUuid,
     update: LibraryUpdate,
 ) -> anyhow::Result<()> {
+    debug!({ library_uuid = library_uuid }, "updating library");
+
     if let Some(val) = update.count {
         r"
         UPDATE libraries SET mtime = :mtime, count = :count WHERE library_uuid = :library_uuid"
@@ -771,9 +911,12 @@ pub async fn update_library(
             .await?;
     }
 
+    debug!({ library_uuid = library_uuid }, "updated library");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn search_libraries(
     pool: Pool,
     uid: String,
@@ -805,6 +948,7 @@ pub async fn search_libraries(
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn search_media_in_library(
     pool: Pool,
     uid: String,
@@ -852,7 +996,11 @@ pub async fn search_media_in_library(
     Ok(data)
 }
 
+// comment queries
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_comment(pool: Pool, comment: Comment) -> anyhow::Result<CommentUuid> {
+    debug!({ media_uuid = comment.media_uuid }, "adding comment");
+
     let mut result = r"
         INSERT INTO comments (comment_uuid, media_uuid, mtime, uid, text)
         VALUES (UUID_SHORT(), :media_uuid, :mtime, :uid, :text)
@@ -870,14 +1018,19 @@ pub async fn add_comment(pool: Pool, comment: Comment) -> anyhow::Result<Comment
 
     let row = result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("Failed to return result for add_comment"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add comment to database"))?;
 
     let data = from_row_opt::<CommentUuid>(row)?;
+
+    debug!({media_uuid = comment.media_uuid, comment_uuid = data}, "added comment");
 
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn get_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>> {
+    debug!({ comment_uuid = comment_uuid }, "getting comment details");
+
     let mut result = r"
     SELECT media_uuid, mtime, uid, text FROM comments WHERE comment_uuid = :comment_uuid"
         .with(params! {
@@ -895,6 +1048,8 @@ pub async fn get_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Resul
 
     let data = from_row_opt::<(MediaUuid, i64, String, String)>(row)?;
 
+    debug!({ comment_uuid = comment_uuid }, "found comment details");
+
     Ok(Some(Comment {
         media_uuid: data.0,
         mtime: data.1,
@@ -903,7 +1058,10 @@ pub async fn get_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Resul
     }))
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn delete_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Result<()> {
+    debug!({ comment_uuid = comment_uuid }, "deleting comment");
+
     r"
         DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
         .with(params! {
@@ -912,14 +1070,19 @@ pub async fn delete_comment(pool: Pool, comment_uuid: CommentUuid) -> anyhow::Re
         .run(pool.get_conn().await?)
         .await?;
 
+    debug!({ comment_uuid = comment_uuid }, "deleted comment");
+
     Ok(())
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
 pub async fn update_comment(
     pool: Pool,
     comment_uuid: CommentUuid,
     text: Option<String>,
 ) -> anyhow::Result<()> {
+    debug!({ comment_uuid = comment_uuid }, "updating comment");
+
     if let Some(val) = text {
         r"
         UPDATE comments SET text = :text WHERE comment_uuid = :comment_uuid"
@@ -930,6 +1093,8 @@ pub async fn update_comment(
             .run(pool.get_conn().await?)
             .await?;
     }
+
+    debug!({ comment_uuid = comment_uuid }, "updated comment");
 
     Ok(())
 }

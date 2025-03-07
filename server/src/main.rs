@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         http_doc_root: String::from(
             "/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public",
         ),
-        mysql_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
+        mariadb_url: String::from("mariadb://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
         fs_scanner_threads: 8,
@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
     let mut senders = HashMap::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &mut senders);
-    let db_svc = db::mysql::MySQLService::create(config.clone(), &mut senders);
+    let db_svc = db::mariadb::MariaDBService::create(config.clone(), &mut senders);
     let fs_svc = fs::svc::FileService::create(config.clone(), &mut senders);
     let http_svc = http::svc::HttpService::create(config.clone(), &mut senders);
 

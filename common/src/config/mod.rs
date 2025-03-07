@@ -21,7 +21,7 @@ pub struct ESConfig {
     pub http_doc_root: String,
 
     // user, password, host, port, and database
-    pub mysql_url: String,
+    pub mariadb_url: String,
 
     // read-only source path where media can be located
     //
