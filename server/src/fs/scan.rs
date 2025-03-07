@@ -128,6 +128,10 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
     tasks.join_all().await;
 }
 
+// media registration
+//
+// this function is spawned into a tokio task set, hence the empty return type
+// and use of the scan context to actually communicate with the caller
 #[instrument(level=Level::DEBUG, skip(context, path))]
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
     debug!({path = ?path}, "started processing media");

@@ -6,9 +6,9 @@ use tracing::{debug, instrument, Level};
 
 use crate::auth::{Group, User};
 use api::album::{Album, AlbumUpdate, AlbumUuid};
-use api::comment::{self, Comment, CommentUuid};
+use api::comment::{Comment, CommentUuid};
 use api::library::{Library, LibraryUpdate, LibraryUuid};
-use api::media::{self, Media, MediaMetadata, MediaUpdate, MediaUuid};
+use api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
 
 #[instrument(level=Level::DEBUG, skip_all)]
 pub async fn media_access_groups(

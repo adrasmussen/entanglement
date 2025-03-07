@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+
 use tracing::info;
 
 mod auth;
@@ -13,10 +14,10 @@ mod service;
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::config::ESConfig;
 use service::EntanglementService;
+
 // the outermost caller should definitely have a loop that periodically calls
 // Status for each service to ensure that the threads haven't stopped, and then
 // gracefully stop the server after logging whatever the error was
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -37,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         http_doc_root: String::from(
             "/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public",
         ),
-        mariadb_url: String::from("mariadb://entanglement:testpw@[fd00::3]/entanglement"),
+        mariadb_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
         media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
         media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
         fs_scanner_threads: 8,
