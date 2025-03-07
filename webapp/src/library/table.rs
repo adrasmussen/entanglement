@@ -1,75 +1,181 @@
+// webapp/src/library/table.rs
+
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::style, Route};
+use crate::{common::local_time, Route};
 use api::library::*;
 
 #[derive(Clone, PartialEq, Props)]
-struct LibraryTableRowProps {
-    library_uuid: LibraryUuid,
+pub struct LibraryTableProps {
+    libraries: Vec<LibraryUuid>,
+    update_signal: Signal<()>,
 }
 
 #[component]
-fn LibraryTableRow(props: LibraryTableRowProps) -> Element {
-    let library_uuid = props.library_uuid;
+pub fn LibraryTable(props: LibraryTableProps) -> Element {
+    let libraries = props.libraries.clone();
+    let _update_signal = props.update_signal;
 
-    let library = use_resource(move || async move {
-        get_library(&GetLibraryReq {
-            library_uuid: library_uuid,
-        })
-        .await
-    });
-
-    let library = &*library.read();
-
-    let result = match library {
-        Some(Ok(result)) => result.library.clone(),
-        _ => {
-            return rsx! {
-                tr {
-                    span { "error fetching {library_uuid}" }
+    if libraries.is_empty() {
+        return rsx! {
+            div {
+                class: "empty-state",
+                style: "
+                    padding: var(--space-8) var(--space-4);
+                    text-align: center;
+                    background-color: var(--surface);
+                    border-radius: var(--radius-lg);
+                    margin-top: var(--space-4);
+                ",
+                div { style: "
+                        font-size: 4rem;
+                        margin-bottom: var(--space-4);
+                        color: var(--neutral-400);
+                    ",
+                    "📚"
                 }
-            };
-        }
-    };
-
-    rsx! {
-        tr {
-            td {
-                Link {
-                    to: Route::LibraryDetail {
-                        library_uuid: library_uuid.to_string(),
-                    },
-                    span { "{result.path}" }
+                h3 { style: "
+                        margin-bottom: var(--space-2);
+                        color: var(--text-primary);
+                    ",
+                    "No Libraries Found"
+                }
+                p { style: "
+                        color: var(--text-secondary);
+                        max-width: 500px;
+                        margin: 0 auto;
+                    ",
+                    "No libraries match your search criteria. Try adjusting your search or contact an administrator to set up libraries."
                 }
             }
-            td { "{result.gid}" }
-            td { "{result.count}" }
-            td { "{result.mtime}" }
-        }
+        };
     }
-}
 
-#[derive(Clone, PartialEq, Props)]
-pub struct LibaryTableProps {
-    libraries: Vec<LibraryUuid>,
-}
+    // Fetch details for each library
+    let libraries_future = use_resource(move || {
+        let libraries = libraries.clone();
 
-#[component]
-pub fn LibraryTable(props: LibaryTableProps) -> Element {
-    rsx! {
-        div {
+        async move {
+            let mut library_details = Vec::new();
 
-            table {
-                tr {
-                    th { "Path" }
-                    th { "Group" }
-                    th { "File count" }
-                    th { "Last modified" }
+            for library_uuid in libraries.iter() {
+                match get_library(&GetLibraryReq { library_uuid: *library_uuid }).await {
+                    Ok(resp) => library_details.push((*library_uuid, resp.library)),
+                    Err(err) => {
+                        tracing::error!("Failed to fetch library {library_uuid}: {err}");
+                    }
                 }
+            }
 
-                for library_uuid in props.libraries.iter() {
-                    LibraryTableRow { key: "{library_uuid}", library_uuid: *library_uuid }
+            // Sort libraries by path for better display
+            library_details.sort_by(|a, b| a.1.path.cmp(&b.1.path));
+            library_details
+        }
+    });
+
+    let libraries = &*libraries_future.read();
+
+    let libraries = libraries.clone();
+
+    match libraries {
+        Some(library_details) => {
+            rsx! {
+                div {
+                    class: "table-container",
+                    style: "
+                        margin-top: var(--space-4);
+                        background-color: var(--surface);
+                        border-radius: var(--radius-lg);
+                        overflow: hidden;
+                        box-shadow: var(--shadow-sm);
+                    ",
+                    table { style: "width: 100%; border-collapse: collapse;",
+                        thead {
+                            tr { style: "background-color: var(--primary); color: white;",
+                                th { style: "padding: var(--space-3); text-align: left;", "Path" }
+                                th { style: "padding: var(--space-3); text-align: left;", "Group" }
+                                th { style: "padding: var(--space-3); text-align: left;", "File Count" }
+                                th { style: "padding: var(--space-3); text-align: left;", "Last Modified" }
+                                th { style: "padding: var(--space-3); text-align: right;", "Actions" }
+                            }
+                        }
+                        tbody {
+                            for (library_uuid, library) in library_details {
+                                tr { key: "{library_uuid}",
+                                    style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
+                                    onmouseenter: move |_| {
+                                        // Handle hover state
+                                    },
+
+                                    // Path column with link
+                                    td { style: "padding: var(--space-3);",
+                                        Link {
+                                            to: Route::LibraryDetail {
+                                                library_uuid: library_uuid.to_string(),
+                                            },
+                                            style: "color: var(--primary); font-weight: 500; text-decoration: none;",
+                                            "{library.path}"
+                                        }
+                                    }
+
+                                    // Group column
+                                    td { style: "padding: var(--space-3);",
+                                        span {
+                                            class: "group-badge",
+                                            style: "
+                                                display: inline-block;
+                                                padding: var(--space-1) var(--space-2);
+                                                background-color: var(--neutral-100);
+                                                border-radius: var(--radius-full);
+                                                font-size: 0.875rem;
+                                            ",
+                                            "{library.gid}"
+                                        }
+                                    }
+
+                                    // File count column
+                                    td { style: "padding: var(--space-3);",
+                                        "{library.count}"
+                                    }
+
+                                    // Last modified column
+                                    td { style: "padding: var(--space-3);",
+                                        "{local_time(library.mtime)}"
+                                    }
+
+                                    // Actions column
+                                    td { style: "padding: var(--space-3); text-align: right;",
+                                        button {
+                                            class: "btn btn-secondary btn-sm",
+                                            style: "margin-right: var(--space-2);",
+                                            onclick: move |_| {
+                                                // Placeholder for scan action
+                                                tracing::info!("Scan library {library_uuid} clicked");
+                                            },
+                                            "Scan"
+                                        }
+                                        Link {
+                                            to: Route::LibraryDetail {
+                                                library_uuid: library_uuid.to_string(),
+                                            },
+                                            class: "btn btn-primary btn-sm",
+                                            "Browse"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            rsx! {
+                div {
+                    class: "loading-state",
+                    style: "margin-top: var(--space-4); padding: var(--space-6);",
+                    "Loading libraries..."
                 }
             }
         }

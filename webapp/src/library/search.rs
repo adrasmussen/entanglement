@@ -1,83 +1,128 @@
+// webapp/src/library/search.rs
+
 use dioxus::prelude::*;
 
 use crate::{
-    common::{storage::*, style},
+    common::storage::*,
+    components::{modal::ModalBox, search_bar::SearchBar},
     library::{table::LibraryTable, LIBRARY_SEARCH_KEY},
 };
 use api::library::*;
 
-#[derive(Clone, PartialEq, Props)]
-struct LibrarySearchBarProps {
-    library_search_signal: Signal<String>,
-    status: String,
-}
-
-#[component]
-fn LibrarySearchBar(props: LibrarySearchBarProps) -> Element {
-    let mut library_search_signal = props.library_search_signal;
-    let status = props.status;
-
-    rsx! {
-        div {
-
-            div { class: "subnav",
-                form {
-                    onsubmit: move |event| async move {
-                        let filter = match event.values().get("search_filter") {
-                            Some(val) => val.as_value(),
-                            None => String::from(""),
-                        };
-                        library_search_signal.set(filter.clone());
-                        set_local_storage(LIBRARY_SEARCH_KEY, filter);
-                    },
-                    input {
-                        name: "search_filter",
-                        r#type: "text",
-                        value: "{library_search_signal()}",
-                    }
-                    input { r#type: "submit", value: "Search" }
-                }
-                span { "{status}" }
-            }
-        }
-    }
-}
-
 #[component]
 pub fn LibrarySearch() -> Element {
+    let update_signal = use_signal(|| ());
+
+    // Get search signal from local storage
     let library_search_signal = use_signal::<String>(|| try_local_storage(LIBRARY_SEARCH_KEY));
 
+    // Fetch libraries data
     let library_future = use_resource(move || async move {
+        // Read the update signal to trigger a refresh when needed
+        update_signal.read();
         let filter = library_search_signal();
-
-        search_libraries(&SearchLibrariesReq { filter: filter }).await
+        search_libraries(&SearchLibrariesReq { filter }).await
     });
 
-    let (libraries, status) = match &*library_future.read() {
-        Some(Ok(resp)) => (
-            Ok(resp.libraries.clone()),
-            format!("Found {} results", resp.libraries.len()),
-        ),
-        Some(Err(err)) => (
-            Err(err.to_string()),
-            String::from("Error from search_libraries"),
-        ),
-        None => (
-            Err(String::from("Still waiting on search_libraries future...")),
-            String::from(""),
-        ),
+    // Create action button for search bar - positioned on the right
+    let action_button = rsx! {
+        div { style: "margin-left: auto;", // This will push the button to the right
+            button {
+                class: "btn btn-primary",
+                onclick: move |_| {
+                    // Placeholder for library scan action
+                    // This could be replaced with appropriate modal or action
+                    tracing::info!("Scan libraries clicked");
+                },
+                "Scan Libraries"
+            }
+        }
+    };
+
+    // Get status text
+    let status = match &*library_future.read() {
+        Some(Ok(resp)) => format!("Found {} libraries", resp.libraries.len()),
+        Some(Err(_)) => String::from("Error searching libraries"),
+        None => String::from("Loading..."),
     };
 
     rsx! {
-        LibrarySearchBar { library_search_signal, status }
+        div { class: "container",
+            // Modal container for popups
+            ModalBox { update_signal }
 
-        match libraries {
-            Ok(libraries) => rsx! {
-                LibraryTable { libraries }
-            },
-            Err(err) => rsx! {
-                span { "{err}" }
-            },
+            // Page header
+            div { class: "page-header", style: "margin-bottom: var(--space-4);",
+                h1 { class: "section-title", "Libraries" }
+                p { "Manage your media source libraries" }
+            }
+
+            // Search controls
+            SearchBar {
+                search_signal: library_search_signal,
+                storage_key: LIBRARY_SEARCH_KEY,
+                placeholder: "Search by library path...",
+                status,
+                action_button,
+            }
+
+            // Library table
+            match &*library_future.read() {
+                Some(Ok(resp)) => {
+                    rsx! {
+                        LibraryTable { libraries: resp.libraries.clone(), update_signal }
+                    }
+                }
+                Some(Err(err)) => rsx! {
+                    div {
+                        class: "error-state",
+                        style: "
+                            padding: var(--space-4);
+                            background-color: var(--surface);
+                            border-radius: var(--radius-lg);
+                            margin-top: var(--space-4);
+                            color: var(--error);
+                            text-align: center;
+                        ",
+                        "Error: {err}"
+                    }
+                },
+                None => rsx! {
+                    div {
+                        class: "loading-state libraries-table",
+                        style: "
+                            margin-top: var(--space-4);
+                            background-color: var(--surface);
+                            border-radius: var(--radius-lg);
+                            overflow: hidden;
+                            box-shadow: var(--shadow-sm);
+                        ",
+                        // Library table skeleton loading UI
+                        table { style: "width: 100%; border-collapse: collapse;",
+                            thead {
+                                tr {
+                                    for _ in 0..4 {
+                                        th {
+                                            div { class: "skeleton", style: "height: 24px; width: 100%;" }
+                                        }
+                                    }
+                                }
+                            }
+                            tbody {
+                                for _ in 0..5 {
+                                    tr {
+                                        for _ in 0..4 {
+                                            td {
+                                                div { class: "skeleton", style: "height: 18px; width: 90%;" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+            }
         }
     }
 }

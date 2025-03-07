@@ -50,11 +50,11 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
     });
 
     // Create action button for search bar - positioned on the right
-    let action_button = rsx! {
-        div { style: "margin-left: auto;", // This will push the button to the right
-            button { class: "btn btn-secondary", onclick: move |_| {}, "Add Media" }
-        }
-    };
+    // let action_button = rsx! {
+    //     div { style: "margin-left: auto;", // This will push the button to the right
+    //         button { class: "btn btn-secondary", onclick: move |_| {}, "Add Media" }
+    //     }
+    // };
 
     let album_data = &*album_future.read();
     let media_data = &*media_future.read();
@@ -148,7 +148,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                         storage_key: MEDIA_SEARCH_KEY,
                         placeholder: "Search media in this album...",
                         status: format!("Found {} items in this album", media.len()),
-                        action_button,
+                        //action_button,
                     }
 
                     // Media grid
