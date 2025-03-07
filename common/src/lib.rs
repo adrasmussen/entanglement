@@ -8,7 +8,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
-use dashmap::{DashMap, mapref::entry::Entry};
+use dashmap::{mapref::entry::Entry, DashMap};
 
 // awaitable cache
 //

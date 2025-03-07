@@ -609,17 +609,18 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                 div {
                     class: "search-bar",
                     style: "
-                    display: flex;
-                    align-items: center;
-                    gap: var(--space-2);
-                    margin-bottom: var(--space-6);
-                    background-color: var(--surface);
-                    padding: var(--space-3);
-                    border-radius: var(--radius-lg);
-                    box-shadow: var(--shadow-sm);
-                ",
+                        display: flex;
+                        align-items: center;
+                        gap: var(--space-2);
+                        margin-bottom: var(--space-6);
+                        background-color: var(--surface);
+                        padding: var(--space-3);
+                        border-radius: var(--radius-lg);
+                        box-shadow: var(--shadow-sm);
+                    ",
                     form {
                         class: "form-group",
+                        style: "width: 100%;",
                         onsubmit: move |event| async move {
                             let filter = match event.values().get("search_filter") {
                                 Some(val) => val.as_value(),
@@ -628,7 +629,7 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                             album_search_signal.set(filter.clone());
                         },
                         label { class: "form-label", "Search Albums" }
-                        div { style: "display: flex; gap: var(--space-2);",
+                        div { style: "display: flex; gap: var(--space-2); align-items: center;",
                             input {
                                 class: "form-input",
                                 r#type: "text",
@@ -637,8 +638,8 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                                 placeholder: "Enter album name or description...",
                                 style: "flex: 1;",
                             }
+                            button { class: "btn btn-primary", r#type: "submit", "Search" }
                         }
-                        button { class: "btn btn-primary", r#type: "submit", "Search" }
                     }
                 }
 
@@ -660,10 +661,10 @@ pub fn AddMediaToAlbumModal(props: AddMediaToAlbumModalProps) -> Element {
                                     div {
                                         class: "empty-state",
                                         style: "
-                                                                                                                                                        padding: var(--space-6);
-                                                                                                                                                        text-align: center;
-                                                                                                                                                        color: var(--text-tertiary);
-                                                                                                                                                    ",
+                                            padding: var(--space-6);
+                                            text-align: center;
+                                            color: var(--text-tertiary);
+                                        ",
                                         "No albums found. Try a different search term or create a new album."
                                     }
                                 }
@@ -766,8 +767,7 @@ fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
                         div {
                             style: {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
-                                format!(
-                                    "
+                                format!("
                                     width: 18px;
                                     height: 18px;
                                     border-radius: 50%;
@@ -786,7 +786,8 @@ fn AlbumSelectionItem(props: AlbumSelectionItemProps) -> Element {
                                         height: 10px;
                                         border-radius: 50%;
                                         background-color: white;
-                                    " }
+                                    "
+                                }
                             }
                         }
                     }

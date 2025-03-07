@@ -2,14 +2,14 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    Route,
     album::MEDIA_SEARCH_KEY,
     common::{local_time, storage::*},
     components::{
         media_card::MediaCard,
-        modal::{MODAL_STACK, Modal, ModalBox},
+        modal::{Modal, ModalBox, MODAL_STACK},
         search_bar::SearchBar,
     },
+    Route,
 };
 use api::album::*;
 

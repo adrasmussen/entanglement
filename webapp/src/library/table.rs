@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{Route, common::style};
+use crate::{common::style, Route};
 use api::library::*;
 
 #[derive(Clone, PartialEq, Props)]

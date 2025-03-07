@@ -1,7 +1,7 @@
 // webapp/src/album/grid.rs
 
 use crate::album::card::AlbumCard;
-use crate::components::modal::{MODAL_STACK, Modal};
+use crate::components::modal::{Modal, MODAL_STACK};
 use api::album::AlbumUuid;
 use dioxus::prelude::*;
 

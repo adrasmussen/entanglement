@@ -6,7 +6,9 @@ mod comments;
 use comments::DeleteCommentModal;
 
 mod albums;
-use albums::{AddMediaToAlbumModal, CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal};
+use albums::{
+    AddMediaToAlbumModal, CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal,
+};
 
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use chrono::Local;
 
-use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
+use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
 
 use crate::auth::{Group, User};
 use api::album::{Album, AlbumUpdate, AlbumUuid};

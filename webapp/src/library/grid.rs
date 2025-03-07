@@ -2,8 +2,8 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    Route,
     common::{stream::*, style},
+    Route,
 };
 use api::media::*;
 

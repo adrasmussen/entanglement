@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{storage::*, style},
-    library::{MEDIA_SEARCH_KEY, grid::MediaGrid},
+    library::{grid::MediaGrid, MEDIA_SEARCH_KEY},
 };
 use api::library::*;
 

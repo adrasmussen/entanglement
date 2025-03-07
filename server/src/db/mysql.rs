@@ -7,7 +7,7 @@ use mysql_async::Pool;
 use tokio::sync::Mutex;
 
 use crate::auth::msg::*;
-use crate::db::{ESDbService, msg::DbMsg};
+use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::*;
 use api::{album::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
