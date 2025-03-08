@@ -458,6 +458,15 @@ pub async fn update_media(
             .await?;
     }
 
+    r"
+    UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+        .with(params! {
+            "mtime" => Local::now().timestamp(),
+            "media_uuid" => media_uuid,
+        })
+        .run(pool.get_conn().await?)
+        .await?;
+
     debug!({ media_uuid = media_uuid }, "updated media details");
 
     Ok(())
@@ -553,7 +562,7 @@ pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
         .with(params! {
             "uid" => album.uid,
             "gid" => album.gid,
-            "mtime" => album.mtime,
+            "mtime" => Local::now().timestamp(),
             "name" => album.name.clone(),
             "note" => album.note,
         })
@@ -661,6 +670,15 @@ pub async fn update_album(
             .await?;
     }
 
+    r"
+    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+        .with(params! {
+            "mtime" => Local::now().timestamp(),
+            "album_uuid" => album_uuid,
+        })
+        .run(pool.get_conn().await?)
+        .await?;
+
     debug!({ album_uuid = album_uuid }, "updated album");
 
     Ok(())
@@ -692,6 +710,7 @@ pub async fn add_media_to_album(
         .with(params! {
             "media_uuid" => media_uuid,
             "album_uuid" => album_uuid,
+            "mtime" => Local::now().timestamp(),
         })
         .run(pool.get_conn().await?)
         .await?
@@ -701,6 +720,15 @@ pub async fn add_media_to_album(
     result
         .pop()
         .ok_or_else(|| anyhow::Error::msg("failed to add media to album"))?;
+
+    r"
+    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+        .with(params! {
+            "mtime" => Local::now().timestamp(),
+            "album_uuid" => album_uuid,
+        })
+        .run(pool.get_conn().await?)
+        .await?;
 
     debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "added media to album");
 
@@ -719,6 +747,16 @@ pub async fn rm_media_from_album(
         DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
         .with(params! {
             "media_uuid" => media_uuid,
+            "album_uuid" => album_uuid,
+            "mtime" => Local::now().timestamp(),
+        })
+        .run(pool.get_conn().await?)
+        .await?;
+
+    r"
+    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+        .with(params! {
+            "mtime" => Local::now().timestamp(),
             "album_uuid" => album_uuid,
         })
         .run(pool.get_conn().await?)
@@ -840,7 +878,7 @@ pub async fn add_library(pool: Pool, library: Library) -> anyhow::Result<Library
         .with(params! {
             "path" => library.path.clone(),
             "gid" => library.gid,
-            "mtime" => library.mtime,
+            "mtime" => Local::now().timestamp(),
             "count" => library.count,
         })
         .run(pool.get_conn().await?)
