@@ -36,6 +36,13 @@ pub enum DbMsg {
         gid: HashSet<String>,
         filter: String,
     },
+    SimilarMedia {
+        resp: ESMResp<Vec<MediaUuid>>,
+        uid: String,
+        gid: HashSet<String>,
+        hash: String,
+        distance: i64,
+    },
 
     // comment messages
     AddComment {

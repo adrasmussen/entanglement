@@ -224,6 +224,7 @@ impl HttpEndpoint {
             .route("/GetMedia", post(get_media))
             .route("/UpdateMedia", post(update_media))
             .route("/SearchMedia", post(search_media))
+            .route("/SimilarMedia", post(similar_media))
             .route("/AddComment", post(add_comment))
             .route("/GetComment", post(get_comment))
             .route("/DeleteComment", post(delete_comment))
@@ -654,6 +655,39 @@ async fn search_media(
     let result = rx.await??;
 
     Ok(Json(SearchMediaResp { media: result }).into_response())
+}
+
+async fn similar_media(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<SimilarMediaReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    // auth handled as part of the db search
+
+    let gid = state.groups_for_user(&uid).await?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .db_svc_sender
+        .send(
+            DbMsg::SimilarMedia {
+                resp: tx,
+                uid: uid,
+                gid: gid,
+                hash: message.hash,
+                distance: message.distance,
+            }
+            .into(),
+        )
+        .await?;
+
+    let result = rx.await??;
+
+    Ok(Json(SimilarMediaResp { media: result }).into_response())
 }
 
 async fn add_comment(

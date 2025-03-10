@@ -78,3 +78,17 @@ pub struct SearchMediaReq {
 pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
 }
+
+// find similar media
+endpoint!(SimilarMedia);
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SimilarMediaReq {
+    pub hash: String,
+    pub distance: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SimilarMediaResp {
+    pub media: Vec<MediaUuid>,
+}

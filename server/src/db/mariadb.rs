@@ -136,6 +136,16 @@ impl ESDbService for MariaDBState {
         common::db::mariadb::search_media(self.pool.clone(), uid, gid, filter).await
     }
 
+    async fn similar_media(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        hash: String,
+        distance: i64,
+    ) -> anyhow::Result<Vec<MediaUuid>> {
+        common::db::mariadb::similar_media(self.pool.clone(), uid, gid, hash, distance).await
+    }
+
     // comment queries
     async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid> {
         common::db::mariadb::add_comment(self.pool.clone(), comment).await
@@ -312,6 +322,16 @@ impl ESInner for MariaDBState {
                     filter,
                 } => {
                     self.respond(resp, self.search_media(uid, gid, filter))
+                        .await
+                }
+                DbMsg::SimilarMedia {
+                    resp,
+                    uid,
+                    gid,
+                    hash,
+                    distance,
+                } => {
+                    self.respond(resp, self.similar_media(uid, gid, hash, distance))
                         .await
                 }
 

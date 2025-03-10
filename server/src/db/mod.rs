@@ -38,6 +38,14 @@ trait ESDbService: ESInner {
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>>;
 
+    async fn similar_media(
+        &self,
+        uid: String,
+        gid: HashSet<String>,
+        hash: String,
+        distance: i64,
+    ) -> anyhow::Result<Vec<MediaUuid>>;
+
     // comment functions
     async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid>;
 

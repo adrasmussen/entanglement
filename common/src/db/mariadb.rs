@@ -535,6 +535,71 @@ pub async fn search_media(
     Ok(data)
 }
 
+#[instrument(level=Level::DEBUG, skip_all)]
+pub async fn similar_media(
+    pool: Pool,
+    uid: String,
+    gid: HashSet<String>,
+    hash: String,
+    distance: i64,
+) -> anyhow::Result<Vec<MediaUuid>> {
+    // for a given uid and filter, find all media that match either:
+    //  * is in a library owned by a group containing the uid
+    //  * if the media is not hidden, is in an album owned
+    //    by a group containing the uid
+    let result = r"
+        SELECT
+            media.media_uuid
+        FROM
+            (
+            SELECT
+                media_uuid
+            FROM
+                (
+                SELECT
+                    album_uuid
+                FROM
+                    albums
+                WHERE
+                    INSTR(:gid, gid) > 0
+            ) AS t1
+        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
+        UNION
+        SELECT
+            media_uuid
+        FROM
+            (
+            SELECT
+                library_uuid
+            FROM
+                libraries
+            WHERE
+                INSTR(:gid, gid) > 0
+        ) AS t2
+        INNER JOIN media ON t2.library_uuid = media.library_uuid
+        ) AS t3
+        INNER JOIN media ON t3.media_uuid = media.media_uuid
+        WHERE
+            hidden = FALSE AND BIG_HAM(:hash, hash) < :distance"
+        .with(params! {
+            "uid" => uid,
+            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "hash" => hash,
+            "distance" => distance,
+        })
+        .run(pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
+
+    let data = result
+        .into_iter()
+        .map(|row| from_row_opt::<MediaUuid>(row))
+        .collect::<Result<Vec<_>, FromRowError>>()?;
+
+    Ok(data)
+}
+
 // album queries
 #[instrument(level=Level::DEBUG, skip_all)]
 pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
