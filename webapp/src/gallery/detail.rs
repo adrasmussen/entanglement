@@ -45,9 +45,20 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
     let mut album_uuids = use_signal(|| Vec::<AlbumUuid>::new());
     let mut comment_uuids = use_signal(|| Vec::<CommentUuid>::new());
 
-    // This will be populated by the API in the future
-    // For now, we'll initialize it as an empty vector
-    let _similar_media = Vec::<MediaUuid>::new();
+    // Fetch similar media
+    let mut media_hash = use_signal(|| String::new());
+
+    // TODO -- make this a local variable?
+    let mut distance= use_signal(|| 128);
+
+    let similar_future = use_resource(move || async move {
+        let hash = media_hash();
+        let distance = distance();
+
+        similar_media(&SimilarMediaReq { hash, distance }).await
+    });
+
+    let similar_media = &*similar_future.read();
 
     match media_data {
         Some(Ok(media_data)) => {
@@ -55,6 +66,8 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
 
             album_uuids.set(media_data.albums.clone());
             comment_uuids.set(media_data.comments.clone());
+
+            media_hash.set(media_data.media.hash.clone());
 
             // Format metadata for display
             let date_formatted = if media.date.is_empty() {
