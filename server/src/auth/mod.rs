@@ -20,24 +20,14 @@ trait ESAuthService: ESInner {
     // authz
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()>;
 
-    // for a given user, find their groups
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>>;
 
-    // for a given group, find its members
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>>;
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool>;
 
-    // a user can access media if they either are a member of a group that either owns a library
-    // or album containing that media
-    //
-    // access allows users to download the media for viewing by the frontend as well as creating
-    // tickets that reference that media
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
 
-    // a user owns media if they are a member of a group that owns a library
-    //
-    // ownership allows adding/removing media to albums and setting the hidden state
     async fn owns_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
 
     // authn

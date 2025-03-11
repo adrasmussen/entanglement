@@ -148,7 +148,7 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                         storage_key: MEDIA_SEARCH_KEY,
                         placeholder: "Search media in this album...",
                         status: format!("Found {} items in this album", media.len()),
-                        //action_button,
+                                        //action_button,
                     }
 
                     // Media grid

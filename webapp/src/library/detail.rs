@@ -26,7 +26,9 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                 div { class: "container error-state",
                     h1 { "Invalid Library ID" }
                     p { "The provided library ID could not be parsed." }
-                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
+                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary",
+                        "Return to Libraries"
+                    }
                 }
             };
         }
@@ -58,8 +60,7 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
 
     // Create action buttons for search bar - with "Show hidden files" centered
     let action_button = rsx! {
-        div {
-            style: "display: flex; align-items: center; margin-left: auto;",
+        div { style: "display: flex; align-items: center; margin-left: auto;",
             // Checkbox for hidden files
             input {
                 r#type: "checkbox",
@@ -68,13 +69,9 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                 oninput: move |evt| {
                     show_hidden.set(evt.checked());
                 },
-                style: "margin: 0 8px 0 0;"
+                style: "margin: 0 8px 0 0;",
             }
-            label {
-                r#for: "show-hidden-checkbox",
-                style: "margin: 0 16px 0 0;",
-                "Show hidden files"
-            }
+            label { r#for: "show-hidden-checkbox", style: "margin: 0 16px 0 0;", "Show hidden files" }
 
             // Scan button
             button {
@@ -140,18 +137,18 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                                     span { "File count: {library.count}" }
                                 }
                             }
-
-                            // Action buttons
-                            // div { style: "display: flex; gap: var(--space-2);",
-                            //     button {
-                            //         class: "btn btn-secondary",
-                            //         onclick: move |_| {
-                            //             // Placeholder for scan action
-                            //             tracing::info!("Start scan for library {library_uuid}");
-                            //         },
-                            //         "Scan Library"
-                            //     }
-                            // }
+                        
+                        // Action buttons
+                        // div { style: "display: flex; gap: var(--space-2);",
+                        //     button {
+                        //         class: "btn btn-secondary",
+                        //         onclick: move |_| {
+                        //             // Placeholder for scan action
+                        //             tracing::info!("Start scan for library {library_uuid}");
+                        //         },
+                        //         "Scan Library"
+                        //     }
+                        // }
                         }
                     }
 
@@ -160,9 +157,10 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                         search_signal: media_search_signal,
                         storage_key: MEDIA_SEARCH_KEY,
                         placeholder: "Search media in this library...",
-                        status: format!("Found {} items in this library{}",
+                        status: format!(
+                            "Found {} items in this library{}",
                             media.len(),
-                            if show_hidden() { " (including hidden)" } else { "" }
+                            if show_hidden() { " (including hidden)" } else { "" },
                         ),
                         action_button,
                     }
@@ -238,7 +236,9 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                 div { class: "container error-state",
                     h1 { "Error Loading Library" }
                     p { "There was an error loading the library: {library_err}" }
-                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
+                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary",
+                        "Return to Libraries"
+                    }
                 }
             }
         }
@@ -247,7 +247,9 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                 div { class: "container error-state",
                     h1 { "Error Loading Library Media" }
                     p { "There was an error loading media for this library: {media_err}" }
-                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
+                    Link { to: Route::LibrarySearch {}, class: "btn btn-primary",
+                        "Return to Libraries"
+                    }
                 }
             }
         }

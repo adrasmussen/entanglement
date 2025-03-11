@@ -93,20 +93,29 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                     table { style: "width: 100%; border-collapse: collapse;",
                         thead {
                             tr { style: "background-color: var(--primary); color: white;",
-                                th { style: "padding: var(--space-3); text-align: left;", "Path" }
-                                th { style: "padding: var(--space-3); text-align: left;", "Group" }
-                                th { style: "padding: var(--space-3); text-align: left;", "File Count" }
-                                th { style: "padding: var(--space-3); text-align: left;", "Last Modified" }
-                                th { style: "padding: var(--space-3); text-align: right;", "Actions" }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "Path"
+                                }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "Group"
+                                }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "File Count"
+                                }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "Last Modified"
+                                }
+                                th { style: "padding: var(--space-3); text-align: right;",
+                                    "Actions"
+                                }
                             }
                         }
                         tbody {
-                            for (library_uuid, library) in library_details {
-                                tr { key: "{library_uuid}",
+                            for (library_uuid , library) in library_details {
+                                tr {
+                                    key: "{library_uuid}",
                                     style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
-                                    onmouseenter: move |_| {
-                                        // Handle hover state
-                                    },
+                                    onmouseenter: move |_| {},
 
                                     // Path column with link
                                     td { style: "padding: var(--space-3);",
@@ -135,9 +144,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     }
 
                                     // File count column
-                                    td { style: "padding: var(--space-3);",
-                                        "{library.count}"
-                                    }
+                                    td { style: "padding: var(--space-3);", "{library.count}" }
 
                                     // Last modified column
                                     td { style: "padding: var(--space-3);",
@@ -150,7 +157,6 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                             class: "btn btn-secondary btn-sm",
                                             style: "margin-right: var(--space-2);",
                                             onclick: move |_| {
-                                                // Placeholder for scan action
                                                 tracing::info!("Scan library {library_uuid} clicked");
                                             },
                                             "Scan"

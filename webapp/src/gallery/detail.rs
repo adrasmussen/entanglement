@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    common::stream::full_link,
+    common::stream::{full_link, thumbnail_link},
     components::modal::{Modal, ModalBox, MODAL_STACK},
     gallery::{album_details::AlbumDetailsTable, comments::CommentsList},
     Route,
@@ -49,7 +49,7 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
     let mut media_hash = use_signal(|| String::new());
 
     // TODO -- make this a local variable?
-    let mut distance= use_signal(|| 128);
+    let mut distance = use_signal(|| 128);
 
     let similar_future = use_resource(move || async move {
         let hash = media_hash();
@@ -67,7 +67,9 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
             album_uuids.set(media_data.albums.clone());
             comment_uuids.set(media_data.comments.clone());
 
-            media_hash.set(media_data.media.hash.clone());
+            if media_hash() == "".to_string() {
+                media_hash.set(media_data.media.hash.clone())
+            };
 
             // Format metadata for display
             let date_formatted = if media.date.is_empty() {
@@ -150,7 +152,6 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                 }
                             }
 
-                            // Similar Media section
                             div {
                                 class: "similar-media-section",
                                 style: "
@@ -169,40 +170,170 @@ pub fn GalleryDetail(props: GalleryDetailProps) -> Element {
                                         align-items: center;
                                     ",
                                     span { "Similar Media" }
-                                    span { style: "
-                                            font-size: 0.875rem;
-                                            color: var(--text-tertiary);
-                                            font-weight: normal;
-                                        ",
-                                        "Coming soon"
+
+                                    // Distance selector for similarity threshold
+                                    div { style: "display: flex; align-items: center; gap: var(--space-2);",
+                                        span { style: "font-size: 0.875rem; font-weight: normal; color: var(--text-tertiary);",
+                                            "Threshold:"
+                                        }
+                                        select {
+                                            style: "
+                                                font-size: 0.875rem;
+                                                padding: 2px 6px;
+                                                border-radius: var(--radius-md);
+                                                border: 1px solid var(--border);
+                                                background-color: var(--surface);
+                                            ",
+                                            value: "{distance()}",
+                                            onchange: move |evt| {
+                                                if let Ok(val) = evt.value().parse::<i64>() {
+                                                    distance.set(val);
+                                                }
+                                            },
+                                            option { value: "64", "Very Similar" }
+                                            option { value: "128", "Similar" }
+                                            option { value: "192", "Somewhat Similar" }
+                                            option { value: "256", "Broadly Similar" }
+                                        }
                                     }
                                 }
 
-                                // Placeholder grid for similar media
-                                // This will be populated when similar_media field is available in the API
+                                // Vertical scrollable container for similar media
                                 div {
-                                    class: "similar-media-grid",
+                                    class: "similar-media-container",
                                     style: "
-                                        display: grid;
-                                        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-                                        gap: var(--space-2);
+                                        overflow-y: auto;
+                                        max-height: 300px; /* Limit height to enforce scrolling */
+                                        padding-right: var(--space-2);
+                                        /* Enable smooth scrolling */
+                                        scroll-behavior: smooth;
+                                        /* Hide scrollbar but keep functionality */
+                                        scrollbar-width: thin;
+                                        scrollbar-color: var(--neutral-300) transparent;
+
+                                        /* Custom scrollbar styling */
+                                        &::-webkit-scrollbar {{
+                                            width: 6px;
+                                       }}
+                                        &::-webkit-scrollbar-track {{
+                                            background: transparent;
+                                        }}
+                                        &::-webkit-scrollbar-thumb {{
+                                            background-color: var(--neutral-300);
+                                            border-radius: 20px;
+                                        }}
                                     ",
 
-                                    // Placeholder items
-                                    for _ in 0..6 {
-                                        div {
-                                            class: "similar-media-placeholder",
-                                            style: "
-                                                background-color: var(--neutral-100);
-                                                border-radius: var(--radius-md);
-                                                aspect-ratio: 1;
-                                                display: flex;
-                                                align-items: center;
-                                                justify-content: center;
-                                                color: var(--text-tertiary);
-                                                font-size: 1.5rem;
-                                            ",
-                                            "🖼️"
+                                    match similar_media {
+                                        Some(Ok(resp)) if !resp.media.is_empty() => {
+                                            let similar_items = resp.media.clone();
+                                            let filtered_items = similar_items
+                                                .iter()
+                                                .filter(|uuid| **uuid != media_uuid)
+                                                .collect::<Vec<_>>();
+                                            rsx! {
+                                                if filtered_items.is_empty() {
+
+                                                    div { style: "
+                                                            padding: var(--space-4);
+                                                            text-align: center;
+                                                            color: var(--text-tertiary);
+                                                            font-style: italic;
+                                                        ",
+                                                        "No similar media found. Try adjusting the threshold."
+                                                    }
+                                                } else {
+
+                                                    div {
+                                                        class: "similar-media-grid",
+                                                        style: "
+                                                            display: grid;
+                                                            grid-template-columns: repeat(3, 1fr);
+                                                            gap: var(--space-2);
+                                                            width: 100%;
+                                                        ",
+
+                                                        for & media_id in filtered_items {
+                                                            Link {
+                                                                key: "{media_id}",
+                                                                to: Route::GalleryDetail {
+                                                                    media_uuid: media_id.to_string(),
+                                                                },
+                                                                div {
+                                                                    class: "similar-media-item",
+                                                                    style: "
+                                                                        position: relative;
+                                                                        overflow: hidden;
+                                                                        border-radius: var(--radius-md);
+                                                                        height: 100%;
+                                                                        transition: transform var(--transition-fast) var(--easing-standard);
+
+                                                                        &:hover {{
+                                                                            transform: scale(1.05);
+                                                                            box-shadow: var(--shadow-md);
+                                                                            z-index: 1;
+                                                                        }}
+                                                                    ",
+                                                                    img {
+                                                                        src: thumbnail_link(media_id),
+                                                                        alt: "Similar media",
+                                                                        style: "
+                                                                            width: 100%;
+                                                                            aspect-ratio: 1;
+                                                                            object-fit: cover;
+                                                                        ",
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Some(Ok(_)) => {
+                                            rsx! {
+                                                div { style: "
+                                                        padding: var(--space-4);
+                                                        text-align: center;
+                                                        color: var(--text-tertiary);
+                                                        font-style: italic;
+                                                    ",
+                                                    "No similar media found. Try adjusting the threshold."
+                                                }
+                                            }
+                                        }
+                                        Some(Err(err)) => {
+                                            rsx! {
+                                                div { style: "
+                                                        padding: var(--space-4);
+                                                        text-align: center;
+                                                        color: var(--error);
+                                                    ",
+                                                    "Error loading similar media: {err}"
+                                                }
+                                            }
+                                        }
+                                        None => {
+                                            rsx! {
+                                                div {
+                                                    class: "similar-media-grid skeleton-grid",
+                                                    style: "
+                                                        display: grid;
+                                                        grid-template-columns: repeat(3, 1fr);
+                                                        gap: var(--space-2);
+                                                    ",
+
+                                                    for _ in 0..12 {
+                                                        div {
+                                                            class: "skeleton",
+                                                            style: "
+                                                                border-radius: var(--radius-md);
+                                                                height: 100%;
+                                                            ",
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

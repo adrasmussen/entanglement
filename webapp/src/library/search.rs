@@ -30,8 +30,6 @@ pub fn LibrarySearch() -> Element {
             button {
                 class: "btn btn-primary",
                 onclick: move |_| {
-                    // Placeholder for library scan action
-                    // This could be replaced with appropriate modal or action
                     tracing::info!("Scan libraries clicked");
                 },
                 "Scan Libraries"
@@ -77,13 +75,13 @@ pub fn LibrarySearch() -> Element {
                     div {
                         class: "error-state",
                         style: "
-                            padding: var(--space-4);
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            margin-top: var(--space-4);
-                            color: var(--error);
-                            text-align: center;
-                        ",
+                                                padding: var(--space-4);
+                                                background-color: var(--surface);
+                                                border-radius: var(--radius-lg);
+                                                margin-top: var(--space-4);
+                                                color: var(--error);
+                                                text-align: center;
+                                            ",
                         "Error: {err}"
                     }
                 },
@@ -91,19 +89,22 @@ pub fn LibrarySearch() -> Element {
                     div {
                         class: "loading-state libraries-table",
                         style: "
-                            margin-top: var(--space-4);
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            overflow: hidden;
-                            box-shadow: var(--shadow-sm);
-                        ",
+                                                margin-top: var(--space-4);
+                                                background-color: var(--surface);
+                                                border-radius: var(--radius-lg);
+                                                overflow: hidden;
+                                                box-shadow: var(--shadow-sm);
+                                            ",
                         // Library table skeleton loading UI
                         table { style: "width: 100%; border-collapse: collapse;",
                             thead {
                                 tr {
                                     for _ in 0..4 {
                                         th {
-                                            div { class: "skeleton", style: "height: 24px; width: 100%;" }
+                                            div {
+                                                class: "skeleton",
+                                                style: "height: 24px; width: 100%;",
+                                            }
                                         }
                                     }
                                 }
@@ -113,7 +114,10 @@ pub fn LibrarySearch() -> Element {
                                     tr {
                                         for _ in 0..4 {
                                             td {
-                                                div { class: "skeleton", style: "height: 18px; width: 90%;" }
+                                                div {
+                                                    class: "skeleton",
+                                                    style: "height: 18px; width: 90%;",
+                                                }
                                             }
                                         }
                                     }
