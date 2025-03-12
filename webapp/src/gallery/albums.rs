@@ -10,7 +10,7 @@ use api::media::MediaUuid;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct AlbumDetailsTableProps {
-    album_uuids: Signal<Vec<AlbumUuid>>,
+    album_uuids: Memo<Vec<AlbumUuid>>,
     media_uuid: MediaUuid,
     update_signal: Signal<()>,
 }
@@ -23,6 +23,8 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
 
     // Fetch details for each album
     let albums_future = use_resource(move || {
+        //let album_uuids = album_uuids.clone();
+
         async move {
             let mut albums = Vec::new();
 
