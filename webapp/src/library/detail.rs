@@ -137,8 +137,7 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                                     span { "File count: {library.count}" }
                                 }
                             }
-                        
-                        // Action buttons
+                                                // Action buttons
                         // div { style: "display: flex; gap: var(--space-2);",
                         //     button {
                         //         class: "btn btn-secondary",

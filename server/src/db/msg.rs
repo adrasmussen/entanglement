@@ -40,7 +40,7 @@ pub enum DbMsg {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,
         gid: HashSet<String>,
-        hash: String,
+        media_uuid: MediaUuid,
         distance: i64,
     },
 

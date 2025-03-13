@@ -84,7 +84,7 @@ endpoint!(SimilarMedia);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SimilarMediaReq {
-    pub hash: String,
+    pub media_uuid: MediaUuid,
     pub distance: i64,
 }
 

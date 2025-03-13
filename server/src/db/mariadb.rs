@@ -140,10 +140,10 @@ impl ESDbService for MariaDBState {
         &self,
         uid: String,
         gid: HashSet<String>,
-        hash: String,
+        media_uuid: MediaUuid,
         distance: i64,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mariadb::similar_media(self.pool.clone(), uid, gid, hash, distance).await
+        common::db::mariadb::similar_media(self.pool.clone(), uid, gid, media_uuid, distance).await
     }
 
     // comment queries
@@ -328,10 +328,10 @@ impl ESInner for MariaDBState {
                     resp,
                     uid,
                     gid,
-                    hash,
+                    media_uuid,
                     distance,
                 } => {
-                    self.respond(resp, self.similar_media(uid, gid, hash, distance))
+                    self.respond(resp, self.similar_media(uid, gid, media_uuid, distance))
                         .await
                 }
 

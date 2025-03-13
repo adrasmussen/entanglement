@@ -42,7 +42,7 @@ trait ESDbService: ESInner {
         &self,
         uid: String,
         gid: HashSet<String>,
-        hash: String,
+        media_uuid: MediaUuid,
         distance: i64,
     ) -> anyhow::Result<Vec<MediaUuid>>;
 

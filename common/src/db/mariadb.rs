@@ -540,7 +540,7 @@ pub async fn similar_media(
     pool: Pool,
     uid: String,
     gid: HashSet<String>,
-    hash: String,
+    media_uuid: MediaUuid,
     distance: i64,
 ) -> anyhow::Result<Vec<MediaUuid>> {
     // for a given uid and filter, find all media that match either:
@@ -580,11 +580,11 @@ pub async fn similar_media(
         ) AS t3
         INNER JOIN media ON t3.media_uuid = media.media_uuid
         WHERE
-            hidden = FALSE AND BIG_HAM(:hash, hash) < :distance"
+            hidden = FALSE AND BIG_HAM((SELECT hash FROM media where media_uuid = :media_uuid), hash) < :distance"
         .with(params! {
             "uid" => uid,
             "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
-            "hash" => hash,
+            "media_uuid" => media_uuid,
             "distance" => distance,
         })
         .run(pool.get_conn().await?)

@@ -678,7 +678,7 @@ async fn similar_media(
                 resp: tx,
                 uid: uid,
                 gid: gid,
-                hash: message.hash,
+                media_uuid: message.media_uuid,
                 distance: message.distance,
             }
             .into(),

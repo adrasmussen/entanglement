@@ -14,6 +14,12 @@ pub const SLICE_PATH: &str = "slices";
 #[derive(Clone, Debug)]
 pub struct WebError(Arc<anyhow::Error>);
 
+impl WebError {
+    pub fn new() -> Self {
+        WebError(Arc::new(anyhow::Error::msg("")))
+    }
+}
+
 impl Display for WebError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)

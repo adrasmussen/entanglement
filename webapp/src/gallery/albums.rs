@@ -23,8 +23,6 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
 
     // Fetch details for each album
     let albums_future = use_resource(move || {
-        //let album_uuids = album_uuids.clone();
-
         async move {
             let mut albums = Vec::new();
 
