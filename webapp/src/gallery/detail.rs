@@ -68,17 +68,21 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
         }
     })?;
 
+    //
+    let media_uuid = use_memo(use_reactive(&media_uuid, |media_uuid| media_uuid));
+
     let mut status_signal = use_signal(|| String::from(""));
 
     // media_uuid is nonreactive, as it comes from the Router
     //
     // thus, to ensure that *this* component re-renders correctly upon changing media URLs directly,
     // we use_reactive() to subscribe the get_media() future to media_uuid as if it were reactive
-    let media_future = use_resource(use_reactive(&media_uuid, move |media_uuid| async move {
+    let media_future = use_resource(move || async move {
+        let media_uuid = *media_uuid.read();
         update_signal.read();
 
         get_media(&GetMediaReq { media_uuid }).await
-    }));
+    });
 
     // this subscribes the whole component to the use_resource() reactive variable
     let media_data = &*media_future.read();
@@ -102,8 +106,6 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
     let media = media_data.media;
 
     // subscribe other elements via memos
-    let media_uuid_memo = use_memo(use_reactive(&media_uuid, |media_uuid| media_uuid));
-
     let album_uuids = use_memo(move || match &*media_future.read() {
         Some(Ok(v)) => v.albums.clone(),
         _ => Vec::new(),
@@ -151,7 +153,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         match media.metadata {
                             MediaMetadata::Image => rsx! {
                                 img {
-                                    src: full_link(media_uuid),
+                                    src: full_link(media_uuid()),
                                     alt: media.note.clone(),
                                     class: "media-detail-image",
                                     style: "
@@ -162,14 +164,14 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                         object-fit: contain;
                                     ",
                                     onclick: move |_| {
-                                        MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid)));
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid())));
                                     },
                                 }
                             },
                             MediaMetadata::Video => rsx! {
                                 video {
                                     controls: true,
-                                    src: full_link(media_uuid),
+                                    src: full_link(media_uuid()),
                                     class: "media-detail-video",
                                     style: "
                                         width: 100%;
@@ -184,7 +186,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         }
                     }
 
-                    SimilarMedia { media_uuid: media_uuid_memo }
+                    SimilarMedia { media_uuid }
                 }
 
                 // Right column - All metadata, albums, and comments (scrollable)
@@ -209,7 +211,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                 let note = event.values().get("note").map(|v| v.as_value());
                                 match update_media(
                                         &UpdateMediaReq {
-                                            media_uuid,
+                                            media_uuid: media_uuid(),
                                             update: MediaUpdate {
                                                 hidden: None,
                                                 date,
@@ -278,7 +280,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                         onclick: move |_| async move {
                                             match update_media(
                                                     &UpdateMediaReq {
-                                                        media_uuid,
+                                                        media_uuid: media_uuid(),
                                                         update: MediaUpdate {
                                                             hidden: Some(!media.hidden),
                                                             date: None,
@@ -324,7 +326,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                 button {
                                     class: "btn btn-secondary",
                                     onclick: move |_| {
-                                        let link = full_link(media_uuid);
+                                        let link = full_link(media_uuid());
                                         let window = web_sys::window().expect("no global window exists");
                                         let _ = window.open_with_url_and_target(&link, "_blank");
                                     },
@@ -343,7 +345,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                     }
 
                     // Albums section - using our new component
-                    AlbumTable { album_uuids, media_uuid: media_uuid_memo }
+                    AlbumTable { album_uuids, media_uuid }
 
                     // Use our new comments component
                     CommentList {

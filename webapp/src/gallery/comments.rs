@@ -7,7 +7,7 @@ use api::{comment::*, media::MediaUuid};
 #[derive(Clone, PartialEq, Props)]
 pub struct CommentListProps {
     comment_uuids: Memo<Vec<CommentUuid>>,
-    media_uuid: MediaUuid,
+    media_uuid: Memo<MediaUuid>,
     update_signal: Signal<()>,
 }
 
@@ -32,14 +32,14 @@ pub fn CommentList(props: CommentListProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 struct CommentListInnerProps {
     comment_uuids: Memo<Vec<CommentUuid>>,
-    media_uuid: MediaUuid,
+    media_uuid: Memo<MediaUuid>,
     update_signal: Signal<()>,
 }
 
 #[component]
 fn CommentListInner(props: CommentListInnerProps) -> Element {
     let comment_uuids = props.comment_uuids;
-    let media_uuid = props.media_uuid;
+    let media_uuid = *props.media_uuid.read();
     let mut update_signal = props.update_signal;
 
     let mut new_comment = use_signal(|| String::new());
