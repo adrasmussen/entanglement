@@ -6,7 +6,7 @@ use api::media::*;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct SimilarMediaProps {
-    media_uuid: MediaUuid,
+    media_uuid: Memo<MediaUuid>,
 }
 
 #[component]
@@ -29,7 +29,7 @@ pub fn SimilarMedia(props: SimilarMediaProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct SimilarMediaInnerProps {
-    media_uuid: MediaUuid,
+    media_uuid: Memo<MediaUuid>,
 }
 
 #[component]
@@ -38,6 +38,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
     let mut distance_signal = use_signal(|| 64);
 
     let similar_future = use_resource(move || async move {
+        let media_uuid = media_uuid();
         let distance = distance_signal();
 
         similar_media(&SimilarMediaReq {
@@ -88,7 +89,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
     let filtered_items = similar_media
         .media
         .iter()
-        .filter(|uuid| **uuid != media_uuid)
+        .filter(|uuid| **uuid != media_uuid())
         .collect::<Vec<_>>();
 
     rsx! {
@@ -131,19 +132,19 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                             }
                         },
                         option { value: "64", "Very Similar" }
-                        option { value: "128", "Similar" }
-                        option { value: "192", "Somewhat Similar" }
-                        option { value: "256", "Broadly Similar" }
+                        option { value: "84", "Similar" }
+                        option { value: "106", "Somewhat Similar" }
+                        option { value: "128", "Broadly Similar" }
                     }
                 }
             }
             if filtered_items.is_empty() {
                 div { style: "
-                padding: var(--space-4);
-                text-align: center;
-                color: var(--text-tertiary);
-                font-style: italic;
-            ",
+                        padding: var(--space-4);
+                        text-align: center;
+                        color: var(--text-tertiary);
+                        font-style: italic;
+                    ",
                     "No similar media found. Try adjusting the threshold."
                 }
             } else {
@@ -152,36 +153,36 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                 div {
                     class: "similar-media-container",
                     style: "
-                    overflow-y: auto;
-                    max-height: 300px; /* Limit height to enforce scrolling */
-                    padding-right: var(--space-2);
-                    /* Enable smooth scrolling */
-                    scroll-behavior: smooth;
-                    /* Hide scrollbar but keep functionality */
-                    scrollbar-width: thin;
-                    scrollbar-color: var(--neutral-300) transparent;
+                        overflow-y: auto;
+                        max-height: 300px; /* Limit height to enforce scrolling */
+                        padding-right: var(--space-2);
+                        /* Enable smooth scrolling */
+                        scroll-behavior: smooth;
+                        /* Hide scrollbar but keep functionality */
+                        scrollbar-width: thin;
+                        scrollbar-color: var(--neutral-300) transparent;
 
-                    /* Custom scrollbar styling */
-                    &::-webkit-scrollbar {{
-                        width: 6px;
-                    }}
-                    &::-webkit-scrollbar-track {{
-                        background: transparent;
-                    }}
-                    &::-webkit-scrollbar-thumb {{
-                        background-color: var(--neutral-300);
-                        border-radius: 20px;
-                    }}
-                ",
+                        /* Custom scrollbar styling */
+                        &::-webkit-scrollbar {{
+                            width: 6px;
+                        }}
+                        &::-webkit-scrollbar-track {{
+                            background: transparent;
+                        }}
+                        &::-webkit-scrollbar-thumb {{
+                            background-color: var(--neutral-300);
+                            border-radius: 20px;
+                        }}
+                    ",
 
                     div {
                         class: "similar-media-grid",
                         style: "
-                        display: grid;
-                        grid-template-columns: repeat(3, 1fr);
-                        gap: var(--space-2);
-                        width: 100%;
-                    ",
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                            gap: var(--space-2);
+                            width: 100%;
+                        ",
 
                         for & media_id in filtered_items {
                             Link {
@@ -192,26 +193,26 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                                 div {
                                     class: "similar-media-item",
                                     style: "
-                                    position: relative;
-                                    overflow: hidden;
-                                    border-radius: var(--radius-md);
-                                    height: 100%;
-                                    transition: transform var(--transition-fast) var(--easing-standard);
+                                        position: relative;
+                                        overflow: hidden;
+                                        border-radius: var(--radius-md);
+                                        height: 100%;
+                                        transition: transform var(--transition-fast) var(--easing-standard);
 
-                                    &:hover {{
-                                        transform: scale(1.05);
-                                        box-shadow: var(--shadow-md);
-                                        z-index: 1;
-                                    }}
-                                ",
+                                        &:hover {{
+                                            transform: scale(1.05);
+                                            box-shadow: var(--shadow-md);
+                                            z-index: 1;
+                                        }}
+                                    ",
                                     img {
                                         src: thumbnail_link(media_id),
                                         alt: "Similar media",
                                         style: "
-                                        width: 100%;
-                                        aspect-ratio: 1;
-                                        object-fit: cover;
-                                    ",
+                                            width: 100%;
+                                            aspect-ratio: 1;
+                                            object-fit: cover;
+                                        ",
                                     }
                                 }
                             }

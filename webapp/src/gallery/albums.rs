@@ -8,18 +8,41 @@ use crate::{
 use api::album::*;
 use api::media::MediaUuid;
 
+// no update_signal() because all of the changes are made through modal boxes
 #[derive(Clone, PartialEq, Props)]
-pub struct AlbumDetailsTableProps {
+pub struct AlbumTableProps {
     album_uuids: Memo<Vec<AlbumUuid>>,
-    media_uuid: MediaUuid,
-    update_signal: Signal<()>,
+    media_uuid: Memo<MediaUuid>,
 }
 
 #[component]
-pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
+pub fn AlbumTable(props: AlbumTableProps) -> Element {
+    rsx! {
+        ErrorBoundary {
+            handle_error: |error: ErrorContext| {
+                rsx! {
+                    if let Some(error_ui) = error.show() {
+                        {error_ui}
+                    } else {
+                        div { "AlbumTable encountered an error.  Check the logs or reach out the the administrators." }
+                    }
+                }
+            },
+            AlbumTableInner { album_uuids: props.album_uuids, media_uuid: props.media_uuid }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct AlbumTableInnerProps {
+    album_uuids: Memo<Vec<AlbumUuid>>,
+    media_uuid: Memo<MediaUuid>,
+}
+
+#[component]
+fn AlbumTableInner(props: AlbumTableInnerProps) -> Element {
     let album_uuids = props.album_uuids;
-    let media_uuid = props.media_uuid;
-    let _update_signal = props.update_signal;
+    let media_uuid = *props.media_uuid.read();
 
     // Fetch details for each album
     let albums_future = use_resource(move || {
@@ -30,7 +53,7 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
                 match get_album(&GetAlbumReq { album_uuid }).await {
                     Ok(resp) => albums.push((album_uuid, resp.album)),
                     Err(err) => {
-                        tracing::error!("Failed to fetch album {album_uuid}: {err}");
+                        tracing::error!("Failed to fetch album for {album_uuid}: {err}");
                     }
                 }
             }
@@ -42,7 +65,6 @@ pub fn AlbumDetailsTable(props: AlbumDetailsTableProps) -> Element {
     });
 
     let albums = &*albums_future.read();
-
     let albums = albums.clone();
 
     rsx! {

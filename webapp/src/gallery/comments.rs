@@ -5,14 +5,39 @@ use crate::common::local_time;
 use api::{comment::*, media::MediaUuid};
 
 #[derive(Clone, PartialEq, Props)]
-pub struct CommentsListProps {
+pub struct CommentListProps {
     comment_uuids: Memo<Vec<CommentUuid>>,
     media_uuid: MediaUuid,
     update_signal: Signal<()>,
 }
 
 #[component]
-pub fn CommentsList(props: CommentsListProps) -> Element {
+pub fn CommentList(props: CommentListProps) -> Element {
+    rsx! {
+        ErrorBoundary {
+            handle_error: |error: ErrorContext| {
+                rsx! {
+                    if let Some(error_ui) = error.show() {
+                        {error_ui}
+                    } else {
+                        div { "CommentList encountered an error.  Check the logs or reach out the the administrators." }
+                    }
+                }
+            },
+            CommentListInner {comment_uuids: props.comment_uuids, media_uuid: props.media_uuid, update_signal: props.update_signal}
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct CommentListInnerProps {
+    comment_uuids: Memo<Vec<CommentUuid>>,
+    media_uuid: MediaUuid,
+    update_signal: Signal<()>,
+}
+
+#[component]
+fn CommentListInner(props: CommentListInnerProps) -> Element {
     let comment_uuids = props.comment_uuids;
     let media_uuid = props.media_uuid;
     let mut update_signal = props.update_signal;
@@ -34,8 +59,8 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
                 .await
                 {
                     Ok(resp) => comments.push((comment_uuid, resp.comment)),
-                    Err(_) => {
-                        error!("failed to fetch comment for {comment_uuid}")
+                    Err(err) => {
+                        error!("Failed to fetch comment for {comment_uuid}: {err}")
                     }
                 }
             }
@@ -46,7 +71,6 @@ pub fn CommentsList(props: CommentsListProps) -> Element {
         }
     });
 
-    // unlike the GalleryDetail, the future.read() happens on the inside of the element
     let comments = &*comments_future.read();
     let comments = comments.clone();
 

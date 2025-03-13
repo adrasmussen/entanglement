@@ -4,7 +4,7 @@ use dioxus_router::prelude::*;
 use crate::{
     common::stream::full_link,
     components::modal::{Modal, ModalBox, MODAL_STACK},
-    gallery::{albums::AlbumDetailsTable, comments::CommentsList, similar::SimilarMedia},
+    gallery::{albums::AlbumTable, comments::CommentList, similar::SimilarMedia},
     Route,
 };
 use api::media::*;
@@ -70,14 +70,18 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
     let mut status_signal = use_signal(|| String::from(""));
 
-    let media_future = use_resource(move || async move {
+    // media_uuid is nonreactive, as it comes from the Router
+    //
+    // thus, to ensure that *this* component re-renders correctly upon changing media URLs directly,
+    // we use_reactive() to subscribe the get_media() future to media_uuid as if it were reactive
+    let media_future = use_resource(use_reactive(&media_uuid, move |media_uuid| async move {
         update_signal.read();
 
         get_media(&GetMediaReq { media_uuid }).await
-    });
+    }));
 
-    // this subscribes the whole element to the use_resource result, and will re-render when it completes
-    let media_data = media_future.read();
+    // this subscribes the whole component to the use_resource() reactive variable
+    let media_data = &*media_future.read();
 
     // converting the option to an error and bubbling it up results in the page never reloading, so we
     // transpose to handle the possible error first and then match/return early
@@ -87,15 +91,19 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
         }
     })? {
         Some(v) => v,
-        None => return rsx! {
-            GalleryDetailSkeleton {}
-        },
+        None => {
+            return rsx! {
+                GalleryDetailSkeleton {}
+            }
+        }
     };
 
     // extract the parts of the message, and use memos to send them to child elements
     let media = media_data.media;
 
     // subscribe other elements via memos
+    let media_uuid_memo = use_memo(use_reactive(&media_uuid, |media_uuid| media_uuid));
+
     let album_uuids = use_memo(move || match &*media_future.read() {
         Some(Ok(v)) => v.albums.clone(),
         _ => Vec::new(),
@@ -176,7 +184,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         }
                     }
 
-                    SimilarMedia { media_uuid }
+                    SimilarMedia { media_uuid: media_uuid_memo }
                 }
 
                 // Right column - All metadata, albums, and comments (scrollable)
@@ -335,10 +343,10 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                     }
 
                     // Albums section - using our new component
-                    AlbumDetailsTable { album_uuids, media_uuid, update_signal }
+                    AlbumTable { album_uuids, media_uuid: media_uuid_memo }
 
                     // Use our new comments component
-                    CommentsList {
+                    CommentList {
                         comment_uuids,
                         media_uuid,
                         update_signal,
