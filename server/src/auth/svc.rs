@@ -16,7 +16,7 @@ use tracing::{debug, error, info, instrument, Level};
 use crate::auth::msg::AuthMsg;
 use crate::auth::ESAuthService;
 use crate::db::msg::DbMsg;
-use crate::service::*;
+use crate::service::{ESMReceiver, ESM, ESMRegistry, ESInner, EntanglementService, ESMSender, ServiceType};
 
 // auth service
 //
@@ -38,10 +38,10 @@ pub struct AuthService {
 impl EntanglementService for AuthService {
     type Inner = AuthCache;
 
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+    fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
 
-        sender_map.insert(ServiceType::Auth, tx);
+        registry.insert(ServiceType::Auth, tx);
 
         AuthService {
             config: config.clone(),
@@ -50,11 +50,11 @@ impl EntanglementService for AuthService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, senders))]
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         let config = self.config.clone();
         let receiver = self.receiver.clone();
-        let state = Arc::new(AuthCache::new(config.clone(), senders.clone())?);
+        let state = Arc::new(AuthCache::new(config.clone(), registry.clone())?);
 
         // determine authn/authz providers from the global config file
         //
@@ -117,13 +117,81 @@ impl EntanglementService for AuthService {
 }
 
 pub struct AuthCache {
-    db_svc_sender: ESMSender,
+    registry: ESMRegistry,
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
     authz_providers: Arc<Mutex<Vec<Box<dyn AuthzBackend>>>>,
     // uid: set(gid)
     user_cache: Arc<AwaitCache<String, HashSet<String>>>,
     // media_uuid: set(gid)
     access_cache: Arc<AwaitCache<MediaUuid, HashSet<String>>>,
+}
+
+#[async_trait]
+impl ESInner for AuthCache {
+    fn new(
+        _config: Arc<ESConfig>,
+        registry: ESMRegistry,
+    ) -> anyhow::Result<Self> {
+        Ok(AuthCache {
+            registry: registry.clone(),
+            authn_providers: Arc::new(Mutex::new(Vec::new())),
+            authz_providers: Arc::new(Mutex::new(Vec::new())),
+            user_cache: Arc::new(AwaitCache::new()),
+            access_cache: Arc::new(AwaitCache::new()),
+        })
+    }
+
+    fn registry(&self) -> ESMRegistry {
+        self.registry.clone()
+    }
+
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+        match esm {
+            ESM::Auth(message) => match message {
+                AuthMsg::ClearUserCache { resp, uid } => {
+                    self.respond(resp, self.clear_user_cache(uid)).await
+                }
+                AuthMsg::ClearAccessCache { resp, uuid } => {
+                    self.respond(resp, self.clear_access_cache(uuid)).await
+                }
+
+                AuthMsg::GroupsForUser { resp, uid } => {
+                    self.respond(resp, self.groups_for_user(uid)).await
+                }
+                AuthMsg::UsersInGroup { resp, gid } => {
+                    self.respond(resp, self.users_in_group(gid)).await
+                }
+                AuthMsg::IsGroupMember { resp, uid, gid } => {
+                    self.respond(resp, self.is_group_member(uid, gid)).await
+                }
+                AuthMsg::CanAccessMedia {
+                    resp,
+                    uid,
+                    media_uuid,
+                } => {
+                    self.respond(resp, self.can_access_media(uid, media_uuid))
+                        .await
+                }
+                AuthMsg::OwnsMedia {
+                    resp,
+                    uid,
+                    media_uuid,
+                } => self.respond(resp, self.owns_media(uid, media_uuid)).await,
+                AuthMsg::IsValidUser { resp, uid } => {
+                    self.respond(resp, self.is_valid_user(uid)).await
+                }
+                AuthMsg::AuthenticateUser {
+                    resp,
+                    uid,
+                    password,
+                } => {
+                    self.respond(resp, self.authenticate_user(uid, password))
+                        .await
+                }
+            },
+            _ => Err(anyhow::Error::msg("not implemented")),
+        }
+    }
 }
 
 impl AuthCache {
@@ -142,9 +210,10 @@ impl AuthCache {
     }
 
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
+        let db_svc_sender = self.registry.get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender
+        db_svc_sender
             .clone()
             .send(
                 DbMsg::MediaAccessGroups {
@@ -255,9 +324,10 @@ impl ESAuthService for AuthCache {
     // this should be a relatively uncommon operation, so having three independent database messages
     // is worth being able to use the existing messages to get the information
     async fn owns_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
+        let db_svc_sender = self.registry.get(&ServiceType::Db)?;
         let (media_tx, media_rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender
+        db_svc_sender
             .clone()
             .send(
                 DbMsg::GetMedia {
@@ -275,7 +345,7 @@ impl ESAuthService for AuthCache {
 
         let (library_tx, library_rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender
+        db_svc_sender
             .clone()
             .send(
                 DbMsg::GetLibrary {
@@ -339,69 +409,5 @@ impl ESAuthService for AuthCache {
         }
 
         Ok(false)
-    }
-}
-
-#[async_trait]
-impl ESInner for AuthCache {
-    fn new(
-        _config: Arc<ESConfig>,
-        senders: HashMap<ServiceType, ESMSender>,
-    ) -> anyhow::Result<Self> {
-        Ok(AuthCache {
-            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
-            authn_providers: Arc::new(Mutex::new(Vec::new())),
-            authz_providers: Arc::new(Mutex::new(Vec::new())),
-            user_cache: Arc::new(AwaitCache::new()),
-            access_cache: Arc::new(AwaitCache::new()),
-        })
-    }
-
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
-        match esm {
-            ESM::Auth(message) => match message {
-                AuthMsg::ClearUserCache { resp, uid } => {
-                    self.respond(resp, self.clear_user_cache(uid)).await
-                }
-                AuthMsg::ClearAccessCache { resp, uuid } => {
-                    self.respond(resp, self.clear_access_cache(uuid)).await
-                }
-
-                AuthMsg::GroupsForUser { resp, uid } => {
-                    self.respond(resp, self.groups_for_user(uid)).await
-                }
-                AuthMsg::UsersInGroup { resp, gid } => {
-                    self.respond(resp, self.users_in_group(gid)).await
-                }
-                AuthMsg::IsGroupMember { resp, uid, gid } => {
-                    self.respond(resp, self.is_group_member(uid, gid)).await
-                }
-                AuthMsg::CanAccessMedia {
-                    resp,
-                    uid,
-                    media_uuid,
-                } => {
-                    self.respond(resp, self.can_access_media(uid, media_uuid))
-                        .await
-                }
-                AuthMsg::OwnsMedia {
-                    resp,
-                    uid,
-                    media_uuid,
-                } => self.respond(resp, self.owns_media(uid, media_uuid)).await,
-                AuthMsg::IsValidUser { resp, uid } => {
-                    self.respond(resp, self.is_valid_user(uid)).await
-                }
-                AuthMsg::AuthenticateUser {
-                    resp,
-                    uid,
-                    password,
-                } => {
-                    self.respond(resp, self.authenticate_user(uid, password))
-                        .await
-                }
-            },
-            _ => Err(anyhow::Error::msg("not implemented")),
-        }
     }
 }

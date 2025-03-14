@@ -9,6 +9,7 @@ use crate::service::*;
 
 pub mod msg;
 pub mod svc;
+pub mod check;
 
 #[async_trait]
 trait ESAuthService: ESInner {

@@ -10,10 +10,11 @@ mod db;
 mod fs;
 mod http;
 mod service;
+mod task;
 
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::config::ESConfig;
-use service::EntanglementService;
+use service::{ESMRegistry, EntanglementService};
 
 // the outermost caller should definitely have a loop that periodically calls
 // Status for each service to ensure that the threads haven't stopped, and then
@@ -64,17 +65,17 @@ async fn main() -> anyhow::Result<()> {
     info!("starting core services...");
 
     // start the core services
-    let mut senders = HashMap::new();
+    let mut registry = ESMRegistry::new();
 
-    let auth_svc = auth::svc::AuthService::create(config.clone(), &mut senders);
-    let db_svc = db::mariadb::MariaDBService::create(config.clone(), &mut senders);
-    let fs_svc = fs::svc::FileService::create(config.clone(), &mut senders);
-    let http_svc = http::svc::HttpService::create(config.clone(), &mut senders);
+    let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);
+    let db_svc = db::mariadb::MariaDBService::create(config.clone(), &registry);
+    let fs_svc = fs::svc::FileService::create(config.clone(), &registry);
+    let http_svc = http::svc::HttpService::create(config.clone(), &registry);
 
-    auth_svc.start(&senders).await?;
-    db_svc.start(&senders).await?;
-    fs_svc.start(&senders).await?;
-    http_svc.start(&senders).await?;
+    auth_svc.start(&registry).await?;
+    db_svc.start(&registry).await?;
+    fs_svc.start(&registry).await?;
+    http_svc.start(&registry).await?;
 
     info!("done");
 

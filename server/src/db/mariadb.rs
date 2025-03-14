@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
-use crate::service::*;
+use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
 use api::{album::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
@@ -28,10 +28,10 @@ pub struct MariaDBService {
 impl EntanglementService for MariaDBService {
     type Inner = MariaDBState;
 
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+    fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        sender_map.insert(ServiceType::Db, tx);
+        registry.insert(ServiceType::Db, tx);
 
         MariaDBService {
             config: config.clone(),
@@ -40,11 +40,11 @@ impl EntanglementService for MariaDBService {
         }
     }
 
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(MariaDBState::new(self.config.clone(), senders.clone())?);
+        let state = Arc::new(MariaDBState::new(self.config.clone(), registry.clone())?);
 
         let serve = {
             async move {
@@ -77,15 +77,194 @@ impl EntanglementService for MariaDBService {
 }
 
 pub struct MariaDBState {
-    auth_svc_sender: ESMSender,
+    registry: ESMRegistry,
     pool: Pool,
+}
+
+#[async_trait]
+impl ESInner for MariaDBState {
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+        Ok(MariaDBState {
+            registry: registry.clone(),
+            pool: Pool::new(config.mariadb_url.clone().as_str()),
+        })
+    }
+
+    fn registry(&self) -> ESMRegistry {
+        self.registry.clone()
+    }
+
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+        match esm {
+            ESM::Db(message) => match message {
+                // auth messages
+                DbMsg::MediaAccessGroups { resp, media_uuid } => {
+                    self.respond(resp, self.media_access_groups(media_uuid))
+                        .await
+                }
+
+                // media messages
+                DbMsg::AddMedia { resp, media } => self.respond(resp, self.add_media(media)).await,
+                DbMsg::GetMedia { resp, media_uuid } => {
+                    self.respond(resp, self.get_media(media_uuid)).await
+                }
+                DbMsg::GetMediaUuidByPath { resp, path } => {
+                    self.respond(resp, self.get_media_uuid_by_path(path)).await
+                }
+                DbMsg::UpdateMedia {
+                    resp,
+                    media_uuid,
+                    update,
+                } => {
+                    self.respond(resp, self.update_media(media_uuid, update))
+                        .await
+                }
+                DbMsg::SearchMedia {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_media(uid, gid, filter))
+                        .await
+                }
+                DbMsg::SimilarMedia {
+                    resp,
+                    uid,
+                    gid,
+                    media_uuid,
+                    distance,
+                } => {
+                    self.respond(resp, self.similar_media(uid, gid, media_uuid, distance))
+                        .await
+                }
+
+                // comment messages
+                DbMsg::AddComment { resp, comment } => {
+                    self.respond(resp, self.add_comment(comment)).await
+                }
+                DbMsg::GetComment { resp, comment_uuid } => {
+                    self.respond(resp, self.get_comment(comment_uuid)).await
+                }
+                DbMsg::DeleteComment { resp, comment_uuid } => {
+                    self.respond(resp, self.delete_comment(comment_uuid)).await
+                }
+                DbMsg::UpdateComment {
+                    resp,
+                    comment_uuid,
+                    text,
+                } => {
+                    self.respond(resp, self.update_comment(comment_uuid, text))
+                        .await
+                }
+
+                // album messages
+                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
+                DbMsg::GetAlbum { resp, album_uuid } => {
+                    self.respond(resp, self.get_album(album_uuid)).await
+                }
+                DbMsg::DeleteAlbum { resp, album_uuid } => {
+                    self.respond(resp, self.delete_album(album_uuid)).await
+                }
+                DbMsg::UpdateAlbum {
+                    resp,
+                    album_uuid,
+                    update,
+                } => {
+                    self.respond(resp, self.update_album(album_uuid, update))
+                        .await
+                }
+                DbMsg::AddMediaToAlbum {
+                    resp,
+                    media_uuid,
+                    album_uuid,
+                } => {
+                    self.respond(resp, self.add_media_to_album(media_uuid, album_uuid))
+                        .await
+                }
+                DbMsg::RmMediaFromAlbum {
+                    resp,
+                    media_uuid,
+                    album_uuid,
+                } => {
+                    self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
+                        .await
+                }
+                DbMsg::SearchAlbums {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_albums(uid, gid, filter))
+                        .await
+                }
+                DbMsg::SearchMediaInAlbum {
+                    resp,
+                    uid,
+                    gid,
+                    album_uuid,
+                    filter,
+                } => {
+                    self.respond(
+                        resp,
+                        self.search_media_in_album(uid, gid, album_uuid, filter),
+                    )
+                    .await
+                }
+
+                // library messages
+                DbMsg::AddLibrary { resp, library } => {
+                    self.respond(resp, self.add_library(library)).await
+                }
+                DbMsg::GetLibrary { resp, library_uuid } => {
+                    self.respond(resp, self.get_library(library_uuid)).await
+                }
+                DbMsg::UpdateLibrary {
+                    resp,
+                    library_uuid,
+                    update,
+                } => {
+                    self.respond(resp, self.update_library(library_uuid, update))
+                        .await
+                }
+                DbMsg::SearchLibraries {
+                    resp,
+                    uid,
+                    gid,
+                    filter,
+                } => {
+                    self.respond(resp, self.search_libraries(uid, gid, filter))
+                        .await
+                }
+                DbMsg::SearchMediaInLibrary {
+                    resp,
+                    uid,
+                    gid,
+                    library_uuid,
+                    filter,
+                    hidden,
+                } => {
+                    self.respond(
+                        resp,
+                        self.search_media_in_library(uid, gid, library_uuid, filter, hidden),
+                    )
+                    .await
+                }
+                _ => panic!(),
+            },
+            _ => Err(anyhow::Error::msg("not implemented")),
+        }
+    }
 }
 
 impl MariaDBState {
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()> {
+        let auth_svc_sender = self.registry.get(&ServiceType::Auth)?;
+
         let (tx, rx) = tokio::sync::oneshot::channel();
 
-        self.auth_svc_sender
+        auth_svc_sender
             .send(
                 AuthMsg::ClearAccessCache {
                     resp: tx,
@@ -275,180 +454,5 @@ impl ESDbService for MariaDBState {
             hidden,
         )
         .await
-    }
-}
-
-#[async_trait]
-impl ESInner for MariaDBState {
-    fn new(
-        config: Arc<ESConfig>,
-        senders: HashMap<ServiceType, ESMSender>,
-    ) -> anyhow::Result<Self> {
-        Ok(MariaDBState {
-            auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
-            pool: Pool::new(config.mariadb_url.clone().as_str()),
-        })
-    }
-
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
-        match esm {
-            ESM::Db(message) => match message {
-                // auth messages
-                DbMsg::MediaAccessGroups { resp, media_uuid } => {
-                    self.respond(resp, self.media_access_groups(media_uuid))
-                        .await
-                }
-
-                // media messages
-                DbMsg::AddMedia { resp, media } => self.respond(resp, self.add_media(media)).await,
-                DbMsg::GetMedia { resp, media_uuid } => {
-                    self.respond(resp, self.get_media(media_uuid)).await
-                }
-                DbMsg::GetMediaUuidByPath { resp, path } => {
-                    self.respond(resp, self.get_media_uuid_by_path(path)).await
-                }
-                DbMsg::UpdateMedia {
-                    resp,
-                    media_uuid,
-                    update,
-                } => {
-                    self.respond(resp, self.update_media(media_uuid, update))
-                        .await
-                }
-                DbMsg::SearchMedia {
-                    resp,
-                    uid,
-                    gid,
-                    filter,
-                } => {
-                    self.respond(resp, self.search_media(uid, gid, filter))
-                        .await
-                }
-                DbMsg::SimilarMedia {
-                    resp,
-                    uid,
-                    gid,
-                    media_uuid,
-                    distance,
-                } => {
-                    self.respond(resp, self.similar_media(uid, gid, media_uuid, distance))
-                        .await
-                }
-
-                // comment messages
-                DbMsg::AddComment { resp, comment } => {
-                    self.respond(resp, self.add_comment(comment)).await
-                }
-                DbMsg::GetComment { resp, comment_uuid } => {
-                    self.respond(resp, self.get_comment(comment_uuid)).await
-                }
-                DbMsg::DeleteComment { resp, comment_uuid } => {
-                    self.respond(resp, self.delete_comment(comment_uuid)).await
-                }
-                DbMsg::UpdateComment {
-                    resp,
-                    comment_uuid,
-                    text,
-                } => {
-                    self.respond(resp, self.update_comment(comment_uuid, text))
-                        .await
-                }
-
-                // album messages
-                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
-                DbMsg::GetAlbum { resp, album_uuid } => {
-                    self.respond(resp, self.get_album(album_uuid)).await
-                }
-                DbMsg::DeleteAlbum { resp, album_uuid } => {
-                    self.respond(resp, self.delete_album(album_uuid)).await
-                }
-                DbMsg::UpdateAlbum {
-                    resp,
-                    album_uuid,
-                    update,
-                } => {
-                    self.respond(resp, self.update_album(album_uuid, update))
-                        .await
-                }
-                DbMsg::AddMediaToAlbum {
-                    resp,
-                    media_uuid,
-                    album_uuid,
-                } => {
-                    self.respond(resp, self.add_media_to_album(media_uuid, album_uuid))
-                        .await
-                }
-                DbMsg::RmMediaFromAlbum {
-                    resp,
-                    media_uuid,
-                    album_uuid,
-                } => {
-                    self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
-                        .await
-                }
-                DbMsg::SearchAlbums {
-                    resp,
-                    uid,
-                    gid,
-                    filter,
-                } => {
-                    self.respond(resp, self.search_albums(uid, gid, filter))
-                        .await
-                }
-                DbMsg::SearchMediaInAlbum {
-                    resp,
-                    uid,
-                    gid,
-                    album_uuid,
-                    filter,
-                } => {
-                    self.respond(
-                        resp,
-                        self.search_media_in_album(uid, gid, album_uuid, filter),
-                    )
-                    .await
-                }
-
-                // library messages
-                DbMsg::AddLibrary { resp, library } => {
-                    self.respond(resp, self.add_library(library)).await
-                }
-                DbMsg::GetLibrary { resp, library_uuid } => {
-                    self.respond(resp, self.get_library(library_uuid)).await
-                }
-                DbMsg::UpdateLibrary {
-                    resp,
-                    library_uuid,
-                    update,
-                } => {
-                    self.respond(resp, self.update_library(library_uuid, update))
-                        .await
-                }
-                DbMsg::SearchLibraries {
-                    resp,
-                    uid,
-                    gid,
-                    filter,
-                } => {
-                    self.respond(resp, self.search_libraries(uid, gid, filter))
-                        .await
-                }
-                DbMsg::SearchMediaInLibrary {
-                    resp,
-                    uid,
-                    gid,
-                    library_uuid,
-                    filter,
-                    hidden,
-                } => {
-                    self.respond(
-                        resp,
-                        self.search_media_in_library(uid, gid, library_uuid, filter, hidden),
-                    )
-                    .await
-                }
-            },
-            _ => Err(anyhow::Error::msg("not implemented")),
-        }
     }
 }

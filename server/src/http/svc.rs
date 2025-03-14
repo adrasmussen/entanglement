@@ -24,14 +24,16 @@ use tower_http::{
 };
 use tracing::{debug, error, info, instrument, Level};
 
-use crate::auth::msg::AuthMsg;
+use crate::auth::{check::AuthCheck, msg::AuthMsg};
 use crate::db::msg::DbMsg;
 use crate::fs::msg::FsMsg;
 use crate::http::{
     auth::{proxy_auth, CurrentUser},
     AppError,
 };
-use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use crate::service::{
+    ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
+};
 use api::{album::*, auth::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
@@ -67,10 +69,10 @@ pub struct HttpService {
 impl EntanglementService for HttpService {
     type Inner = HttpEndpoint;
 
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+    fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        sender_map.insert(ServiceType::Http, tx);
+        registry.insert(ServiceType::Http, tx);
 
         HttpService {
             config: config.clone(),
@@ -80,10 +82,10 @@ impl EntanglementService for HttpService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, senders))]
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(HttpEndpoint::new(self.config.clone(), senders.clone())?);
+        let state = Arc::new(HttpEndpoint::new(self.config.clone(), registry.clone())?);
 
         // if we wanted to support more socket types, we could spawn several listeners since they
         // don't have any relevant state and the message handlers are all fully concurrent
@@ -133,6 +135,7 @@ impl EntanglementService for HttpService {
 #[derive(Clone, Debug)]
 pub struct HttpEndpoint {
     config: Arc<ESConfig>,
+    registry: ESMRegistry,
     auth_svc_sender: ESMSender,
     db_svc_sender: ESMSender,
     fs_svc_sender: ESMSender,
@@ -140,18 +143,20 @@ pub struct HttpEndpoint {
 
 #[async_trait]
 impl ESInner for HttpEndpoint {
-    fn new(
-        config: Arc<ESConfig>,
-        senders: HashMap<ServiceType, ESMSender>,
-    ) -> anyhow::Result<Self> {
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         Ok(HttpEndpoint {
             config: config.clone(),
+            registry: registry.clone(),
             // panic if we can't find all of the necessary senders, since this is a
             // compile-time problem and not a runtime problem
-            auth_svc_sender: senders.get(&ServiceType::Auth).unwrap().clone(),
-            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
-            fs_svc_sender: senders.get(&ServiceType::Fs).unwrap().clone(),
+            auth_svc_sender: registry.get(&ServiceType::Auth).unwrap().clone(),
+            db_svc_sender: registry.get(&ServiceType::Db).unwrap().clone(),
+            fs_svc_sender: registry.get(&ServiceType::Fs).unwrap().clone(),
         })
+    }
+
+    fn registry(&self) -> ESMRegistry {
+        self.registry.clone()
     }
 
     // currently there are no useful messages for this service to respond to
@@ -302,187 +307,9 @@ impl HttpEndpoint {
         handle
     }
 
-    #[instrument(level=Level::DEBUG)]
-    async fn groups_for_user(&self, uid: &String) -> anyhow::Result<HashSet<String>> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.auth_svc_sender
-            .send(
-                AuthMsg::GroupsForUser {
-                    resp: tx,
-                    uid: uid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await?
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn is_group_member(&self, uid: &String, gid: HashSet<String>) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.auth_svc_sender
-            .send(
-                AuthMsg::IsGroupMember {
-                    resp: tx,
-                    uid: uid.clone(),
-                    gid: gid,
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await?
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.auth_svc_sender
-            .send(
-                AuthMsg::CanAccessMedia {
-                    resp: tx,
-                    uid: uid.clone(),
-                    media_uuid: media_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await?
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.auth_svc_sender
-            .send(
-                AuthMsg::OwnsMedia {
-                    resp: tx,
-                    uid: uid.clone(),
-                    media_uuid: media_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await?
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn can_access_comment(
-        &self,
-        uid: &String,
-        comment_uuid: &CommentUuid,
-    ) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetComment {
-                    resp: tx,
-                    comment_uuid: comment_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let comment = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
-
-        self.can_access_media(uid, &comment.media_uuid).await
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn owns_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetComment {
-                    resp: tx,
-                    comment_uuid: comment_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let comment = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
-
-        Ok(uid.to_owned() == comment.uid)
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetAlbum {
-                    resp: tx,
-                    album_uuid: album_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let album = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
-
-        self.is_group_member(&uid, HashSet::from([album.gid])).await
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn owns_album(&self, uid: &String, album_uuid: &AlbumUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetAlbum {
-                    resp: tx,
-                    album_uuid: album_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let album = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
-
-        Ok(uid.to_owned() == album.uid)
-    }
-
-    #[instrument(level=Level::DEBUG)]
-    async fn owns_library(&self, uid: &String, library_uuid: &LibraryUuid) -> anyhow::Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetLibrary {
-                    resp: tx,
-                    library_uuid: library_uuid.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let library = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
-
-        self.is_group_member(&uid, HashSet::from([library.gid]))
-            .await
-    }
 }
+
+impl AuthCheck for HttpEndpoint {}
 
 // http handlers
 
@@ -835,7 +662,7 @@ async fn add_album(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    // anyone may create an album, but they must be in the group they are creating
+    // anyone may create an album, but they must be in the group of the album they create
     if !state
         .is_group_member(&uid, HashSet::from([message.gid.clone()]))
         .await?

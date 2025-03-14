@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use anyhow;
+use anyhow::Result;
 use async_trait::async_trait;
+use dashmap::DashMap;
 use tokio;
 
 use common::config::ESConfig;
@@ -17,6 +17,7 @@ pub enum ServiceType {
     Db,
     Fs,
     Http,
+    Task,
 }
 
 // Entanglement Service Messages
@@ -28,7 +29,7 @@ pub type ESMReceiver = tokio::sync::mpsc::Receiver<ESM>;
 
 // message responses are carried back via oneshot channels, and
 // this ensures consistency
-pub type ESMResp<T> = tokio::sync::oneshot::Sender<anyhow::Result<T>>;
+pub type ESMResp<T> = tokio::sync::oneshot::Sender<Result<T>>;
 
 #[derive(Debug)]
 pub enum ESM {
@@ -37,23 +38,52 @@ pub enum ESM {
     Fs(crate::fs::msg::FsMsg),
     _Http(crate::http::msg::HttpMsg),
     _Svc(crate::service::msg::Svc),
+    Task(crate::task::msg::TaskMsg),
+}
+
+// currently, we assume that each service will be instantiated
+// once, and that there should be one message namespace
+#[derive(Clone, Debug)]
+pub struct ESMRegistry(Arc<DashMap<ServiceType, ESMSender>>);
+
+impl ESMRegistry {
+    pub fn new() -> Self {
+        ESMRegistry(Arc::new(DashMap::new()))
+    }
+
+    pub fn insert(&self, k: ServiceType, v: ESMSender) -> Result<()> {
+        match self.0.clone().insert(k.clone(), v) {
+            None => return Ok(()),
+            Some(w) => {
+                self.0.clone().insert(k, w);
+                return Err(anyhow::Error::msg(
+                    "internal compile time error -- a sender was added twice to the registry",
+                ));
+            }
+        }
+    }
+
+    pub fn get(&self, k: &ServiceType) -> Result<ESMSender> {
+        Ok(self.0.get(k).ok_or_else(|| anyhow::Error::msg("internal compile time error -- a service was started without a necessary dependency"))?.clone())
+    }
 }
 
 #[async_trait]
 pub trait EntanglementService: Send + Sync + 'static {
     type Inner: ESInner;
 
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self;
+    fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self;
 
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()>;
+    async fn start(&self, registry: &ESMRegistry) -> Result<()>;
 }
 
 #[async_trait]
 pub trait ESInner: Sized + Send + Sync + 'static {
-    fn new(config: Arc<ESConfig>, senders: HashMap<ServiceType, ESMSender>)
-        -> anyhow::Result<Self>;
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self>;
 
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()>;
+    fn registry(&self) -> ESMRegistry;
+
+    async fn message_handler(&self, esm: ESM) -> Result<()>;
 
     // rather than have the inner service trait functions (i.e., the RPC calls) respond directly,
     // we define this helper function for use in the message_handler loop
@@ -63,10 +93,10 @@ pub trait ESInner: Sized + Send + Sync + 'static {
     //
     // note that the type_name is current best effort at providing a bit more information, but it
     // will likely go away with a real logging setup
-    async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> anyhow::Result<()>
+    async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> Result<()>
     where
         T: Send + Sync,
-        Fut: Future<Output = anyhow::Result<T>> + Send, // this will eventually be a ESResult<T>
+        Fut: Future<Output = Result<T>> + Send, // this will eventually be a ESResult<T>
     {
         resp.send(fut.await).map_err(|_| {
             anyhow::Error::msg(format!(

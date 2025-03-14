@@ -10,7 +10,7 @@ use tracing::{debug, error, instrument, Level};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
-use crate::service::{ESInner, ESMReceiver, ESMSender, EntanglementService, ServiceType, ESM};
+use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
 use api::library::{LibraryScanJob, LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
 
@@ -28,7 +28,7 @@ pub struct FileService {
 impl EntanglementService for FileService {
     type Inner = FileScanner;
 
-    fn create(config: Arc<ESConfig>, sender_map: &mut HashMap<ServiceType, ESMSender>) -> Self {
+    fn create(config: Arc<ESConfig>, sender_map: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
         sender_map.insert(ServiceType::Fs, tx);
@@ -40,12 +40,12 @@ impl EntanglementService for FileService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, senders))]
-    async fn start(&self, senders: &HashMap<ServiceType, ESMSender>) -> anyhow::Result<()> {
+    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         // falliable stuff can happen here
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(FileScanner::new(self.config.clone(), senders.clone())?);
+        let state = Arc::new(FileScanner::new(self.config.clone(), registry.clone())?);
 
         let serve = {
             async move {
@@ -87,16 +87,56 @@ impl EntanglementService for FileService {
 // the handles haven't expired, and so on
 pub struct FileScanner {
     config: Arc<ESConfig>,
-    db_svc_sender: ESMSender,
+    registry: ESMRegistry,
     running_scans: Arc<RwLock<HashMap<LibraryUuid, Arc<RwLock<LibraryScanJob>>>>>,
 }
 
 #[async_trait]
+impl ESInner for FileScanner {
+    fn new(
+        config: Arc<ESConfig>,
+        registry: ESMRegistry,
+    ) -> anyhow::Result<Self> {
+        Ok(FileScanner {
+            config: config.clone(),
+            registry: registry.clone(),
+            running_scans: Arc::new(RwLock::new(HashMap::new())),
+        })
+    }
+
+    fn registry(&self) -> ESMRegistry {
+        self.registry.clone()
+    }
+
+    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+        match esm {
+            ESM::Fs(message) => match message {
+                FsMsg::_Status { resp } => {
+                    self.respond(resp, async { Err(anyhow::Error::msg("not implemented")) })
+                        .await
+                }
+                FsMsg::ScanLibrary { resp, library_uuid } => {
+                    self.respond(resp, self.scan_library(library_uuid)).await
+                }
+                FsMsg::ScanStatus { resp } => self.respond(resp, self.scan_status()).await,
+                FsMsg::StopScan { resp, library_uuid } => {
+                    self.respond(resp, self.stop_scan(library_uuid)).await
+                }
+                FsMsg::FixSymlinks { resp } => self.respond(resp, self.fix_symlinks()).await,
+            },
+            _ => Err(anyhow::Error::msg("not implemented")),
+        }
+    }
+}
+
+
+#[async_trait]
 impl ESFileService for FileScanner {
     async fn scan_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<()> {
+        let db_svc_sender = self.registry.get(&ServiceType::Db)?;
         let (library_tx, library_rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender
+        db_svc_sender
             .send(
                 DbMsg::GetLibrary {
                     resp: library_tx,
@@ -142,7 +182,7 @@ impl ESFileService for FileScanner {
             config: self.config.clone(),
             library_uuid: library_uuid,
             library_path: self.config.media_srcdir.clone().join(library.path),
-            db_svc_sender: self.db_svc_sender.clone(),
+            db_svc_sender: db_svc_sender.clone(),
             job_status: job,
         });
 
@@ -168,7 +208,7 @@ impl ESFileService for FileScanner {
 
         let (update_tx, update_rx) = tokio::sync::oneshot::channel();
 
-        self.db_svc_sender
+        db_svc_sender
             .send(
                 DbMsg::UpdateLibrary {
                     resp: update_tx,
@@ -202,39 +242,5 @@ impl ESFileService for FileScanner {
 
     async fn fix_symlinks(&self) -> anyhow::Result<()> {
         Err(anyhow::Error::msg("not implemented"))
-    }
-}
-
-#[async_trait]
-impl ESInner for FileScanner {
-    fn new(
-        config: Arc<ESConfig>,
-        senders: HashMap<ServiceType, ESMSender>,
-    ) -> anyhow::Result<Self> {
-        Ok(FileScanner {
-            config: config.clone(),
-            db_svc_sender: senders.get(&ServiceType::Db).unwrap().clone(),
-            running_scans: Arc::new(RwLock::new(HashMap::new())),
-        })
-    }
-
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
-        match esm {
-            ESM::Fs(message) => match message {
-                FsMsg::_Status { resp } => {
-                    self.respond(resp, async { Err(anyhow::Error::msg("not implemented")) })
-                        .await
-                }
-                FsMsg::ScanLibrary { resp, library_uuid } => {
-                    self.respond(resp, self.scan_library(library_uuid)).await
-                }
-                FsMsg::ScanStatus { resp } => self.respond(resp, self.scan_status()).await,
-                FsMsg::StopScan { resp, library_uuid } => {
-                    self.respond(resp, self.stop_scan(library_uuid)).await
-                }
-                FsMsg::FixSymlinks { resp } => self.respond(resp, self.fix_symlinks()).await,
-            },
-            _ => Err(anyhow::Error::msg("not implemented")),
-        }
     }
 }

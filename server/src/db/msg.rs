@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, comment::*, library::*, media::*};
+use api::{album::*, comment::*, library::*, media::*, task::*};
 
 use crate::service::*;
 
@@ -133,6 +133,45 @@ pub enum DbMsg {
         filter: String,
         hidden: bool,
     },
+
+    // task messages
+    AddTask {
+        resp: ESMResp<TaskUuid>,
+        task: Task,
+    },
+    GetTask {
+        resp: ESMResp<Task>,
+        task_uuid: TaskUuid,
+    },
+    DeleteTask {
+        resp: ESMResp<()>,
+        task_uuid: TaskUuid
+    },
+    UpdateTask {
+        resp: ESMResp<()>,
+        task_uuid: TaskUuid,
+        update: TaskUpdate,
+    },
+    SearchTasks {
+        resp: ESMResp<Vec<TaskUuid>>,
+        filter: Option<TaskStatus>,
+    },
+    AddLog {
+        resp: ESMResp<()>,
+        log: String
+    },
+    GetLog {
+        resp: ESMResp<String>,
+        log_uuid: String,
+    },
+    DeleteLog {
+        resp: ESMResp<()>,
+        log_uuid: String,
+    },
+    SearchLogs {
+        resp: ESMResp<Vec<String>>,
+        filter: String,
+    }
 }
 
 impl From<DbMsg> for ESM {

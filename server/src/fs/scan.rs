@@ -8,7 +8,7 @@ use blockhash::blockhash256;
 use chrono::Local;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{debug, error, info, instrument, warn, Level};
+use tracing::{debug, info, instrument, warn, Level};
 use walkdir::WalkDir;
 
 use crate::db::msg::DbMsg;
@@ -64,7 +64,11 @@ pub async fn run_scan(context: Arc<ScanContext>) -> () {
 
     let max_threads = context.config.clone().fs_scanner_threads;
 
-    for entry in WalkDir::new(context.library_path.clone()).into_iter() {
+    for entry in WalkDir::new(context.library_path.clone())
+        .same_file_system(true)
+        .contents_first(true)
+        .into_iter()
+    {
         // things to check eventually:
         //  * too many errors
         //  * cancel signal
