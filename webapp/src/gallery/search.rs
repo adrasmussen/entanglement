@@ -11,19 +11,15 @@ use api::media::*;
 pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
 
-    // Track whether advanced search options are expanded
     let mut advanced_expanded = use_signal(|| false);
 
-    // Get search signal from local storage
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
-    // Fetch media data
     let media_future = use_resource(move || async move {
         let filter = media_search_signal();
         search_media(&SearchMediaReq { filter }).await
     });
 
-    // Create action button for search bar - now it's an "Advanced" toggle
     let action_button = rsx! {
         button {
             class: "btn btn-secondary",
@@ -36,16 +32,13 @@ pub fn GallerySearch() -> Element {
 
     rsx! {
         div { class: "container",
-            // Modal container for popups
             ModalBox { update_signal }
 
-            // Page header
-            div { class: "page-header",
+            div { class: "page-header", style: "margin-bottom: var(--space-4);",
                 h1 { class: "section-title", "Photo Gallery" }
                 p { "Browse and search all accessible media" }
             }
 
-            // Search controls
             SearchBar {
                 search_signal: media_search_signal,
                 storage_key: MEDIA_SEARCH_KEY,
@@ -58,35 +51,34 @@ pub fn GallerySearch() -> Element {
                 action_button,
             }
 
-            // Advanced search options (expandable)
             {
                 if advanced_expanded() {
                     rsx! {
                         div {
                             class: "advanced-search-options",
                             style: "
-                                                                                                        margin-top: -16px;
-                                                                                                        margin-bottom: var(--space-6);
-                                                                                                        padding: var(--space-4);
-                                                                                                        background-color: var(--neutral-50);
-                                                                                                        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-                                                                                                        box-shadow: var(--shadow-sm);
-                                                                                                        border-top: 1px solid var(--neutral-200);
-                                                                                                        animation: slide-down 0.2s ease-out;
-                                                                                                    ",
+                                margin-top: -16px;
+                                margin-bottom: var(--space-6);
+                                padding: var(--space-4);
+                                background-color: var(--neutral-50);
+                                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+                                box-shadow: var(--shadow-sm);
+                                border-top: 1px solid var(--neutral-200);
+                                animation: slide-down 0.2s ease-out;
+                            ",
                             h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Search Options" }
                             div {
                                 class: "coming-soon",
                                 style: "
-                                                                                                            display: flex;
-                                                                                                            align-items: center;
-                                                                                                            justify-content: center;
-                                                                                                            padding: var(--space-6);
-                                                                                                            background-color: var(--surface);
-                                                                                                            border-radius: var(--radius-md);
-                                                                                                            color: var(--text-secondary);
-                                                                                                            font-style: italic;
-                                                                                                        ",
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    padding: var(--space-6);
+                                    background-color: var(--surface);
+                                    border-radius: var(--radius-md);
+                                    color: var(--text-secondary);
+                                    font-style: italic;
+                                ",
                                 "Advanced search options coming soon..."
                             }
                         }
@@ -96,7 +88,6 @@ pub fn GallerySearch() -> Element {
                 }
             }
 
-            // Media grid
             match &*media_future.read() {
                 Some(Ok(resp)) => {
                     rsx! {

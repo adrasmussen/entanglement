@@ -24,7 +24,11 @@ pub fn CommentList(props: CommentListProps) -> Element {
                     }
                 }
             },
-            CommentListInner {comment_uuids: props.comment_uuids, media_uuid: props.media_uuid, update_signal: props.update_signal}
+            CommentListInner {
+                comment_uuids: props.comment_uuids,
+                media_uuid: props.media_uuid,
+                update_signal: props.update_signal,
+            }
         }
     }
 }
@@ -45,10 +49,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
     let mut new_comment = use_signal(|| String::new());
     let mut status_signal = use_signal(|| String::new());
 
-    // Fetch each comment
     let comments_future = use_resource(move || {
-        //let comment_uuids = comment_uuids.clone();
-
         async move {
             let mut comments = Vec::new();
 
@@ -76,7 +77,6 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
 
     rsx! {
         div { class: "comments-container",
-            // Add new comment form
             form {
                 class: "comment-form",
                 style: "margin-bottom: var(--space-4); background-color: var(--neutral-50); padding: var(--space-3); border-radius: var(--radius-md);",
@@ -133,8 +133,6 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
                     button { class: "btn btn-primary btn-sm", r#type: "submit", "Post Comment" }
                 }
             }
-
-            // Comments list
 
             match comments {
                 Some(comments) => {
@@ -194,7 +192,6 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
                         div {
                             class: "comments-list",
                             style: "display: flex; flex-direction: column; gap: var(--space-3);",
-                            // Loading state
                             for _ in 0..2 {
                                 div {
                                     class: "comment-skeleton",

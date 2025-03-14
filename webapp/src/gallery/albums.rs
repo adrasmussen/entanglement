@@ -44,7 +44,6 @@ fn AlbumTableInner(props: AlbumTableInnerProps) -> Element {
     let album_uuids = props.album_uuids;
     let media_uuid = *props.media_uuid.read();
 
-    // Fetch details for each album
     let albums_future = use_resource(move || {
         async move {
             let mut albums = Vec::new();
@@ -58,7 +57,7 @@ fn AlbumTableInner(props: AlbumTableInnerProps) -> Element {
                 }
             }
 
-            // Sort albums by name for better display
+            // Sort albums by name
             albums.sort_by(|a, b| a.1.name.cmp(&b.1.name));
             albums
         }
