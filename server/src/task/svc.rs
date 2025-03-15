@@ -18,7 +18,7 @@ use crate::service::{
 };
 use crate::task::{msg::TaskMsg, scan::scan_library, ESTaskService};
 use crate::{auth::check::AuthCheck, db::msg::DbMsg};
-use api::{library::LibraryUuid, task::*};
+use api::{library::LibraryUuid, task::{Task, TaskStatus, TaskType, TaskUid, TaskUpdate}};
 use common::config::ESConfig;
 
 pub struct TaskService {
@@ -85,14 +85,13 @@ impl EntanglementService for TaskService {
 pub struct TaskRunner {
     config: Arc<ESConfig>,
     registry: ESMRegistry,
-    db_svc_sender: ESMSender,
     running_tasks: DashMap<LibraryUuid, Option<RunningTask>>,
 }
 
 #[derive(Clone, Debug)]
 struct RunningTask {
     task: Task,
-    uuid: TaskUuid,
+    uuid: LibraryUuid,
     handle: Arc<JoinHandle<()>>,
 }
 
@@ -102,10 +101,6 @@ impl ESInner for TaskRunner {
         Ok(TaskRunner {
             config: config.clone(),
             registry: registry.clone(),
-            db_svc_sender: registry
-                .get(&ServiceType::Db)
-                .expect("task service failed to find db service sender")
-                .clone(),
             running_tasks: DashMap::new(),
         })
     }
@@ -126,11 +121,9 @@ impl ESInner for TaskRunner {
                     self.respond(resp, self.start_task(library_uuid, task_type, uid))
                         .await
                 }
-                TaskMsg::StopTask {
-                    resp,
-                    task_uuid,
-                    uid,
-                } => self.respond(resp, self.stop_task(task_uuid, uid)).await,
+                TaskMsg::StopTask { resp, library_uuid } => {
+                    self.respond(resp, self.stop_task(library_uuid)).await
+                }
                 TaskMsg::Status { resp } => self.respond(resp, self.status()).await,
             },
             _ => Err(anyhow::Error::msg("not implemented")),
@@ -141,7 +134,7 @@ impl ESInner for TaskRunner {
 impl AuthCheck for TaskRunner {}
 
 #[instrument(level=Level::DEBUG, skip(task_future, db_svc_sender))]
-fn spawn_task<F>(task_uuid: TaskUuid, task_future: F, db_svc_sender: ESMSender) -> JoinHandle<()>
+fn spawn_task<F>(task_uuid: LibraryUuid, task_future: F, db_svc_sender: ESMSender) -> JoinHandle<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
 {
@@ -203,7 +196,7 @@ impl ESTaskService for TaskRunner {
         library_uuid: LibraryUuid,
         task_type: TaskType,
         uid: TaskUid,
-    ) -> Result<TaskUuid> {
+    ) -> Result<LibraryUuid> {
         debug!("task received by runner");
 
         let db_svc_sender = self.registry.get(&ServiceType::Db)?;
@@ -260,12 +253,17 @@ impl ESTaskService for TaskRunner {
                 )
                 .await?;
 
+            // TODO -- a failure here will leave a dangling task in the database
             let task_uuid = task_rx.await??;
 
             debug!("task recorded in database");
 
             let handle = match task.task_type {
-                TaskType::ScanLibrary => spawn_task(task_uuid, scan_library(), db_svc_sender),
+                TaskType::ScanLibrary => spawn_task(
+                    task_uuid,
+                    scan_library(self.config.clone(), self.registry.clone(), library),
+                    db_svc_sender,
+                ),
                 _ => {
                     error!({ task_uuid = task_uuid, task_type = ?task.task_type }, "unknown task type");
                     return Err(anyhow::Error::msg("unknown task type"));
@@ -297,11 +295,55 @@ impl ESTaskService for TaskRunner {
         }
     }
 
-    async fn stop_task(&self, task_uuid: TaskUuid, uid: TaskUid) -> Result<()> {
-        todo!()
+    #[instrument(level=Level::DEBUG)]
+    async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()> {
+        debug!("aborting task");
+
+        let db_svc_sender = self.registry.get(&ServiceType::Db)?;
+
+        let rt = self
+            .running_tasks
+            .get(&library_uuid)
+            .ok_or_else(|| {
+                anyhow::Error::msg(format!(
+                    "no tasks currently running for library {library_uuid}"
+                ))
+            })?
+            .clone()
+            .ok_or_else(|| {
+                anyhow::Error::msg(format!(
+                    "task for library {library_uuid} has not been dispatched yet"
+                ))
+            })?;
+
+        debug!({task_type = ?rt.task.task_type}, "found running task for library, aborting");
+
+        rt.handle.abort();
+
+        let (tx, rx) = channel();
+
+        db_svc_sender
+            .send(
+                DbMsg::UpdateTask {
+                    resp: tx,
+                    task_uuid: rt.uuid,
+                    update: TaskUpdate {
+                        status: Some(TaskStatus::Aborted),
+                        end: Some(Local::now().timestamp()),
+                    },
+                }
+                .into(),
+            )
+            .await?;
+
+        rx.await??;
+
+        self.running_tasks.remove(&library_uuid);
+
+        Ok(())
     }
 
-    async fn status(&self) -> Result<HashMap<TaskUuid, Task>> {
+    async fn status(&self) -> Result<HashMap<LibraryUuid, Task>> {
         todo!()
     }
 }
