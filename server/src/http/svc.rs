@@ -72,7 +72,7 @@ impl EntanglementService for HttpService {
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        registry.insert(ServiceType::Http, tx);
+        registry.insert(ServiceType::Http, tx).expect("failed to add http sender to registry");
 
         HttpService {
             config: config.clone(),

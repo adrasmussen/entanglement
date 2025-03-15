@@ -19,6 +19,7 @@ pub enum TaskStatus {
     Success,
     Failure,
     Orphaned,
+    Aborted,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

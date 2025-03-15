@@ -1,21 +1,20 @@
 use std::collections::HashMap;
 
 use crate::service::{ESMResp, ESM};
-use api::task::*;
+use api::{library::LibraryUuid, task::*};
 
 #[derive(Debug)]
 pub enum TaskMsg {
     StartTask {
         resp: ESMResp<TaskUuid>,
-        task: Task,
+        library_uuid: LibraryUuid,
+        task_type: TaskType,
+        uid: TaskUid
     },
     StopTask {
         resp: ESMResp<()>,
         task_uuid: TaskUuid,
         uid: TaskUid,
-    },
-    Flush {
-        resp: ESMResp<()>,
     },
     Status {
         resp: ESMResp<HashMap<TaskUuid, Task>>,

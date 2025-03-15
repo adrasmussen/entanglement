@@ -31,7 +31,7 @@ impl EntanglementService for MariaDBService {
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        registry.insert(ServiceType::Db, tx);
+        registry.insert(ServiceType::Db, tx).expect("failed to add db sender to registry");
 
         MariaDBService {
             config: config.clone(),

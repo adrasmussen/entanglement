@@ -1,26 +1,25 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 use tokio::{
     sync::{oneshot::channel, Mutex},
     task::{spawn, JoinHandle},
 };
 use tracing::{debug, error, info, instrument, warn, Level};
 
-use crate::db::msg::DbMsg;
 use crate::service::{
     ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
 };
 use crate::task::{msg::TaskMsg, scan::scan_library, ESTaskService};
+use crate::{auth::check::AuthCheck, db::msg::DbMsg};
 use api::{library::LibraryUuid, task::*};
 use common::config::ESConfig;
-
-const ADMIN_TASKS: [TaskType; 0] = [];
 
 pub struct TaskService {
     config: Arc<ESConfig>,
@@ -35,7 +34,9 @@ impl EntanglementService for TaskService {
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        registry.insert(ServiceType::Task, tx);
+        registry
+            .insert(ServiceType::Task, tx)
+            .expect("failed to add task sender to registry");
 
         TaskService {
             config: config.clone(),
@@ -85,14 +86,14 @@ pub struct TaskRunner {
     config: Arc<ESConfig>,
     registry: ESMRegistry,
     db_svc_sender: ESMSender,
-    running_tasks: DashMap<LibraryUuid, RunningTask>,
+    running_tasks: DashMap<LibraryUuid, Option<RunningTask>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct RunningTask {
     task: Task,
     uuid: TaskUuid,
-    handle: JoinHandle<Result<()>>,
+    handle: Arc<JoinHandle<()>>,
 }
 
 #[async_trait]
@@ -116,15 +117,20 @@ impl ESInner for TaskRunner {
     async fn message_handler(&self, esm: ESM) -> Result<()> {
         match esm {
             ESM::Task(message) => match message {
-                TaskMsg::StartTask { resp, task } => {
-                    self.respond(resp, self.start_task(task)).await
+                TaskMsg::StartTask {
+                    resp,
+                    library_uuid,
+                    task_type,
+                    uid,
+                } => {
+                    self.respond(resp, self.start_task(library_uuid, task_type, uid))
+                        .await
                 }
                 TaskMsg::StopTask {
                     resp,
                     task_uuid,
                     uid,
                 } => self.respond(resp, self.stop_task(task_uuid, uid)).await,
-                TaskMsg::Flush { resp } => self.respond(resp, self.flush()).await,
                 TaskMsg::Status { resp } => self.respond(resp, self.status()).await,
             },
             _ => Err(anyhow::Error::msg("not implemented")),
@@ -132,96 +138,166 @@ impl ESInner for TaskRunner {
     }
 }
 
+impl AuthCheck for TaskRunner {}
+
+#[instrument(level=Level::DEBUG, skip(task_future, db_svc_sender))]
+fn spawn_task<F>(task_uuid: TaskUuid, task_future: F, db_svc_sender: ESMSender) -> JoinHandle<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+{
+    let db_svc_sender = db_svc_sender.clone();
+
+    spawn(async move {
+        let res = task_future.await;
+
+        let (tx, rx) = channel();
+
+        let status = match res {
+            Ok(()) => {
+                info!("task succeeded");
+                TaskStatus::Success
+            }
+            Err(_) => {
+                warn!("task failed");
+                TaskStatus::Failure
+            }
+        };
+
+        match db_svc_sender
+            .send(
+                DbMsg::UpdateTask {
+                    resp: tx,
+                    task_uuid: task_uuid,
+                    update: TaskUpdate {
+                        status: Some(status),
+                        end: Some(Local::now().timestamp()),
+                    },
+                }
+                .into(),
+            )
+            .await
+        {
+            Ok(_) => {}
+            Err(err) => {
+                error!("failed to send UpdateTask message to db service: {err}");
+            }
+        };
+
+        match rx.await {
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => {
+                error!("failed to update task in database: {err}");
+            }
+            Err(err) => {
+                error!("failed to receive UpdateTask response from db service: {err}")
+            }
+        };
+    })
+}
+
 #[async_trait]
 impl ESTaskService for TaskRunner {
     #[instrument(level=Level::DEBUG)]
-    async fn start_task(&self, task: Task) -> Result<TaskUuid> {
+    async fn start_task(
+        &self,
+        library_uuid: LibraryUuid,
+        task_type: TaskType,
+        uid: TaskUid,
+    ) -> Result<TaskUuid> {
         debug!("task received by runner");
 
-        let library_uuid = task.library_uuid;
+        let db_svc_sender = self.registry.get(&ServiceType::Db)?;
 
-        // sanity checks
-        if self.running_tasks.contains_key(&library_uuid) {
-            warn!(
-                { library_uuid = library_uuid },
-                "library is already running a task"
-            );
-            return Err(anyhow::Error::msg(format!(
-                "library {} is already running a task",
-                library_uuid
-            )));
+        match self.running_tasks.entry(library_uuid) {
+            Entry::Occupied(_) => {
+                return Err(anyhow::Error::msg(format!(
+                    "cannot start {task_type:?} -- a task is already running for library {library_uuid}"
+                )))
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(None);
+            }
         }
 
-        if task.uid != TaskUid::System && ADMIN_TASKS.contains(&task.task_type) {
-            warn!({uid = ?task.uid, task_type = ?task.task_type, library_uuid = library_uuid}, "user attempted to run admin-only task");
-            return Err(anyhow::Error::msg(
-                "non-system users cannot run administrative tasks",
-            ));
+        let dispatch = async {
+            let (library_tx, library_rx) = channel();
+
+            db_svc_sender
+                .send(
+                    DbMsg::GetLibrary {
+                        resp: library_tx,
+                        library_uuid: library_uuid,
+                    }
+                    .into(),
+                )
+                .await?;
+
+            let library = library_rx.await??.ok_or_else(|| {
+                anyhow::Error::msg(format!("unknown library uuid {}", library_uuid))
+            })?;
+
+            let (task_tx, task_rx) = channel();
+
+            // repackage the task to overwrite the dynamic parts
+            let task = Task {
+                library_uuid: library_uuid,
+                task_type: task_type,
+                uid: uid,
+                status: TaskStatus::Running,
+                start: Local::now().timestamp(),
+                end: None,
+            };
+
+            // even if the task fails immediately (or we don't even get the uuid back),
+            // we want to record the attempt
+            db_svc_sender
+                .send(
+                    DbMsg::AddTask {
+                        resp: task_tx,
+                        task: task.clone(),
+                    }
+                    .into(),
+                )
+                .await?;
+
+            let task_uuid = task_rx.await??;
+
+            debug!("task recorded in database");
+
+            let handle = match task.task_type {
+                TaskType::ScanLibrary => spawn_task(task_uuid, scan_library(), db_svc_sender),
+                _ => {
+                    error!({ task_uuid = task_uuid, task_type = ?task.task_type }, "unknown task type");
+                    return Err(anyhow::Error::msg("unknown task type"));
+                }
+            };
+
+            debug!("task dispatched");
+
+            Ok(RunningTask {
+                task: task,
+                uuid: task_uuid,
+                handle: Arc::new(handle),
+            })
+        };
+
+        match dispatch.await {
+            Ok(rt) => {
+                let task_uuid = rt.uuid;
+                self.running_tasks.alter(&library_uuid, |_, _| Some(rt));
+                Ok(task_uuid)
+            }
+            Err(err) => {
+                error!("failed to dispatch task: {err}");
+                self.running_tasks.remove(&library_uuid);
+                Err(anyhow::Error::msg(format!(
+                    "failed to dispatch task: {err}"
+                )))
+            }
         }
-
-        let (library_tx, library_rx) = channel();
-
-        self.db_svc_sender
-            .send(
-                DbMsg::GetLibrary {
-                    resp: library_tx,
-                    library_uuid: library_uuid,
-                }
-                .into(),
-            )
-            .await?;
-
-        let library = library_rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg(format!("unknown library uuid {}", library_uuid)))?;
-
-        let (task_tx, task_rx) = channel();
-
-        // repackage the task to overwrite the dynamic parts
-        let task = Task {
-            library_uuid: task.library_uuid,
-            task_type: task.task_type,
-            uid: task.uid,
-            status: TaskStatus::Running,
-            start: Local::now().timestamp(),
-            end: None,
-        };
-
-        // even if the task fails immediately (or we don't even get the uuid back),
-        // we want to record the attempt
-        self.db_svc_sender
-            .send(
-                TaskMsg::StartTask {
-                    resp: task_tx,
-                    task: task.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let task_uuid = task_rx.await??;
-
-        debug!({ task_uuid = task_uuid }, "task recorded in database");
-
-        let handle = match task.task_type {
-            TaskType::ScanLibrary => {
-                spawn(scan_library());
-            }
-            _ => {
-                error!({ task_uuid = task_uuid, task_type = ?task.task_type }, "unknown task type");
-                return Err(anyhow::Error::msg("unknown task type"));
-            }
-        };
-
-        debug!({ task_uuid = task_uuid }, "task dispatched");
-        Ok(task_uuid)
     }
 
     async fn stop_task(&self, task_uuid: TaskUuid, uid: TaskUid) -> Result<()> {
-        todo!()
-    }
-
-    async fn flush(&self) -> Result<()> {
         todo!()
     }
 

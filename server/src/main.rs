@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
     info!("starting core services...");
 
     // start the core services
-    let mut registry = ESMRegistry::new();
+    let registry = ESMRegistry::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);
     let db_svc = db::mariadb::MariaDBService::create(config.clone(), &registry);

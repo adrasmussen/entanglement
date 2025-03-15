@@ -43,6 +43,9 @@ pub enum ESM {
 
 // currently, we assume that each service will be instantiated
 // once, and that there should be one message namespace
+//
+// i'm not super happy with this whole system, but it's easy to
+// understand and reasonably performant
 #[derive(Clone, Debug)]
 pub struct ESMRegistry(Arc<DashMap<ServiceType, ESMSender>>);
 
@@ -96,7 +99,7 @@ pub trait ESInner: Sized + Send + Sync + 'static {
     async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> Result<()>
     where
         T: Send + Sync,
-        Fut: Future<Output = Result<T>> + Send, // this will eventually be a ESResult<T>
+        Fut: Future<Output = Result<T>> + Send,
     {
         resp.send(fut.await).map_err(|_| {
             anyhow::Error::msg(format!(
