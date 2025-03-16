@@ -102,12 +102,12 @@ pub const HOME_STYLES: &str = r#"
     font-size: 1.75rem;
   }
 
-  .album-icon {
+  .collection-icon {
     background-color: var(--secondary);
     position: relative;
   }
 
-  .album-icon::before {
+  .collection-icon::before {
     content: "🖼️";
     font-size: 1.75rem;
   }
@@ -300,12 +300,12 @@ pub const HOME_STYLES: &str = r#"
     font-size: 1.75rem;
   }
 
-  .albums-icon::before {
+  .collections-icon::before {
     content: "📂";
     font-size: 1.75rem;
   }
 
-  .new-album-icon::before {
+  .new-collection-icon::before {
     content: "➕";
     font-size: 1.75rem;
   }

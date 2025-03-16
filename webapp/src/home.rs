@@ -8,18 +8,18 @@ pub fn ModernHome() -> Element {
     // Stats for the dashboard - in a real implementation,
     // these would be fetched from your API
     let media_count = use_signal(|| 0);
-    let albums_count = use_signal(|| 0);
+    let collections_count = use_signal(|| 0);
     let libraries_count = use_signal(|| 0);
 
     let stats_loaded = use_signal(|| false);
 
     use_future(move || {
-        to_owned![media_count, albums_count, libraries_count, stats_loaded];
+        to_owned![media_count, collections_count, libraries_count, stats_loaded];
         async move {
             // Simulate an API call
             // In a real implementation, you would fetch real data
             media_count.set(3752);
-            albums_count.set(48);
+            collections_count.set(48);
             libraries_count.set(5);
             stats_loaded.set(true);
         }
@@ -42,9 +42,9 @@ pub fn ModernHome() -> Element {
                                 "Browse Gallery"
                             }
                             Link {
-                                to: Route::AlbumSearch {},
+                                to: Route::CollectionSearch {},
                                 class: "btn btn-secondary btn-lg",
-                                "View Albums"
+                                "View Collections"
                             }
                         }
                     }
@@ -78,13 +78,13 @@ pub fn ModernHome() -> Element {
                             }
                         }
 
-                        // Albums stat card
+                        // Collections stat card
                         div { class: "stat-card",
-                            div { class: "stat-icon album-icon" }
+                            div { class: "stat-icon collection-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    if albums_count() > 0 {
-                                        "{albums_count()}"
+                                    if collections_count() > 0 {
+                                        "{collections_count()}"
                                     } else {
                                         div {
                                             class: "skeleton",
@@ -92,10 +92,10 @@ pub fn ModernHome() -> Element {
                                         }
                                     }
                                 }
-                                p { class: "stat-label", "Albums" }
+                                p { class: "stat-label", "Collections" }
                             }
                             Link {
-                                to: Route::AlbumSearch {},
+                                to: Route::CollectionSearch {},
                                 class: "stat-action",
                                 "View All"
                             }
@@ -138,7 +138,7 @@ pub fn ModernHome() -> Element {
                             div { class: "feature-icon organize-icon" }
                             h3 { class: "feature-title", "Organize Your Media" }
                             p { class: "feature-desc",
-                                "Sort, tag, and categorize your photos and videos into albums and collections."
+                                "Sort, tag, and categorize your photos and videos into collections and collections."
                             }
                         }
 
@@ -185,14 +185,14 @@ pub fn ModernHome() -> Element {
                             span { "Browse Gallery" }
                         }
                         Link {
-                            to: Route::AlbumSearch {},
+                            to: Route::CollectionSearch {},
                             class: "quick-action-card",
-                            div { class: "quick-action-icon albums-icon" }
-                            span { "View Albums" }
+                            div { class: "quick-action-icon collections-icon" }
+                            span { "View Collections" }
                         }
                         button { class: "quick-action-card", onclick: move |_| {},
-                            div { class: "quick-action-icon new-album-icon" }
-                            span { "Create Album" }
+                            div { class: "quick-action-icon new-collection-icon" }
+                            span { "Create Collection" }
                         }
                         Link {
                             to: Route::LibrarySearch {},

@@ -6,7 +6,7 @@ use tracing::{debug, instrument, Level};
 
 use crate::auth::{Group, User};
 use api::{
-    album::{Album, AlbumUpdate, AlbumUuid},
+    collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
@@ -22,7 +22,7 @@ pub async fn media_access_groups(
     debug!({ media_uuid = media_uuid }, "finding media access groups");
 
     // for a given media_uuid, find all gids that match either:
-    //  * if the media is not hidden, any album that contains the media
+    //  * if the media is not hidden, any collection that contains the media
     //  * the library that contains that media
     let result = r"
         SELECT
@@ -30,14 +30,14 @@ pub async fn media_access_groups(
         FROM
             (
             SELECT
-                album_uuid
+                collection_uuid
             FROM
                 media
-            INNER JOIN album_contents ON media.media_uuid = album_contents.media_uuid
+            INNER JOIN collection_contents ON media.media_uuid = collection_contents.media_uuid
             WHERE
                 media.media_uuid = :media_uuid AND media.hidden = FALSE
         ) AS t1
-        INNER JOIN albums ON t1.album_uuid = albums.album_uuid
+        INNER JOIN collections ON t1.collection_uuid = collections.collection_uuid
         UNION
         SELECT
             gid
@@ -312,7 +312,7 @@ pub async fn add_media(pool: Pool, media: Media) -> anyhow::Result<MediaUuid> {
 pub async fn get_media(
     pool: Pool,
     media_uuid: MediaUuid,
-) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
+) -> anyhow::Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
     debug!({ media_uuid = media_uuid }, "getting media details");
 
     let mut media_result = r"
@@ -340,8 +340,8 @@ pub async fn get_media(
         None => return Ok(None),
     };
 
-    let album_result = r"
-        SELECT album_uuid FROM album_contents WHERE media_uuid = :media_uuid"
+    let collection_result = r"
+        SELECT collection_uuid FROM collection_contents WHERE media_uuid = :media_uuid"
         .with(params! {
             "media_uuid" => media_uuid,
         })
@@ -350,9 +350,9 @@ pub async fn get_media(
         .collect::<Row>()
         .await?;
 
-    let album_data = album_result
+    let collection_data = collection_result
         .into_iter()
-        .map(|row| from_row_opt::<AlbumUuid>(row))
+        .map(|row| from_row_opt::<CollectionUuid>(row))
         .collect::<Result<Vec<_>, FromRowError>>()?;
 
     let comment_result = r"
@@ -394,7 +394,7 @@ pub async fn get_media(
                 }
             },
         },
-        album_data,
+        collection_data,
         comment_data,
     )))
 }
@@ -498,7 +498,7 @@ pub async fn search_media(
 ) -> anyhow::Result<Vec<MediaUuid>> {
     // for a given uid and filter, find all media that match either:
     //  * is in a library owned by a group containing the uid
-    //  * if the media is not hidden, is in an album owned
+    //  * if the media is not hidden, is in an collection owned
     //    by a group containing the uid
     let result = r"
         SELECT
@@ -510,13 +510,13 @@ pub async fn search_media(
             FROM
                 (
                 SELECT
-                    album_uuid
+                    collection_uuid
                 FROM
-                    albums
+                    collections
                 WHERE
                     INSTR(:gid, gid) > 0
             ) AS t1
-        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
+        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
         UNION
         SELECT
             media_uuid
@@ -562,7 +562,7 @@ pub async fn similar_media(
 ) -> anyhow::Result<Vec<MediaUuid>> {
     // for a given uid and filter, find all media that match either:
     //  * is in a library owned by a group containing the uid
-    //  * if the media is not hidden, is in an album owned
+    //  * if the media is not hidden, is in an collection owned
     //    by a group containing the uid
     let result = r"
         SELECT
@@ -574,13 +574,13 @@ pub async fn similar_media(
             FROM
                 (
                 SELECT
-                    album_uuid
+                    collection_uuid
                 FROM
-                    albums
+                    collections
                 WHERE
                     INSTR(:gid, gid) > 0
             ) AS t1
-        INNER JOIN album_contents ON t1.album_uuid = album_contents.album_uuid
+        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
         UNION
         SELECT
             media_uuid
@@ -617,13 +617,13 @@ pub async fn similar_media(
     Ok(data)
 }
 
-// album queries
+// collection queries
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
-    debug!({ album_name = album.name }, "adding album");
+pub async fn add_collection(pool: Pool, collection: Collection) -> anyhow::Result<CollectionUuid> {
+    debug!({ collection_name = collection.name }, "adding collection");
 
     let mut result = r"
-        INSERT INTO albums (album_uuid, uid, gid, mtime, name, note)
+        INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note)
         SELECT
             UUID_SHORT(),
             :uid,
@@ -635,18 +635,18 @@ pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
             DUAL
         WHERE NOT EXISTS(
             SELECT 1
-            FROM albums
+            FROM collections
             WHERE
                 uid = :uid
                 AND name = :name
         )
-        RETURNING album_uuid"
+        RETURNING collection_uuid"
         .with(params! {
-            "uid" => album.uid,
-            "gid" => album.gid,
+            "uid" => collection.uid,
+            "gid" => collection.gid,
             "mtime" => Local::now().timestamp(),
-            "name" => album.name.clone(),
-            "note" => album.note,
+            "name" => collection.name.clone(),
+            "note" => collection.note,
         })
         .run(pool.get_conn().await?)
         .await?
@@ -655,23 +655,23 @@ pub async fn add_album(pool: Pool, album: Album) -> anyhow::Result<AlbumUuid> {
 
     let row = result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("failed to add album to the database"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add collection to the database"))?;
 
-    let data = from_row_opt::<AlbumUuid>(row)?;
+    let data = from_row_opt::<CollectionUuid>(row)?;
 
-    debug!({album_name = album.name, album_uuid = data}, "added album");
+    debug!({collection_name = collection.name, collection_uuid = data}, "added collection");
 
     Ok(data)
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
-    debug!({ album_uuid = album_uuid }, "getting album details");
+pub async fn get_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyhow::Result<Option<Collection>> {
+    debug!({ collection_uuid = collection_uuid }, "getting collection details");
 
     let mut result = r"
-        SELECT uid, gid, mtime, name, note FROM albums WHERE album_uuid = :album_uuid"
+        SELECT uid, gid, mtime, name, note FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?
@@ -685,9 +685,9 @@ pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Opti
 
     let data = from_row_opt::<(String, String, i64, String, String)>(row)?;
 
-    debug!({ album_uuid = album_uuid }, "found album details");
+    debug!({ collection_uuid = collection_uuid }, "found collection details");
 
-    Ok(Some(Album {
+    Ok(Some(Collection {
         uid: data.0,
         gid: data.1,
         mtime: data.2,
@@ -696,46 +696,46 @@ pub async fn get_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<Opti
     }))
 }
 
-pub async fn delete_album(pool: Pool, album_uuid: AlbumUuid) -> anyhow::Result<()> {
-    debug!({ album_uuid = album_uuid }, "deleting media from album");
+pub async fn delete_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyhow::Result<()> {
+    debug!({ collection_uuid = collection_uuid }, "deleting media from collection");
 
     r"
-        DELETE FROM album_contents WHERE album_uuid = :album_uuid"
+        DELETE FROM collection_contents WHERE collection_uuid = :collection_uuid"
         .with(params! {
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?;
 
-    debug!({ album_uuid = album_uuid }, "deleting album");
+    debug!({ collection_uuid = collection_uuid }, "deleting collection");
 
     r"
-        DELETE FROM albums WHERE album_uuid = :album_uuid"
+        DELETE FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?;
 
-    debug!({ album_uuid = album_uuid }, "deleted album");
+    debug!({ collection_uuid = collection_uuid }, "deleted collection");
 
     Ok(())
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn update_album(
+pub async fn update_collection(
     pool: Pool,
-    album_uuid: AlbumUuid,
-    update: AlbumUpdate,
+    collection_uuid: CollectionUuid,
+    update: CollectionUpdate,
 ) -> anyhow::Result<()> {
-    debug!({ album_uuid = album_uuid }, "updating album");
+    debug!({ collection_uuid = collection_uuid }, "updating collection");
 
     if let Some(val) = update.name {
         r"
-        UPDATE albums SET name = :name WHERE album_uuid = :album_uuid"
+        UPDATE collections SET name = :name WHERE collection_uuid = :collection_uuid"
             .with(params! {
                 "name" => val.clone(),
-                "album_uuid" => album_uuid,
+                "collection_uuid" => collection_uuid,
             })
             .run(pool.get_conn().await?)
             .await?;
@@ -743,55 +743,55 @@ pub async fn update_album(
 
     if let Some(val) = update.note {
         r"
-        UPDATE albums SET note = :note WHERE album_uuid = :album_uuid"
+        UPDATE collections SET note = :note WHERE collection_uuid = :collection_uuid"
             .with(params! {
                 "note" => val.clone(),
-                "album_uuid" => album_uuid,
+                "collection_uuid" => collection_uuid,
             })
             .run(pool.get_conn().await?)
             .await?;
     }
 
     r"
-    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+    UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "mtime" => Local::now().timestamp(),
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?;
 
-    debug!({ album_uuid = album_uuid }, "updated album");
+    debug!({ collection_uuid = collection_uuid }, "updated collection");
 
     Ok(())
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn add_media_to_album(
+pub async fn add_media_to_collection(
     pool: Pool,
     media_uuid: MediaUuid,
-    album_uuid: AlbumUuid,
+    collection_uuid: CollectionUuid,
 ) -> anyhow::Result<()> {
-    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "adding media to album");
+    debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "adding media to collection");
 
     let mut result = r"
-        INSERT INTO album_contents (media_uuid, album_uuid)
+        INSERT INTO collection_contents (media_uuid, collection_uuid)
         SELECT
             :media_uuid,
-            :album_uuid
+            :collection_uuid
         FROM
             DUAL
         WHERE NOT EXISTS(
             SELECT 1
-            FROM album_contents
+            FROM collection_contents
             WHERE
                 media_uuid = :media_uuid
-                AND album_uuid = :album_uuid
+                AND collection_uuid = :collection_uuid
         )
         RETURNING id"
         .with(params! {
             "media_uuid" => media_uuid,
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
             "mtime" => Local::now().timestamp(),
         })
         .run(pool.get_conn().await?)
@@ -801,67 +801,67 @@ pub async fn add_media_to_album(
 
     result
         .pop()
-        .ok_or_else(|| anyhow::Error::msg("failed to add media to album"))?;
+        .ok_or_else(|| anyhow::Error::msg("failed to add media to collection"))?;
 
     r"
-    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+    UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "mtime" => Local::now().timestamp(),
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?;
 
-    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "added media to album");
+    debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "added media to collection");
 
     Ok(())
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn rm_media_from_album(
+pub async fn rm_media_from_collection(
     pool: Pool,
     media_uuid: MediaUuid,
-    album_uuid: AlbumUuid,
+    collection_uuid: CollectionUuid,
 ) -> anyhow::Result<()> {
-    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "removing media to album");
+    debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "removing media to collection");
 
     r"
-        DELETE FROM album_contents WHERE (media_uuid = :media_uuid AND album_uuid = :album_uuid)"
+        DELETE FROM collection_contents WHERE (media_uuid = :media_uuid AND collection_uuid = :collection_uuid)"
         .with(params! {
             "media_uuid" => media_uuid,
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
             "mtime" => Local::now().timestamp(),
         })
         .run(pool.get_conn().await?)
         .await?;
 
     r"
-    UPDATE albums SET mtime = :mtime WHERE album_uuid = :album_uuid"
+    UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "mtime" => Local::now().timestamp(),
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
         })
         .run(pool.get_conn().await?)
         .await?;
 
-    debug!({media_uuid = media_uuid, album_uuid = album_uuid}, "removed media from album");
+    debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "removed media from collection");
 
     Ok(())
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn search_albums(
+pub async fn search_collections(
     pool: Pool,
     uid: String,
     gid: HashSet<String>,
     filter: String,
-) -> anyhow::Result<Vec<AlbumUuid>> {
-    // for a given uid and filter, find all albums owned by groups that contain that uid
+) -> anyhow::Result<Vec<CollectionUuid>> {
+    // for a given uid and filter, find all collections owned by groups that contain that uid
     let result = r"
         SELECT
-            album_uuid
+            collection_uuid
         FROM
-            albums
+            collections
         WHERE
             INSTR(:gid, gid) > 0 AND CONCAT_WS(' ', name, note) LIKE :filter"
         .with(params! {
@@ -876,22 +876,22 @@ pub async fn search_albums(
 
     let data = result
         .into_iter()
-        .map(|row| from_row_opt::<AlbumUuid>(row))
+        .map(|row| from_row_opt::<CollectionUuid>(row))
         .collect::<Result<Vec<_>, FromRowError>>()?;
 
     Ok(data)
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn search_media_in_album(
+pub async fn search_media_in_collection(
     pool: Pool,
     uid: String,
     gid: HashSet<String>,
-    album_uuid: AlbumUuid,
+    collection_uuid: CollectionUuid,
     filter: String,
 ) -> anyhow::Result<Vec<MediaUuid>> {
-    // for a given uid, filter, and album_uuid, find all non-hidden media in that album
-    // provided that the album is owned by a group containing the uid
+    // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
+    // provided that the collection is owned by a group containing the uid
     let result = r"
         SELECT
             media.media_uuid
@@ -902,13 +902,13 @@ pub async fn search_media_in_album(
             FROM
                 (
                 SELECT
-                    album_uuid
+                    collection_uuid
                 FROM
-                    albums
+                    collections
                 WHERE
-                    INSTR(:gid, gid) > 0 AND album_uuid = :album_uuid
+                    INSTR(:gid, gid) > 0 AND collection_uuid = :collection_uuid
                 ) AS t2
-            INNER JOIN album_contents ON t2.album_uuid = album_contents.album_uuid
+            INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
             ) AS t3
             INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
@@ -916,7 +916,7 @@ pub async fn search_media_in_album(
         .with(params! {
             "uid" => uid,
             "gid" => fold_set(gid)?,
-            "album_uuid" => album_uuid,
+            "collection_uuid" => collection_uuid,
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -1077,7 +1077,7 @@ pub async fn search_media_in_library(
     filter: String,
     hidden: bool,
 ) -> anyhow::Result<Vec<MediaUuid>> {
-    // for a given uid, filter, hidden state and library_uuid, find all media in that album
+    // for a given uid, filter, hidden state and library_uuid, find all media in that collection
     // provided that the library is owned by a group containing the uid
     //
     // note that this is the only search query where media with "hidden = true" can be found

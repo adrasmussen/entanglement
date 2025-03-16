@@ -8,7 +8,7 @@ use tracing::{instrument, Level};
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ServiceType};
-use api::{album::AlbumUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
+use api::{collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
 
 #[async_trait]
 pub trait AuthCheck: ESInner + Debug {
@@ -132,47 +132,47 @@ pub trait AuthCheck: ESInner + Debug {
     }
 
     #[instrument(level=Level::DEBUG)]
-    async fn can_access_album(&self, uid: &String, album_uuid: &AlbumUuid) -> Result<bool> {
+    async fn can_access_collection(&self, uid: &String, collection_uuid: &CollectionUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         db_svc_sender
             .send(
-                DbMsg::GetAlbum {
+                DbMsg::GetCollection {
                     resp: tx,
-                    album_uuid: album_uuid.clone(),
+                    collection_uuid: collection_uuid.clone(),
                 }
                 .into(),
             )
             .await?;
 
-        let album = rx
+        let collection = rx
             .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
+            .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        self.is_group_member(&uid, HashSet::from([album.gid])).await
+        self.is_group_member(&uid, HashSet::from([collection.gid])).await
     }
 
     #[instrument(level=Level::DEBUG)]
-    async fn owns_album(&self, uid: &String, album_uuid: &AlbumUuid) -> Result<bool> {
+    async fn owns_collection(&self, uid: &String, collection_uuid: &CollectionUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         db_svc_sender
             .send(
-                DbMsg::GetAlbum {
+                DbMsg::GetCollection {
                     resp: tx,
-                    album_uuid: album_uuid.clone(),
+                    collection_uuid: collection_uuid.clone(),
                 }
                 .into(),
             )
             .await?;
 
-        let album = rx
+        let collection = rx
             .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
+            .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        Ok(uid.to_owned() == album.uid)
+        Ok(uid.to_owned() == collection.uid)
     }
 
     #[instrument(level=Level::DEBUG)]

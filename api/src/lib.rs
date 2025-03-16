@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-pub mod album;
+pub mod collection;
 pub mod auth;
 pub mod comment;
 pub mod library;

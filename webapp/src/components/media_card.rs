@@ -9,15 +9,15 @@ pub struct MediaCardProps {
     media_uuid: MediaUuid,
     // Optional props for additional features
     #[props(default)]
-    album_uuid: Option<i64>,
+    collection_uuid: Option<i64>,
 }
 
 #[component]
 pub fn MediaCard(props: MediaCardProps) -> Element {
     let media_uuid = props.media_uuid;
 
-    // If album_uuid is provided, we'll store it in local storage when clicked
-    let album_context = props.album_uuid.map(|uuid| uuid.to_string());
+    // If collection_uuid is provided, we'll store it in local storage when clicked
+    let collection_context = props.collection_uuid.map(|uuid| uuid.to_string());
 
     // Fetch media info to show preview metadata
     let media_info =
@@ -33,10 +33,10 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                 media_uuid: media_uuid.to_string(),
                             },
                             onclick: move |_| {
-                                if let Some(album_id) = &album_context {
+                                if let Some(collection_id) = &collection_context {
                                     crate::common::storage::set_local_storage(
-                                        crate::gallery::GALLERY_ALBUM_KEY,
-                                        album_id.clone(),
+                                        crate::gallery::GALLERY_COLLECTION_KEY,
+                                        collection_id.clone(),
                                     );
                                 }
                             },

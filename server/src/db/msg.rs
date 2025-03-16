@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{album::*, comment::*, library::*, media::*, task::*};
+use api::{collection::*, comment::*, library::*, media::*, task::*};
 
 use crate::service::*;
 
@@ -18,7 +18,7 @@ pub enum DbMsg {
         media: Media,
     },
     GetMedia {
-        resp: ESMResp<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>,
+        resp: ESMResp<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>,
         media_uuid: MediaUuid,
     },
     GetMediaUuidByPath {
@@ -63,45 +63,45 @@ pub enum DbMsg {
         text: Option<String>,
     },
 
-    // album messages
-    AddAlbum {
-        resp: ESMResp<AlbumUuid>,
-        album: Album,
+    // collection messages
+    AddCollection {
+        resp: ESMResp<CollectionUuid>,
+        collection: Collection,
     },
-    GetAlbum {
-        resp: ESMResp<Option<Album>>,
-        album_uuid: AlbumUuid,
+    GetCollection {
+        resp: ESMResp<Option<Collection>>,
+        collection_uuid: CollectionUuid,
     },
-    DeleteAlbum {
+    DeleteCollection {
         resp: ESMResp<()>,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     },
-    UpdateAlbum {
+    UpdateCollection {
         resp: ESMResp<()>,
-        album_uuid: AlbumUuid,
-        update: AlbumUpdate,
+        collection_uuid: CollectionUuid,
+        update: CollectionUpdate,
     },
-    AddMediaToAlbum {
-        resp: ESMResp<()>,
-        media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
-    },
-    RmMediaFromAlbum {
+    AddMediaToCollection {
         resp: ESMResp<()>,
         media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     },
-    SearchAlbums {
-        resp: ESMResp<Vec<AlbumUuid>>,
+    RmMediaFromCollection {
+        resp: ESMResp<()>,
+        media_uuid: MediaUuid,
+        collection_uuid: CollectionUuid,
+    },
+    SearchCollections {
+        resp: ESMResp<Vec<CollectionUuid>>,
         uid: String,
         gid: HashSet<String>,
         filter: String,
     },
-    SearchMediaInAlbum {
+    SearchMediaInCollection {
         resp: ESMResp<Vec<MediaUuid>>,
         uid: String,
         gid: HashSet<String>,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
         filter: String,
     },
 

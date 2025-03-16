@@ -5,7 +5,7 @@ use anyhow;
 use async_trait::async_trait;
 
 use crate::service::ESInner;
-use api::{album::*, comment::*, library::*, media::*};
+use api::{collection::*, comment::*, library::*, media::*};
 
 // instead of service files, we have one per db connection type
 pub mod msg;
@@ -16,7 +16,7 @@ pub mod mariadb;
 trait ESDbService: ESInner {
     // authdb functions
 
-    // get this from checking all albums that contain the media + owning group of the library
+    // get this from checking all collections that contain the media + owning group of the library
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>>;
 
     // media functions
@@ -25,7 +25,7 @@ trait ESDbService: ESInner {
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
-    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>>;
+    ) -> anyhow::Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>;
 
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>>;
 
@@ -59,39 +59,39 @@ trait ESDbService: ESInner {
         text: Option<String>,
     ) -> anyhow::Result<()>;
 
-    // album functions
-    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid>;
+    // collection functions
+    async fn add_collection(&self, collection: Collection) -> anyhow::Result<CollectionUuid>;
 
-    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>>;
+    async fn get_collection(&self, collection_uuid: CollectionUuid) -> anyhow::Result<Option<Collection>>;
 
-    async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()>;
+    async fn delete_collection(&self, collection_uuid: CollectionUuid) -> anyhow::Result<()>;
 
-    async fn update_album(&self, album_uuid: AlbumUuid, update: AlbumUpdate) -> anyhow::Result<()>;
+    async fn update_collection(&self, collection_uuid: CollectionUuid, update: CollectionUpdate) -> anyhow::Result<()>;
 
-    async fn add_media_to_album(
+    async fn add_media_to_collection(
         &self,
         media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     ) -> anyhow::Result<()>;
 
-    async fn rm_media_from_album(
+    async fn rm_media_from_collection(
         &self,
         media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     ) -> anyhow::Result<()>;
 
-    async fn search_albums(
+    async fn search_collections(
         &self,
         uid: String,
         gid: HashSet<String>,
         filter: String,
-    ) -> anyhow::Result<Vec<AlbumUuid>>;
+    ) -> anyhow::Result<Vec<CollectionUuid>>;
 
-    async fn search_media_in_album(
+    async fn search_media_in_collection(
         &self,
         uid: String,
         gid: HashSet<String>,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>>;
 

@@ -1,13 +1,13 @@
 use dioxus::prelude::*;
 
-use api::{album::AlbumUuid, comment::CommentUuid, media::MediaUuid};
+use api::{collection::CollectionUuid, comment::CommentUuid, media::MediaUuid};
 
 mod comments;
 use comments::DeleteCommentModal;
 
-mod albums;
-use albums::{
-    AddMediaToAlbumModal, CreateAlbumModal, DeleteAlbumModal, EditAlbumModal, RmFromAlbumModal,
+mod collections;
+use collections::{
+    AddMediaToCollectionModal, CreateCollectionModal, DeleteCollectionModal, EditCollectionModal, RmFromCollectionModal,
 };
 
 mod enhanced_media_modal;
@@ -27,11 +27,11 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 pub enum Modal {
     EnhancedImageView(MediaUuid),
     DeleteComment(CommentUuid, MediaUuid),
-    CreateAlbum,
-    EditAlbum(AlbumUuid),
-    DeleteAlbum(AlbumUuid),
-    AddMediaToAlbum(MediaUuid),
-    RmMediaFromAlbum(MediaUuid, AlbumUuid),
+    CreateCollection,
+    EditCollection(CollectionUuid),
+    DeleteCollection(CollectionUuid),
+    AddMediaToCollection(MediaUuid),
+    RmMediaFromCollection(MediaUuid, CollectionUuid),
 }
 
 // ModalBox
@@ -59,29 +59,29 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     DeleteCommentModal { update_signal, comment_uuid, media_uuid }
                 }
             }
-            Modal::CreateAlbum => {
+            Modal::CreateCollection => {
                 rsx! {
-                    CreateAlbumModal { update_signal }
+                    CreateCollectionModal { update_signal }
                 }
             }
-            Modal::EditAlbum(album_uuid) => {
+            Modal::EditCollection(collection_uuid) => {
                 rsx! {
-                    EditAlbumModal { update_signal, album_uuid }
+                    EditCollectionModal { update_signal, collection_uuid }
                 }
             }
-            Modal::DeleteAlbum(album_uuid) => {
+            Modal::DeleteCollection(collection_uuid) => {
                 rsx! {
-                    DeleteAlbumModal { update_signal, album_uuid }
+                    DeleteCollectionModal { update_signal, collection_uuid }
                 }
             }
-            Modal::AddMediaToAlbum(media_uuid) => {
+            Modal::AddMediaToCollection(media_uuid) => {
                 rsx! {
-                    AddMediaToAlbumModal { update_signal, media_uuid }
+                    AddMediaToCollectionModal { update_signal, media_uuid }
                 }
             }
-            Modal::RmMediaFromAlbum(media_uuid, album_uuid) => {
+            Modal::RmMediaFromCollection(media_uuid, collection_uuid) => {
                 rsx! {
-                    RmFromAlbumModal { update_signal, media_uuid, album_uuid }
+                    RmFromCollectionModal { update_signal, media_uuid, collection_uuid }
                 }
             }
         },

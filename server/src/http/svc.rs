@@ -34,7 +34,7 @@ use crate::http::{
 use crate::service::{
     ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
 };
-use api::{album::*, auth::*, comment::*, library::*, media::*};
+use api::{collection::*, auth::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
 // http service
@@ -234,14 +234,14 @@ impl HttpEndpoint {
             .route("/GetComment", post(get_comment))
             .route("/DeleteComment", post(delete_comment))
             .route("/UpdateComment", post(update_comment))
-            .route("/AddAlbum", post(add_album))
-            .route("/GetAlbum", post(get_album))
-            .route("/DeleteAlbum", post(delete_album))
-            .route("/UpdateAlbum", post(update_album))
-            .route("/AddMediaToAlbum", post(add_media_to_album))
-            .route("/RmMediaFromAlbum", post(rm_media_from_album))
-            .route("/SearchAlbums", post(search_albums))
-            .route("/SearchMediaInAlbum", post(search_media_in_album))
+            .route("/AddCollection", post(add_collection))
+            .route("/GetCollection", post(get_collection))
+            .route("/DeleteCollection", post(delete_collection))
+            .route("/UpdateCollection", post(update_collection))
+            .route("/AddMediaToCollection", post(add_media_to_collection))
+            .route("/RmMediaFromCollection", post(rm_media_from_collection))
+            .route("/SearchCollections", post(search_collections))
+            .route("/SearchMediaInCollection", post(search_media_in_collection))
             .route("/GetLibrary", post(get_library))
             .route("/SearchLibraries", post(search_libraries))
             .route("/SearchMediaInLibrary", post(search_media_in_library))
@@ -415,7 +415,7 @@ async fn get_media(
 
     Ok(Json(GetMediaResp {
         media: result.0,
-        albums: result.1,
+        collections: result.1,
         comments: result.2,
     })
     .into_response())
@@ -654,20 +654,20 @@ async fn update_comment(
     Ok(Json(UpdateCommentResp {}).into_response())
 }
 
-async fn add_album(
+async fn add_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<AddAlbumReq>,
+    Json(message): Json<AddCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    // anyone may create an album, but they must be in the group of the album they create
+    // anyone may create an collection, but they must be in the group of the collection they create
     if !state
         .is_group_member(&uid, HashSet::from([message.gid.clone()]))
         .await?
     {
-        return Err(anyhow::Error::msg("User must be a member of album group").into());
+        return Err(anyhow::Error::msg("User must be a member of collection group").into());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -675,9 +675,9 @@ async fn add_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::AddAlbum {
+            DbMsg::AddCollection {
                 resp: tx,
-                album: Album {
+                collection: Collection {
                     uid: uid,
                     gid: message.gid,
                     mtime: Local::now().timestamp(),
@@ -691,18 +691,18 @@ async fn add_album(
 
     let result = rx.await??;
 
-    Ok(Json(AddAlbumResp { album_uuid: result }).into_response())
+    Ok(Json(AddCollectionResp { collection_uuid: result }).into_response())
 }
 
-async fn get_album(
+async fn get_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<GetAlbumReq>,
+    Json(message): Json<GetCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.can_access_album(&uid, &message.album_uuid).await? {
+    if !state.can_access_collection(&uid, &message.collection_uuid).await? {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -711,9 +711,9 @@ async fn get_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::GetAlbum {
+            DbMsg::GetCollection {
                 resp: tx,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
             }
             .into(),
         )
@@ -721,20 +721,20 @@ async fn get_album(
 
     let result = rx
         .await??
-        .ok_or_else(|| anyhow::Error::msg("unknown album_uuid"))?;
+        .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-    Ok(Json(GetAlbumResp { album: result }).into_response())
+    Ok(Json(GetCollectionResp { collection: result }).into_response())
 }
 
-async fn delete_album(
+async fn delete_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<DeleteAlbumReq>,
+    Json(message): Json<DeleteCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.owns_album(&uid, &message.album_uuid).await? {
+    if !state.owns_collection(&uid, &message.collection_uuid).await? {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -743,9 +743,9 @@ async fn delete_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::DeleteAlbum {
+            DbMsg::DeleteCollection {
                 resp: tx,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
             }
             .into(),
         )
@@ -753,18 +753,18 @@ async fn delete_album(
 
     rx.await??;
 
-    Ok(Json(DeleteAlbumResp {}).into_response())
+    Ok(Json(DeleteCollectionResp {}).into_response())
 }
 
-async fn update_album(
+async fn update_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<UpdateAlbumReq>,
+    Json(message): Json<UpdateCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.owns_album(&uid, &message.album_uuid).await? {
+    if !state.owns_collection(&uid, &message.collection_uuid).await? {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -773,9 +773,9 @@ async fn update_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::UpdateAlbum {
+            DbMsg::UpdateCollection {
                 resp: tx,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
                 update: message.update,
             }
             .into(),
@@ -784,13 +784,13 @@ async fn update_album(
 
     rx.await??;
 
-    Ok(Json(UpdateAlbumResp {}).into_response())
+    Ok(Json(UpdateCollectionResp {}).into_response())
 }
 
-async fn add_media_to_album(
+async fn add_media_to_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<AddMediaToAlbumReq>,
+    Json(message): Json<AddMediaToCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -799,7 +799,7 @@ async fn add_media_to_album(
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
-    if !state.can_access_album(&uid, &message.album_uuid).await? {
+    if !state.can_access_collection(&uid, &message.collection_uuid).await? {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -808,10 +808,10 @@ async fn add_media_to_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::AddMediaToAlbum {
+            DbMsg::AddMediaToCollection {
                 resp: tx,
                 media_uuid: message.media_uuid,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
             }
             .into(),
         )
@@ -819,20 +819,20 @@ async fn add_media_to_album(
 
     rx.await??;
 
-    Ok(Json(AddMediaToAlbumResp {}).into_response())
+    Ok(Json(AddMediaToCollectionResp {}).into_response())
 }
 
-async fn rm_media_from_album(
+async fn rm_media_from_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<RmMediaFromAlbumReq>,
+    Json(message): Json<RmMediaFromCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
 
     if !(state.owns_media(&uid, &message.media_uuid).await?
-        && state.can_access_album(&uid, &message.album_uuid).await?)
-        && !state.owns_album(&uid, &message.album_uuid).await?
+        && state.can_access_collection(&uid, &message.collection_uuid).await?)
+        && !state.owns_collection(&uid, &message.collection_uuid).await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
@@ -842,10 +842,10 @@ async fn rm_media_from_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::RmMediaFromAlbum {
+            DbMsg::RmMediaFromCollection {
                 resp: tx,
                 media_uuid: message.media_uuid,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
             }
             .into(),
         )
@@ -853,13 +853,13 @@ async fn rm_media_from_album(
 
     rx.await??;
 
-    Ok(Json(RmMediaFromAlbumResp {}).into_response())
+    Ok(Json(RmMediaFromCollectionResp {}).into_response())
 }
 
-async fn search_albums(
+async fn search_collections(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<SearchAlbumsReq>,
+    Json(message): Json<SearchCollectionsReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -873,7 +873,7 @@ async fn search_albums(
     state
         .db_svc_sender
         .send(
-            DbMsg::SearchAlbums {
+            DbMsg::SearchCollections {
                 resp: tx,
                 uid: uid,
                 gid: gid,
@@ -885,13 +885,13 @@ async fn search_albums(
 
     let result = rx.await??;
 
-    Ok(Json(SearchAlbumsResp { albums: result }).into_response())
+    Ok(Json(SearchCollectionsResp { collections: result }).into_response())
 }
 
-async fn search_media_in_album(
+async fn search_media_in_collection(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<SearchMediaInAlbumReq>,
+    Json(message): Json<SearchMediaInCollectionReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -905,11 +905,11 @@ async fn search_media_in_album(
     state
         .db_svc_sender
         .send(
-            DbMsg::SearchMediaInAlbum {
+            DbMsg::SearchMediaInCollection {
                 resp: tx,
                 uid: uid,
                 gid: gid,
-                album_uuid: message.album_uuid,
+                collection_uuid: message.collection_uuid,
                 filter: message.filter,
             }
             .into(),
@@ -918,7 +918,7 @@ async fn search_media_in_album(
 
     let result = rx.await??;
 
-    Ok(Json(SearchMediaInAlbumResp { media: result }).into_response())
+    Ok(Json(SearchMediaInCollectionResp { media: result }).into_response())
 }
 
 async fn get_library(

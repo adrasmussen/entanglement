@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use crate::auth::msg::*;
 use crate::db::{msg::DbMsg, ESDbService};
 use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
-use api::{album::*, comment::*, library::*, media::*};
+use api::{collection::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
 // mysql database backend
@@ -158,57 +158,57 @@ impl ESInner for MariaDBState {
                         .await
                 }
 
-                // album messages
-                DbMsg::AddAlbum { resp, album } => self.respond(resp, self.add_album(album)).await,
-                DbMsg::GetAlbum { resp, album_uuid } => {
-                    self.respond(resp, self.get_album(album_uuid)).await
+                // collection messages
+                DbMsg::AddCollection { resp, collection } => self.respond(resp, self.add_collection(collection)).await,
+                DbMsg::GetCollection { resp, collection_uuid } => {
+                    self.respond(resp, self.get_collection(collection_uuid)).await
                 }
-                DbMsg::DeleteAlbum { resp, album_uuid } => {
-                    self.respond(resp, self.delete_album(album_uuid)).await
+                DbMsg::DeleteCollection { resp, collection_uuid } => {
+                    self.respond(resp, self.delete_collection(collection_uuid)).await
                 }
-                DbMsg::UpdateAlbum {
+                DbMsg::UpdateCollection {
                     resp,
-                    album_uuid,
+                    collection_uuid,
                     update,
                 } => {
-                    self.respond(resp, self.update_album(album_uuid, update))
+                    self.respond(resp, self.update_collection(collection_uuid, update))
                         .await
                 }
-                DbMsg::AddMediaToAlbum {
+                DbMsg::AddMediaToCollection {
                     resp,
                     media_uuid,
-                    album_uuid,
+                    collection_uuid,
                 } => {
-                    self.respond(resp, self.add_media_to_album(media_uuid, album_uuid))
+                    self.respond(resp, self.add_media_to_collection(media_uuid, collection_uuid))
                         .await
                 }
-                DbMsg::RmMediaFromAlbum {
+                DbMsg::RmMediaFromCollection {
                     resp,
                     media_uuid,
-                    album_uuid,
+                    collection_uuid,
                 } => {
-                    self.respond(resp, self.rm_media_from_album(media_uuid, album_uuid))
+                    self.respond(resp, self.rm_media_from_collection(media_uuid, collection_uuid))
                         .await
                 }
-                DbMsg::SearchAlbums {
+                DbMsg::SearchCollections {
                     resp,
                     uid,
                     gid,
                     filter,
                 } => {
-                    self.respond(resp, self.search_albums(uid, gid, filter))
+                    self.respond(resp, self.search_collections(uid, gid, filter))
                         .await
                 }
-                DbMsg::SearchMediaInAlbum {
+                DbMsg::SearchMediaInCollection {
                     resp,
                     uid,
                     gid,
-                    album_uuid,
+                    collection_uuid,
                     filter,
                 } => {
                     self.respond(
                         resp,
-                        self.search_media_in_album(uid, gid, album_uuid, filter),
+                        self.search_media_in_collection(uid, gid, collection_uuid, filter),
                     )
                     .await
                 }
@@ -294,7 +294,7 @@ impl ESDbService for MariaDBState {
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
-    ) -> anyhow::Result<Option<(Media, Vec<AlbumUuid>, Vec<CommentUuid>)>> {
+    ) -> anyhow::Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
         common::db::mariadb::get_media(self.pool.clone(), media_uuid).await
     }
 
@@ -346,31 +346,31 @@ impl ESDbService for MariaDBState {
         common::db::mariadb::update_comment(self.pool.clone(), comment_uuid, text).await
     }
 
-    // album queries
-    async fn add_album(&self, album: Album) -> anyhow::Result<AlbumUuid> {
-        common::db::mariadb::add_album(self.pool.clone(), album).await
+    // collection queries
+    async fn add_collection(&self, collection: Collection) -> anyhow::Result<CollectionUuid> {
+        common::db::mariadb::add_collection(self.pool.clone(), collection).await
     }
 
-    async fn get_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<Option<Album>> {
-        common::db::mariadb::get_album(self.pool.clone(), album_uuid).await
+    async fn get_collection(&self, collection_uuid: CollectionUuid) -> anyhow::Result<Option<Collection>> {
+        common::db::mariadb::get_collection(self.pool.clone(), collection_uuid).await
     }
 
-    async fn delete_album(&self, album_uuid: AlbumUuid) -> anyhow::Result<()> {
-        common::db::mariadb::delete_album(self.pool.clone(), album_uuid).await
+    async fn delete_collection(&self, collection_uuid: CollectionUuid) -> anyhow::Result<()> {
+        common::db::mariadb::delete_collection(self.pool.clone(), collection_uuid).await
 
         // should the function return a list of affected media to clear the cache?
     }
 
-    async fn update_album(&self, album_uuid: AlbumUuid, update: AlbumUpdate) -> anyhow::Result<()> {
-        common::db::mariadb::update_album(self.pool.clone(), album_uuid, update).await
+    async fn update_collection(&self, collection_uuid: CollectionUuid, update: CollectionUpdate) -> anyhow::Result<()> {
+        common::db::mariadb::update_collection(self.pool.clone(), collection_uuid, update).await
     }
 
-    async fn add_media_to_album(
+    async fn add_media_to_collection(
         &self,
         media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     ) -> anyhow::Result<()> {
-        common::db::mariadb::add_media_to_album(self.pool.clone(), media_uuid, album_uuid).await?;
+        common::db::mariadb::add_media_to_collection(self.pool.clone(), media_uuid, collection_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -378,12 +378,12 @@ impl ESDbService for MariaDBState {
         Ok(())
     }
 
-    async fn rm_media_from_album(
+    async fn rm_media_from_collection(
         &self,
         media_uuid: MediaUuid,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
     ) -> anyhow::Result<()> {
-        common::db::mariadb::rm_media_from_album(self.pool.clone(), media_uuid, album_uuid).await?;
+        common::db::mariadb::rm_media_from_collection(self.pool.clone(), media_uuid, collection_uuid).await?;
 
         self.clear_access_cache(Vec::from([media_uuid.clone()]))
             .await?;
@@ -391,23 +391,23 @@ impl ESDbService for MariaDBState {
         Ok(())
     }
 
-    async fn search_albums(
+    async fn search_collections(
         &self,
         uid: String,
         gid: HashSet<String>,
         filter: String,
-    ) -> anyhow::Result<Vec<AlbumUuid>> {
-        common::db::mariadb::search_albums(self.pool.clone(), uid, gid, filter).await
+    ) -> anyhow::Result<Vec<CollectionUuid>> {
+        common::db::mariadb::search_collections(self.pool.clone(), uid, gid, filter).await
     }
 
-    async fn search_media_in_album(
+    async fn search_media_in_collection(
         &self,
         uid: String,
         gid: HashSet<String>,
-        album_uuid: AlbumUuid,
+        collection_uuid: CollectionUuid,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
-        common::db::mariadb::search_media_in_album(self.pool.clone(), uid, gid, album_uuid, filter)
+        common::db::mariadb::search_media_in_collection(self.pool.clone(), uid, gid, collection_uuid, filter)
             .await
     }
 

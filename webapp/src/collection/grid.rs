@@ -1,32 +1,32 @@
-// webapp/src/album/grid.rs
+// webapp/src/collection/grid.rs
 
-use crate::album::card::AlbumCard;
+use crate::collection::card::CollectionCard;
 use crate::components::modal::{Modal, MODAL_STACK};
-use api::album::AlbumUuid;
+use api::collection::CollectionUuid;
 use dioxus::prelude::*;
 
 #[derive(Clone, PartialEq, Props)]
-pub struct AlbumGridProps {
-    albums: Vec<AlbumUuid>,
+pub struct CollectionGridProps {
+    collections: Vec<CollectionUuid>,
 }
 
 #[component]
-pub fn AlbumGrid(props: AlbumGridProps) -> Element {
-    let has_albums = !props.albums.is_empty();
+pub fn CollectionGrid(props: CollectionGridProps) -> Element {
+    let has_collections = !props.collections.is_empty();
 
     rsx! {
-        if has_albums {
+        if has_collections {
             div {
-                class: "albums-grid",
+                class: "collections-grid",
                 style: "
                     display: grid;
                     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
                     gap: var(--space-4);
                     margin-top: var(--space-4);
                 ",
-                for album_uuid in props.albums.iter() {
-                    div { key: "{album_uuid}",
-                        AlbumCard { album_uuid: *album_uuid }
+                for collection_uuid in props.collections.iter() {
+                    div { key: "{collection_uuid}",
+                        CollectionCard { collection_uuid: *collection_uuid }
                     }
                 }
             }
@@ -51,22 +51,22 @@ pub fn AlbumGrid(props: AlbumGridProps) -> Element {
                         margin-bottom: var(--space-2);
                         color: var(--text-primary);
                     ",
-                    "No Albums Found"
+                    "No Collections Found"
                 }
                 p { style: "
                         color: var(--text-secondary);
                         max-width: 500px;
                         margin: 0 auto;
                     ",
-                    "No albums match your search criteria. Try adjusting your search or create a new album to get started."
+                    "No collections match your search criteria. Try adjusting your search or create a new collection to get started."
                 }
                 button {
                     class: "btn btn-primary",
                     style: "margin-top: var(--space-4);",
                     onclick: move |_| {
-                        MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
+                        MODAL_STACK.with_mut(|v| v.push(Modal::CreateCollection));
                     },
-                    "Create New Album"
+                    "Create New Collection"
                 }
             }
         }

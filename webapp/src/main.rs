@@ -14,8 +14,8 @@ use home::ModernHome;
 mod gallery;
 use gallery::{Gallery, GalleryDetail, GallerySearch};
 
-mod album;
-use album::{AlbumDetail, AlbumSearch, Albums};
+mod collection;
+use collection::{CollectionDetail, CollectionSearch, Collections};
 
 mod library;
 use library::{Libraries, LibraryDetail, LibrarySearch};
@@ -27,10 +27,10 @@ fn main() {
 }
 
 // Probably the easiest way to make the gallery view useful is to
-// have an optional ?album=XXX,library=XXX when jumping back to the
+// have an optional ?collection=XXX,library=XXX when jumping back to the
 // GalleryDetail for particular media
 //
-// this enables menus to say "came from this album -- remove?" and
+// this enables menus to say "came from this collection -- remove?" and
 // possibly other things
 
 #[derive(Clone, PartialEq, Routable)]
@@ -47,12 +47,12 @@ enum Route {
                 GalleryDetail { media_uuid: String },
             #[end_layout]
         #[end_nest]
-        #[nest("/albums")]
-            #[layout(Albums)]
+        #[nest("/collections")]
+            #[layout(Collections)]
                 #[route("/")]
-                AlbumSearch {},
-                #[route("/:album_uuid")]
-                AlbumDetail { album_uuid: String },
+                CollectionSearch {},
+                #[route("/:collection_uuid")]
+                CollectionDetail { collection_uuid: String },
             #[end_layout]
         #[end_nest]
         #[nest("/library")]

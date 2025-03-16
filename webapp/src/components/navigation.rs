@@ -31,10 +31,10 @@ pub fn ModernNavBar() -> Element {
                         "Gallery"
                     }
                     Link {
-                        to: Route::AlbumSearch {},
-                        class: if current_path.is_child_of(&Route::AlbumSearch {})
-    || current_path == (Route::AlbumSearch {}) { "nav-link active" } else { "nav-link" },
-                        "Albums"
+                        to: Route::CollectionSearch {},
+                        class: if current_path.is_child_of(&Route::CollectionSearch {})
+    || current_path == (Route::CollectionSearch {}) { "nav-link active" } else { "nav-link" },
+                        "Collections"
                     }
                     Link {
                         to: Route::LibrarySearch {},

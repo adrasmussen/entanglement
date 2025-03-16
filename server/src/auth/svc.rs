@@ -27,7 +27,7 @@ use common::{
 // and authorization (authz) providers, and a cache so we don't have to query them often
 //
 // the cache semantics are not ideal (need to be flushed manually when the group information
-// changes), but the database service will flush individual media files when their albums change
+// changes), but the database service will flush individual media files when their collections change
 //
 // there are almost certainly several better ways of doing this, which will likely matter when we
 // switch to using ldap instead of a fixed file, but the services should roughly stay the same

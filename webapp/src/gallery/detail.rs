@@ -4,7 +4,7 @@ use dioxus_router::prelude::*;
 use crate::{
     common::stream::full_link,
     components::modal::{Modal, ModalBox, MODAL_STACK},
-    gallery::{albums::AlbumTable, comments::CommentList, similar::SimilarMedia},
+    gallery::{collections::CollectionTable, comments::CommentList, similar::SimilarMedia},
     Route,
 };
 use api::{fold_set, media::*, unfold_set};
@@ -103,8 +103,8 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
     };
 
     // subscribe other elements via memos
-    let album_uuids = use_memo(move || match &*media_future.read() {
-        Some(Ok(v)) => v.albums.clone(),
+    let collection_uuids = use_memo(move || match &*media_future.read() {
+        Some(Ok(v)) => v.collections.clone(),
         _ => Vec::new(),
     });
 
@@ -195,7 +195,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                     SimilarMedia { media_uuid }
                 }
 
-                // Right column - All metadata, albums, and comments (scrollable)
+                // Right column - All metadata, collections, and comments (scrollable)
                 div {
                     class: "media-detail-sidebar",
                     style: "
@@ -368,8 +368,8 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         }
                     }
 
-                    // Albums section - using our new component
-                    AlbumTable { album_uuids, media_uuid }
+                    // Collections section - using our new component
+                    CollectionTable { collection_uuids, media_uuid }
 
                     // Use our new comments component
                     CommentList {

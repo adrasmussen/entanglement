@@ -1,30 +1,30 @@
-// webapp/src/album/search.rs
+// webapp/src/collection/search.rs
 
 use dioxus::prelude::*;
 
 use crate::{
-    album::{grid::AlbumGrid, ALBUM_SEARCH_KEY},
+    collection::{grid::CollectionGrid, COLLECTION_SEARCH_KEY},
     common::storage::*,
     components::{
         modal::{Modal, ModalBox, MODAL_STACK},
         search_bar::SearchBar,
     },
 };
-use api::album::*;
+use api::collection::*;
 
 #[component]
-pub fn AlbumSearch() -> Element {
+pub fn CollectionSearch() -> Element {
     let update_signal = use_signal(|| ());
 
     // Get search signal from local storage
-    let album_search_signal = use_signal::<String>(|| try_local_storage(ALBUM_SEARCH_KEY));
+    let collection_search_signal = use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
 
-    // Fetch albums data
-    let album_future = use_resource(move || async move {
+    // Fetch collections data
+    let collection_future = use_resource(move || async move {
         // Read the update signal to trigger a refresh when needed
         update_signal.read();
-        let filter = album_search_signal();
-        search_albums(&SearchAlbumsReq { filter }).await
+        let filter = collection_search_signal();
+        search_collections(&SearchCollectionsReq { filter }).await
     });
 
     // Create action button for search bar - positioned on the right
@@ -33,17 +33,17 @@ pub fn AlbumSearch() -> Element {
             button {
                 class: "btn btn-primary",
                 onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.push(Modal::CreateAlbum));
+                    MODAL_STACK.with_mut(|v| v.push(Modal::CreateCollection));
                 },
-                "Create Album"
+                "Create Collection"
             }
         }
     };
 
     // Get status text
-    let status = match &*album_future.read() {
-        Some(Ok(resp)) => format!("Found {} albums", resp.albums.len()),
-        Some(Err(_)) => String::from("Error searching albums"),
+    let status = match &*collection_future.read() {
+        Some(Ok(resp)) => format!("Found {} collections", resp.collections.len()),
+        Some(Err(_)) => String::from("Error searching collections"),
         None => String::from("Loading..."),
     };
 
@@ -54,24 +54,24 @@ pub fn AlbumSearch() -> Element {
 
             // Page header
             div { class: "page-header", style: "margin-bottom: var(--space-4);",
-                h1 { class: "section-title", "Albums" }
+                h1 { class: "section-title", "Collections" }
                 p { "Organize and browse your media collections" }
             }
 
             // Search controls
             SearchBar {
-                search_signal: album_search_signal,
-                storage_key: ALBUM_SEARCH_KEY,
-                placeholder: "Search by album name or description...",
+                search_signal: collection_search_signal,
+                storage_key: COLLECTION_SEARCH_KEY,
+                placeholder: "Search by collection name or description...",
                 status,
                 action_button,
             }
 
-            // Album grid
-            match &*album_future.read() {
+            // Collection grid
+            match &*collection_future.read() {
                 Some(Ok(resp)) => {
                     rsx! {
-                        AlbumGrid { albums: resp.albums.clone() }
+                        CollectionGrid { collections: resp.collections.clone() }
                     }
                 }
                 Some(Err(err)) => rsx! {
@@ -90,7 +90,7 @@ pub fn AlbumSearch() -> Element {
                 },
                 None => rsx! {
                     div {
-                        class: "loading-state albums-grid",
+                        class: "loading-state collections-grid",
                         style: "
                             display: grid;
                             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -99,7 +99,7 @@ pub fn AlbumSearch() -> Element {
                         ",
                         for _ in 0..6 {
                             div {
-                                class: "album-card loading",
+                                class: "collection-card loading",
                                 style: "
                                     background-color: var(--surface);
                                     border-radius: var(--radius-lg);

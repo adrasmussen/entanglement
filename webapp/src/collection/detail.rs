@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    album::MEDIA_SEARCH_KEY,
+    collection::MEDIA_SEARCH_KEY,
     common::{local_time, storage::*},
     components::{
         media_card::MediaCard,
@@ -11,16 +11,16 @@ use crate::{
     },
     Route,
 };
-use api::album::*;
+use api::collection::*;
 
 #[derive(Clone, PartialEq, Props)]
-pub struct AlbumDetailProps {
+pub struct CollectionDetailProps {
     // This is a String because we get it from the Router
-    album_uuid: String,
+    collection_uuid: String,
 }
 
 #[component]
-pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
+pub fn CollectionDetail(props: CollectionDetailProps) -> Element {
     let update_signal = use_signal(|| ());
 
     rsx! {
@@ -31,76 +31,76 @@ pub fn AlbumDetail(props: AlbumDetailProps) -> Element {
                     if let Some(error_ui) = error.show() {
                         {error_ui}
                     } else {
-                        div { "AlbumDetail encountered an error.  Check the logs or reach out the the administrators." }
+                        div { "CollectionDetail encountered an error.  Check the logs or reach out the the administrators." }
                     }
                 }
             },
-            AlbumInner { update_signal, album_uuid: props.album_uuid }
+            CollectionInner { update_signal, collection_uuid: props.collection_uuid }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
-pub struct AlbumErrorProps {
+pub struct CollectionErrorProps {
     message: String,
 }
 
 #[component]
-fn AlbumError(props: AlbumErrorProps) -> Element {
+fn CollectionError(props: CollectionErrorProps) -> Element {
     rsx! {
         div { class: "container error-state",
-            h1 { "Error Loading Album" }
+            h1 { "Error Loading Collection" }
             p { "There was an error loading the media: {props.message}" }
-            Link { to: Route::AlbumSearch {}, class: "btn btn-primary", "Return to Albums" }
+            Link { to: Route::CollectionSearch {}, class: "btn btn-primary", "Return to Collections" }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Props)]
-struct AlbumInnerProps {
+struct CollectionInnerProps {
     update_signal: Signal<()>,
-    album_uuid: String,
+    collection_uuid: String,
 }
 
 #[component]
-fn AlbumInner(props: AlbumInnerProps) -> Element {
+fn CollectionInner(props: CollectionInnerProps) -> Element {
     let update_signal = props.update_signal;
-    let album_uuid = props.album_uuid.parse::<AlbumUuid>().show(|_| {
-        let message = "The album_uuid could not be parsed".to_string();
+    let collection_uuid = props.collection_uuid.parse::<CollectionUuid>().show(|_| {
+        let message = "The collection_uuid could not be parsed".to_string();
         rsx! {
-            AlbumError { message }
+            CollectionError { message }
         }
     })?;
 
     // see GalleryInner for details
-    let album_uuid = use_memo(use_reactive(&album_uuid, |album_uuid| album_uuid));
-    let album_future = use_resource(move || async move {
-        let album_uuid = album_uuid();
-        get_album(&GetAlbumReq { album_uuid }).await
+    let collection_uuid = use_memo(use_reactive(&collection_uuid, |collection_uuid| collection_uuid));
+    let collection_future = use_resource(move || async move {
+        let collection_uuid = collection_uuid();
+        get_collection(&GetCollectionReq { collection_uuid }).await
     });
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let media_future = use_resource(move || async move {
         update_signal();
-        let album_uuid = album_uuid();
+        let collection_uuid = collection_uuid();
         let filter = media_search_signal();
 
-        search_media_in_album(&SearchMediaInAlbumReq { album_uuid, filter }).await
+        search_media_in_collection(&SearchMediaInCollectionReq { collection_uuid, filter }).await
     });
 
     // see GalleryInner for details
     //
     // the two futures both early return the same loading skeleton, but they could differ in principle
-    let album_data = &*album_future.read();
-    let album_data = match album_data.clone().transpose().show(|error| {
+    let collection_data = &*collection_future.read();
+    let collection_data = match collection_data.clone().transpose().show(|error| {
         rsx! {
-            AlbumError { message: format!("There was an error loading the album: {error}") }
+            CollectionError { message: format!("There was an error loading the collection: {error}") }
         }
     })? {
         Some(v) => v,
         None => {
             return rsx! {
-                AlbumDetailSkeleton {}
+                CollectionDetailSkeleton {}
             }
         }
     };
@@ -108,33 +108,33 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
     let media_data = &*media_future.read();
     let media_data = match media_data.clone().transpose().show(|error| {
         rsx! {
-            AlbumError { message: format!("There was an error searching media in the album: {error}") }
+            CollectionError { message: format!("There was an error searching media in the collection: {error}") }
         }
     })? {
         Some(v) => v,
         None => {
             return rsx! {
-                AlbumDetailSkeleton {}
+                CollectionDetailSkeleton {}
             }
         }
     };
 
-    let album = album_data.album;
+    let collection = collection_data.collection;
     let media = media_data.media;
 
-    let formatted_time = local_time(album.mtime);
+    let formatted_time = local_time(collection.mtime);
 
     rsx! {
         div { class: "container",
             // breadcrumb navigation
             div { class: "breadcrumb", style: "margin-bottom: var(--space-4);",
-                Link { to: Route::AlbumSearch {}, "Albums" }
+                Link { to: Route::CollectionSearch {}, "Collections" }
                 span { " / " }
-                span { "{album.name}" }
+                span { "{collection.name}" }
             }
-            // album detail view header
+            // collection detail view header
             div {
-                class: "album-detail-header",
+                class: "collection-detail-header",
                 style: "
                     background-color: var(--surface);
                     border-radius: var(--radius-lg);
@@ -143,9 +143,9 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                     box-shadow: var(--shadow-sm);
                 ",
                 div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
-                    // Album info
+                    // Collection info
                     div {
-                        h1 { style: "margin: 0 0 var(--space-2) 0;", "{album.name}" }
+                        h1 { style: "margin: 0 0 var(--space-2) 0;", "{collection.name}" }
                         div { style: "
                                 display: flex;
                                 gap: var(--space-4);
@@ -153,12 +153,12 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                                 color: var(--text-secondary);
                                 font-size: 0.875rem;
                             ",
-                            span { "Owner: {album.uid}" }
-                            span { "Group: {album.gid}" }
+                            span { "Owner: {collection.uid}" }
+                            span { "Group: {collection.gid}" }
                             span { "Last modified: {formatted_time}" }
                         }
 
-                        if !album.note.is_empty() {
+                        if !collection.note.is_empty() {
                             p { style: "
                                     padding: var(--space-3);
                                     background-color: var(--neutral-50);
@@ -167,7 +167,7 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                                     color: var(--text-secondary);
                                     max-width: 700px;
                                 ",
-                                "{album.note}"
+                                "{collection.note}"
                             }
                         }
                     }
@@ -176,16 +176,16 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                         button {
                             class: "btn btn-secondary",
                             onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::EditAlbum(album_uuid())));
+                                MODAL_STACK.with_mut(|v| v.push(Modal::EditCollection(collection_uuid())));
                             },
-                            "Edit Album"
+                            "Edit Collection"
                         }
                         button {
                             class: "btn btn-danger",
                             onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::DeleteAlbum(album_uuid())));
+                                MODAL_STACK.with_mut(|v| v.push(Modal::DeleteCollection(collection_uuid())));
                             },
-                            "Delete Album"
+                            "Delete Collection"
                         }
                     }
                 }
@@ -193,8 +193,8 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
             SearchBar {
                 search_signal: media_search_signal,
                 storage_key: MEDIA_SEARCH_KEY,
-                placeholder: "Search media in this album...",
-                status: format!("Found {} items in this album", media.len()),
+                placeholder: "Search media in this collection...",
+                status: format!("Found {} items in this collection", media.len()),
             }
             // media grid
             if media.is_empty() {
@@ -218,20 +218,20 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                             margin-bottom: var(--space-2);
                             color: var(--text-primary);
                         ",
-                        "No Media in This Album"
+                        "No Media in This Collection"
                     }
                     p { style: "
                             color: var(--text-secondary);
                             max-width: 500px;
                             margin: 0 auto;
                         ",
-                        "This album doesn't contain any media yet. Add some media to get started."
+                        "This collection doesn't contain any media yet. Add some media to get started."
                     }
                     button {
                         class: "btn btn-primary",
                         style: "margin-top: var(--space-4);",
                         onclick: move |_| {},
-                        "Add Media to Album"
+                        "Add Media to Collection"
                     }
                 }
             } else {
@@ -247,7 +247,7 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
                         MediaCard {
                             key: "{media_uuid}",
                             media_uuid: *media_uuid,
-                            album_uuid: Some(album_uuid()),
+                            collection_uuid: Some(collection_uuid()),
                         }
                     }
                 }
@@ -257,7 +257,7 @@ fn AlbumInner(props: AlbumInnerProps) -> Element {
 }
 
 #[component]
-fn AlbumDetailSkeleton() -> Element {
+fn CollectionDetailSkeleton() -> Element {
     rsx! {
         div { class: "container loading-state",
             div {
