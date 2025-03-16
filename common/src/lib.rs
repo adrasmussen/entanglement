@@ -1,15 +1,22 @@
-pub mod auth;
-pub mod config;
-pub mod db;
-
 use std::cmp::Eq;
+use std::collections::HashSet;
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::Arc;
 
+use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use dashmap::{mapref::entry::Entry, DashMap};
 
+pub mod auth;
+pub mod config;
+pub mod db;
+
+// string validation
+//
+//
+pub const USER_REGEX: &str = r"^[a-zA-Z0-9_.-]{1,64}$";
+pub const GROUP_REGEX: &str = r"^[a-zA-Z0-9_.-]{1,64}$";
 // awaitable cache
 //
 // this is loosely inspired by the WaitCache crate, except that we want to have requests await

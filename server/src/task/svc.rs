@@ -13,12 +13,18 @@ use tokio::{
 };
 use tracing::{debug, error, info, instrument, warn, Level};
 
-use crate::service::{
-    ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
+use crate::{
+    auth::check::AuthCheck,
+    db::msg::DbMsg,
+    service::{
+        ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
+    },
+    task::{msg::TaskMsg, scan::scan_library, ESTaskService},
 };
-use crate::task::{msg::TaskMsg, scan::scan_library, ESTaskService};
-use crate::{auth::check::AuthCheck, db::msg::DbMsg};
-use api::{library::LibraryUuid, task::{Task, TaskStatus, TaskType, TaskUid, TaskUpdate}};
+use api::{
+    library::LibraryUuid,
+    task::{Task, TaskStatus, TaskType, TaskUid, TaskUpdate},
+};
 use common::config::ESConfig;
 
 pub struct TaskService {

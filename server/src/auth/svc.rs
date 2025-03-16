@@ -1,22 +1,25 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
+use regex::Regex;
 use tokio::sync::Mutex;
+use tracing::{debug, error, info, instrument, Level};
 
+use crate::{
+    auth::{msg::AuthMsg, ESAuthService},
+    db::msg::DbMsg,
+    service::{
+        ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM,
+    },
+};
 use api::media::MediaUuid;
 use common::{
     auth::{proxy::ProxyAuth, yamlfile::YamlGroupFile, AuthnBackend, AuthzBackend},
     config::ESConfig,
-    AwaitCache,
+    AwaitCache, GROUP_REGEX, USER_REGEX,
 };
-use tracing::{debug, error, info, instrument, Level};
-
-use crate::auth::msg::AuthMsg;
-use crate::auth::ESAuthService;
-use crate::db::msg::DbMsg;
-use crate::service::{ESMReceiver, ESM, ESMRegistry, ESInner, EntanglementService, ESMSender, ServiceType};
 
 // auth service
 //
@@ -41,7 +44,9 @@ impl EntanglementService for AuthService {
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
 
-        registry.insert(ServiceType::Auth, tx);
+        registry
+            .insert(ServiceType::Auth, tx)
+            .expect("failed to add auth sender to registry");
 
         AuthService {
             config: config.clone(),
@@ -116,6 +121,7 @@ impl EntanglementService for AuthService {
     }
 }
 
+// TODO -- add user/group regexes
 pub struct AuthCache {
     registry: ESMRegistry,
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
@@ -124,20 +130,21 @@ pub struct AuthCache {
     user_cache: Arc<AwaitCache<String, HashSet<String>>>,
     // media_uuid: set(gid)
     access_cache: Arc<AwaitCache<MediaUuid, HashSet<String>>>,
+    user_regex: Regex,
+    group_regex: Regex,
 }
 
 #[async_trait]
 impl ESInner for AuthCache {
-    fn new(
-        _config: Arc<ESConfig>,
-        registry: ESMRegistry,
-    ) -> anyhow::Result<Self> {
+    fn new(_config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         Ok(AuthCache {
             registry: registry.clone(),
             authn_providers: Arc::new(Mutex::new(Vec::new())),
             authz_providers: Arc::new(Mutex::new(Vec::new())),
             user_cache: Arc::new(AwaitCache::new()),
             access_cache: Arc::new(AwaitCache::new()),
+            user_regex: Regex::new(USER_REGEX)?,
+            group_regex: Regex::new(GROUP_REGEX)?,
         })
     }
 
@@ -154,7 +161,6 @@ impl ESInner for AuthCache {
                 AuthMsg::ClearAccessCache { resp, uuid } => {
                     self.respond(resp, self.clear_access_cache(uuid)).await
                 }
-
                 AuthMsg::GroupsForUser { resp, uid } => {
                     self.respond(resp, self.groups_for_user(uid)).await
                 }
@@ -194,16 +200,33 @@ impl ESInner for AuthCache {
     }
 }
 
+// AuthCache-specifc logic
+//
+// these two functions are the interface with the particular details of the providers and
+// the way the media authorization scheme works
 impl AuthCache {
+    // this is called to populate the user cache for a particular user, and calls all of the
+    // configured providers to get group information
+    //
+    // thus, it is the best singular place to check group validity, as it ensure that only
+    // valid groups make it into the cache
     async fn groups_from_providers(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let mut groups = HashSet::new();
+
+        if !self.is_valid_user(uid.clone()).await? {
+            return Err(anyhow::Error::msg("invalid uid"))
+        }
 
         let authz_providers = self.authz_providers.clone();
 
         let authz_providers = authz_providers.lock().await;
 
         for provider in authz_providers.iter() {
-            groups.extend(provider.groups_for_user(uid.clone()).await?);
+            let mut newgroups = provider.groups_for_user(uid.clone()).await?;
+
+            // only keep valid groups from the returned set
+            newgroups.retain(|s| self.group_regex.is_match(s));
+            groups.extend(newgroups);
         }
 
         Ok(groups)
@@ -227,18 +250,7 @@ impl AuthCache {
         rx.await?
     }
 }
-// should we attempt to optimize the rwlock logic to batch writes?
-//
-// maybe batch with tokio::select! and recv_many -- have a separate writer
-// process with a 1024-length queue
-//
-// may not need timer, actually -- if we while let Some(_) = recv_many(...)
-// then we let things build up during each cycle
 
-// alternatively, prime the cache at boot time and periodically refresh it
-// in bulk, including after each scan
-//
-// then, after we commit changes to any images, refresh just that image
 #[async_trait]
 impl ESAuthService for AuthCache {
     // cache management
@@ -288,6 +300,9 @@ impl ESAuthService for AuthCache {
         Ok(())
     }
 
+    // CACHE LOOKUP FUNCTION
+    //
+    // this is the primary access method for the user AwaitCache
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let user_cache = self.user_cache.clone();
 
@@ -399,6 +414,10 @@ impl ESAuthService for AuthCache {
 
     async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool> {
         let authn_providers = self.authn_providers.clone();
+
+        if !self.user_regex.is_match(&uid) {
+            return Err(anyhow::Error::msg("invalid uid"))
+        }
 
         let authn_providers = authn_providers.lock().await;
 

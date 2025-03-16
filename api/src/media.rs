@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::endpoint;
@@ -24,6 +26,7 @@ pub struct Media {
     pub hidden: bool,
     pub date: String,
     pub note: String,
+    pub tags: HashSet<String>,
     pub metadata: MediaMetadata,
 }
 
@@ -32,6 +35,7 @@ pub struct MediaUpdate {
     pub hidden: Option<bool>,
     pub date: Option<String>,
     pub note: Option<String>,
+    pub tags: Option<HashSet<String>>,
 }
 
 // messages

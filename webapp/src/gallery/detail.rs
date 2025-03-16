@@ -7,7 +7,7 @@ use crate::{
     gallery::{albums::AlbumTable, comments::CommentList, similar::SimilarMedia},
     Route,
 };
-use api::media::*;
+use api::{unfold_set, media::*};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {
@@ -213,6 +213,8 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                             onsubmit: move |event| async move {
                                 let date = event.values().get("date").map(|v| v.as_value());
                                 let note = event.values().get("note").map(|v| v.as_value());
+                                let tags = event.values().get("tags").map(|v| v.as_value()).map(|s| unfold_set(s));
+
                                 match update_media(
                                         &UpdateMediaReq {
                                             media_uuid: media_uuid(),
@@ -220,6 +222,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                                 hidden: None,
                                                 date,
                                                 note,
+                                                tags,
                                             },
                                         },
                                     )
@@ -289,6 +292,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                                             hidden: Some(!media.hidden),
                                                             date: None,
                                                             note: None,
+                                                            tags: None,
                                                         },
                                                     },
                                                 )
@@ -315,6 +319,20 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                     name: "note",
                                     rows: 3,
                                     value: "{media.note}",
+                                }
+                            }
+
+                            div {
+                                class: "form-row",
+                                style: "display: flex; gap: var(--space-4);",
+                                div { class: "form-group", style: "flex: 1;",
+                                    label { class: "form-label", "Tags" }
+                                    input {
+                                        class: "form-input",
+                                        r#type: "text",
+                                        value: "tags lol",
+                                        disabled: true,
+                                    }
                                 }
                             }
 

@@ -5,10 +5,14 @@ use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
 use tracing::{debug, instrument, Level};
 
 use crate::auth::{Group, User};
-use api::album::{Album, AlbumUpdate, AlbumUuid};
-use api::comment::{Comment, CommentUuid};
-use api::library::{Library, LibraryUpdate, LibraryUuid};
-use api::media::{Media, MediaMetadata, MediaUpdate, MediaUuid};
+use api::{
+    album::{Album, AlbumUpdate, AlbumUuid},
+    comment::{Comment, CommentUuid},
+    fold_set,
+    library::{Library, LibraryUpdate, LibraryUuid},
+    media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
+    unfold_set,
+};
 
 #[instrument(level=Level::DEBUG, skip_all)]
 pub async fn media_access_groups(
@@ -312,7 +316,7 @@ pub async fn get_media(
     debug!({ media_uuid = media_uuid }, "getting media details");
 
     let mut media_result = r"
-        SELECT library_uuid, path, hash, mtime, hidden, date, note, media_type FROM media WHERE media_uuid = :media_uuid"
+        SELECT library_uuid, path, hash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
             "media_uuid" => media_uuid,
         })
@@ -328,6 +332,7 @@ pub async fn get_media(
             String,
             i64,
             bool,
+            String,
             String,
             String,
             String,
@@ -376,7 +381,8 @@ pub async fn get_media(
             hidden: media_data.4,
             date: media_data.5,
             note: media_data.6,
-            metadata: match media_data.7.as_str() {
+            tags: unfold_set(media_data.7),
+            metadata: match media_data.8.as_str() {
                 "Image" => MediaMetadata::Image,
                 "Video" => MediaMetadata::Video,
                 "VideoSlice" => MediaMetadata::VideoSlice,
@@ -458,6 +464,17 @@ pub async fn update_media(
             .await?;
     }
 
+    if let Some(val) = update.tags {
+        r"
+        UPDATE media SET tags = :tags WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "tags" => fold_set(val.clone())?,
+                "media_uuid" => media_uuid,
+            })
+            .run(pool.get_conn().await?)
+            .await?;
+    }
+
     r"
     UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
         .with(params! {
@@ -519,7 +536,7 @@ pub async fn search_media(
             hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -583,7 +600,7 @@ pub async fn similar_media(
             hidden = FALSE AND BIG_HAM((SELECT hash FROM media where media_uuid = :media_uuid), hash) < :distance"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "media_uuid" => media_uuid,
             "distance" => distance,
         })
@@ -849,7 +866,7 @@ pub async fn search_albums(
             INSTR(:gid, gid) > 0 AND CONCAT_WS(' ', name, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -898,7 +915,7 @@ pub async fn search_media_in_album(
                 hidden = FALSE AND CONCAT_WS(' ', DATE, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "album_uuid" => album_uuid,
             "filter" => format!("%{}%", filter),
         })
@@ -1035,7 +1052,7 @@ pub async fn search_libraries(
             INSTR(:gid, gid) > 0 AND path LIKE :filter"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "filter" => format!("%{}%", filter),
         })
         .run(pool.get_conn().await?)
@@ -1081,7 +1098,7 @@ pub async fn search_media_in_library(
             hidden = :hidden AND CONCAT_WS(' ', date, note) LIKE :filter"
         .with(params! {
             "uid" => uid,
-            "gid" => gid.iter().fold(String::new(), |a, b| a + b + ", "),
+            "gid" => fold_set(gid)?,
             "library_uuid" => library_uuid,
             "hidden" => hidden,
             "filter" => format!("%{}%", filter),

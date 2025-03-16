@@ -13,8 +13,6 @@ use albums::{
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
 
-mod media_detail_modal;
-
 // global modal signal
 //
 // rather than having each page have its own modal signal logic, we define a global
