@@ -13,31 +13,14 @@ use api::library::*;
 pub fn LibrarySearch() -> Element {
     let update_signal = use_signal(|| ());
 
-    // Get search signal from local storage
     let library_search_signal = use_signal::<String>(|| try_local_storage(LIBRARY_SEARCH_KEY));
 
-    // Fetch libraries data
     let library_future = use_resource(move || async move {
-        // Read the update signal to trigger a refresh when needed
         update_signal.read();
         let filter = library_search_signal();
         search_libraries(&SearchLibrariesReq { filter }).await
     });
 
-    // Create action button for search bar - positioned on the right
-    let action_button = rsx! {
-        div { style: "margin-left: auto;", // This will push the button to the right
-            button {
-                class: "btn btn-primary",
-                onclick: move |_| {
-                    tracing::info!("Scan libraries clicked");
-                },
-                "Scan Libraries"
-            }
-        }
-    };
-
-    // Get status text
     let status = match &*library_future.read() {
         Some(Ok(resp)) => format!("Found {} libraries", resp.libraries.len()),
         Some(Err(_)) => String::from("Error searching libraries"),
@@ -46,25 +29,20 @@ pub fn LibrarySearch() -> Element {
 
     rsx! {
         div { class: "container",
-            // Modal container for popups
             ModalBox { update_signal }
 
-            // Page header
             div { class: "page-header", style: "margin-bottom: var(--space-4);",
                 h1 { class: "section-title", "Libraries" }
                 p { "Manage your media source libraries" }
             }
 
-            // Search controls
             SearchBar {
                 search_signal: library_search_signal,
                 storage_key: LIBRARY_SEARCH_KEY,
                 placeholder: "Search by library path...",
                 status,
-                action_button,
             }
 
-            // Library table
             match &*library_future.read() {
                 Some(Ok(resp)) => {
                     rsx! {
