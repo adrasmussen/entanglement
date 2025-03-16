@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Formatter, Display};
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 pub mod album;
@@ -21,15 +21,39 @@ pub const SLICE_PATH: &str = "slices";
 pub const FOLDING_SEPARATOR: &str = "|";
 
 pub fn fold_set(set: HashSet<String>) -> anyhow::Result<String> {
-    if set.iter().map(|s| s.contains(FOLDING_SEPARATOR)).collect::<HashSet<bool>>().contains(&true) {
-        return Err(anyhow::Error::msg(format!("invalid character in folded set: '{}'", FOLDING_SEPARATOR)))
+    if set
+        .iter()
+        .map(|s| s.contains(FOLDING_SEPARATOR))
+        .collect::<HashSet<bool>>()
+        .contains(&true)
+    {
+        return Err(anyhow::Error::msg(format!(
+            "invalid character in folded set: '{}'",
+            FOLDING_SEPARATOR
+        )));
     }
 
-    Ok(set.iter().fold(String::new(), |a, b| a + b + "|"))
+    Ok(set
+        .iter()
+        .fold(String::new(), |a, b| a + b + FOLDING_SEPARATOR)
+        .trim_matches(
+            FOLDING_SEPARATOR
+                .chars()
+                .next()
+                .ok_or_else(|| anyhow::Error::msg("folding separator const is zero length"))?,
+        )
+        .to_string())
 }
 
-pub fn unfold_set(str: String) -> HashSet<String> {
-    str.split(FOLDING_SEPARATOR).map(|s| s.to_string()).collect::<HashSet<String>>()
+pub fn unfold_set(str: &str) -> HashSet<String> {
+    let mut set = str
+        .split(FOLDING_SEPARATOR)
+        .map(|s| s.to_string())
+        .collect::<HashSet<String>>();
+
+    set.retain(|s| !s.is_empty());
+
+    set
 }
 
 #[derive(Clone, Debug)]

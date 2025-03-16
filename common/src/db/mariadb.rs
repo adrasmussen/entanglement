@@ -381,7 +381,7 @@ pub async fn get_media(
             hidden: media_data.4,
             date: media_data.5,
             note: media_data.6,
-            tags: unfold_set(media_data.7),
+            tags: unfold_set(&media_data.7),
             metadata: match media_data.8.as_str() {
                 "Image" => MediaMetadata::Image,
                 "Video" => MediaMetadata::Video,

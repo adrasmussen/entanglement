@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::fs::{canonicalize, metadata};
 use std::os::unix::fs::symlink;
@@ -255,6 +256,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> () {
         hidden: false,
         date: mediadata.date,
         note: "".to_owned(),
+        tags: HashSet::new(),
         metadata: mediadata.metadata.clone(),
     };
 
