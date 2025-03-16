@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::net::{SocketAddr, SocketAddrV6};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, instrument, Level};
 
 use crate::auth::{check::AuthCheck, msg::AuthMsg};
 use crate::db::msg::DbMsg;
@@ -34,7 +34,7 @@ use crate::http::{
 use crate::service::{
     ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
 };
-use api::{collection::*, auth::*, comment::*, library::*, media::*};
+use api::{auth::*, collection::*, comment::*, library::*, media::*};
 use common::config::ESConfig;
 
 // http service
@@ -72,7 +72,9 @@ impl EntanglementService for HttpService {
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        registry.insert(ServiceType::Http, tx).expect("failed to add http sender to registry");
+        registry
+            .insert(ServiceType::Http, tx)
+            .expect("failed to add http sender to registry");
 
         HttpService {
             config: config.clone(),
@@ -306,7 +308,6 @@ impl HttpEndpoint {
         debug!("finished startup for serve_http");
         handle
     }
-
 }
 
 impl AuthCheck for HttpEndpoint {}
@@ -360,7 +361,7 @@ async fn stream_media(
 // auth handlers
 async fn get_users_in_group(
     State(state): State<Arc<HttpEndpoint>>,
-    Extension(current_user): Extension<CurrentUser>,
+    Extension(_current_user): Extension<CurrentUser>,
     Json(message): Json<GetUsersInGroupReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
@@ -691,7 +692,10 @@ async fn add_collection(
 
     let result = rx.await??;
 
-    Ok(Json(AddCollectionResp { collection_uuid: result }).into_response())
+    Ok(Json(AddCollectionResp {
+        collection_uuid: result,
+    })
+    .into_response())
 }
 
 async fn get_collection(
@@ -702,7 +706,10 @@ async fn get_collection(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.can_access_collection(&uid, &message.collection_uuid).await? {
+    if !state
+        .can_access_collection(&uid, &message.collection_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -734,7 +741,10 @@ async fn delete_collection(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.owns_collection(&uid, &message.collection_uuid).await? {
+    if !state
+        .owns_collection(&uid, &message.collection_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -764,7 +774,10 @@ async fn update_collection(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.owns_collection(&uid, &message.collection_uuid).await? {
+    if !state
+        .owns_collection(&uid, &message.collection_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -799,7 +812,10 @@ async fn add_media_to_collection(
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
-    if !state.can_access_collection(&uid, &message.collection_uuid).await? {
+    if !state
+        .can_access_collection(&uid, &message.collection_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -831,8 +847,12 @@ async fn rm_media_from_collection(
     let uid = current_user.uid.clone();
 
     if !(state.owns_media(&uid, &message.media_uuid).await?
-        && state.can_access_collection(&uid, &message.collection_uuid).await?)
-        && !state.owns_collection(&uid, &message.collection_uuid).await?
+        && state
+            .can_access_collection(&uid, &message.collection_uuid)
+            .await?)
+        && !state
+            .owns_collection(&uid, &message.collection_uuid)
+            .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
@@ -885,7 +905,10 @@ async fn search_collections(
 
     let result = rx.await??;
 
-    Ok(Json(SearchCollectionsResp { collections: result }).into_response())
+    Ok(Json(SearchCollectionsResp {
+        collections: result,
+    })
+    .into_response())
 }
 
 async fn search_media_in_collection(
