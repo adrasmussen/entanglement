@@ -1077,26 +1077,7 @@ async fn get_library_scan(
     Extension(current_user): Extension<CurrentUser>,
     Json(_message): Json<GetLibraryScanReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state
-        .is_group_member(&uid, state.config.authz_admin_groups.clone())
-        .await?
-    {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    }
-
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    state
-        .fs_svc_sender
-        .send(FsMsg::ScanStatus { resp: tx }.into())
-        .await?;
-
-    let jobs = rx.await??;
-
-    Ok(Json(GetLibraryScanResp { jobs }).into_response())
+    todo!()
 }
 
 async fn stop_library_scan(
@@ -1104,30 +1085,5 @@ async fn stop_library_scan(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<StopLibraryScanReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state
-        .is_group_member(&uid, state.config.authz_admin_groups.clone())
-        .await?
-    {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    }
-
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    state
-        .fs_svc_sender
-        .send(
-            FsMsg::StopScan {
-                resp: tx,
-                library_uuid: message.library_uuid,
-            }
-            .into(),
-        )
-        .await?;
-
-    rx.await??;
-
-    Ok(Json(StopLibraryScanResp {}).into_response())
+    todo!()
 }

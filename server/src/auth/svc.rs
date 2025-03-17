@@ -10,13 +10,15 @@ use tracing::{debug, error, info, instrument, Level};
 use crate::{
     auth::{msg::AuthMsg, ESAuthService},
     db::msg::DbMsg,
-    service::{
-        ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM,
-    },
+    service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
 };
 use api::media::MediaUuid;
 use common::{
-    auth::{proxy::ProxyAuth, yamlfile::YamlGroupFile, AuthnBackend, AuthzBackend},
+    auth::{
+        proxy::ProxyAuth,
+        tomlfile::{TomlAuthnFile, TomlAuthzFile},
+        AuthnBackend, AuthzBackend,
+    },
     config::ESConfig,
     AwaitCache, GROUP_REGEX, USER_REGEX,
 };
@@ -74,11 +76,20 @@ impl EntanglementService for AuthService {
             }
         }
 
-        match config.authz_yaml_groups {
+        match config.authn_toml_file {
             None => {}
             Some(_) => {
                 state
-                    .add_authz_provider(YamlGroupFile::connect(config.clone()).await?)
+                    .add_authn_provider(TomlAuthnFile::connect(config.clone()).await?)
+                    .await?;
+            }
+        }
+
+        match config.authz_toml_file {
+            None => {}
+            Some(_) => {
+                state
+                    .add_authz_provider(TomlAuthzFile::connect(config.clone()).await?)
                     .await?;
             }
         }
@@ -214,7 +225,7 @@ impl AuthCache {
         let mut groups = HashSet::new();
 
         if !self.is_valid_user(uid.clone()).await? {
-            return Err(anyhow::Error::msg("invalid uid"))
+            return Err(anyhow::Error::msg("invalid uid"));
         }
 
         let authz_providers = self.authz_providers.clone();
@@ -222,7 +233,7 @@ impl AuthCache {
         let authz_providers = authz_providers.lock().await;
 
         for provider in authz_providers.iter() {
-            let mut newgroups = provider.groups_for_user(uid.clone()).await?;
+            let mut newgroups = provider.groups_for_user(uid.clone()).await;
 
             // only keep valid groups from the returned set
             newgroups.retain(|s| self.group_regex.is_match(s));
@@ -403,7 +414,7 @@ impl ESAuthService for AuthCache {
         for provider in authn_providers.iter() {
             if provider
                 .authenticate_user(uid.clone(), password.clone())
-                .await?
+                .await
             {
                 return Ok(true);
             }
@@ -416,13 +427,13 @@ impl ESAuthService for AuthCache {
         let authn_providers = self.authn_providers.clone();
 
         if !self.user_regex.is_match(&uid) {
-            return Err(anyhow::Error::msg("invalid uid"))
+            return Err(anyhow::Error::msg("invalid uid"));
         }
 
         let authn_providers = authn_providers.lock().await;
 
         for provider in authn_providers.iter() {
-            if provider.is_valid_user(uid.clone()).await? {
+            if provider.is_valid_user(uid.clone()).await {
                 return Ok(true);
             }
         }

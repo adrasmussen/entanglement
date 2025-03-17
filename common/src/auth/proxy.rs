@@ -17,14 +17,13 @@ impl AuthnBackend for ProxyAuth {
         Ok(ProxyAuth {})
     }
 
-    async fn authenticate_user(&self, _uid: String, _password: String) -> anyhow::Result<bool> {
-        Ok(true)
+    async fn authenticate_user(&self, _uid: String, _password: String) -> bool {
+        true
     }
 
-    // in reality, this should somehow communicate with the proxy layer to check if a user has
-    // previously logged on
-    async fn is_valid_user(&self, _uid: String) -> anyhow::Result<bool> {
-        Ok(true)
+    // TODO -- coordinate with the middleware to actually verify things
+    async fn is_valid_user(&self, _uid: String) -> bool {
+        true
     }
 }
 
