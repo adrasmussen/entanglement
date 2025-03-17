@@ -1,6 +1,4 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tracing::info;
 
@@ -13,7 +11,7 @@ mod service;
 mod task;
 
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
-use common::config::ESConfig;
+use common::config::read_config;
 use service::{ESMRegistry, EntanglementService};
 
 // the outermost caller should definitely have a loop that periodically calls
@@ -28,23 +26,10 @@ async fn main() -> anyhow::Result<()> {
     info!("entanglement server starting up, processing config file...");
 
     // temporary dummy configuration -- this will eventually come from a parser
-    let config = Arc::new(ESConfig {
-        authn_proxy_header: Some(String::from("proxy-user")),
-        authn_toml_file: None,
-        authz_admin_groups: Some(HashSet::from([String::from("admin")])),
-        authz_toml_file: Some(String::from(
-            "/srv/home/alex/workspace/entanglement/dev/config.toml",
-        )),
-        http_socket: String::from("[::]:8080"),
-        http_url_root: String::from("/entanglement"),
-        http_doc_root: String::from(
-            "/srv/home/alex/workspace/entanglement/target/dx/webapp/debug/web/public",
-        ),
-        mariadb_url: String::from("mysql://entanglement:testpw@[fd00::3]/entanglement"),
-        media_srcdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/src"),
-        media_srvdir: PathBuf::from("/srv/home/alex/workspace/entanglement/dev/srv"),
-        fs_scanner_threads: 8,
-    });
+    let config = read_config(PathBuf::from(
+        "/srv/home/alex/workspace/entanglement/dev/config.toml",
+    ))
+    .await;
 
     info!("done");
 

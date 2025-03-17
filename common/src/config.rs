@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio;
 use toml;
+use tracing::{debug, instrument, Level};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ESConfig {
@@ -54,12 +55,16 @@ struct TomlConfigFile {
     config: ESConfig,
 }
 
+#[instrument(level=Level::DEBUG)]
 pub async fn read_config(filename: PathBuf) -> Arc<ESConfig> {
+    debug!("reading config file");
+
     let doc = tokio::fs::read_to_string(filename)
         .await
         .expect("failed to read config file");
 
     let data: TomlConfigFile = toml::from_str(&doc).expect("failed to parse config file");
 
+    debug!("successfully parsed config file");
     Arc::new(data.config)
 }
