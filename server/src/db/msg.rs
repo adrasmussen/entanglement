@@ -136,12 +136,12 @@ pub enum DbMsg {
 
     // task messages
     AddTask {
-        resp: ESMResp<LibraryUuid>,
+        resp: ESMResp<TaskUuid>,
         task: Task,
     },
     GetTask {
         resp: ESMResp<Task>,
-        task_uuid: LibraryUuid,
+        task_uuid: TaskUuid,
     },
     DeleteTask {
         resp: ESMResp<()>,
@@ -149,11 +149,11 @@ pub enum DbMsg {
     },
     UpdateTask {
         resp: ESMResp<()>,
-        task_uuid: LibraryUuid,
+        task_uuid: TaskUuid,
         update: TaskUpdate,
     },
     SearchTasks {
-        resp: ESMResp<Vec<LibraryUuid>>,
+        resp: ESMResp<Vec<TaskUuid>>,
         filter: Option<TaskStatus>,
     },
     AddLog {

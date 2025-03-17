@@ -45,22 +45,7 @@ pub struct TaskUpdate {
     pub end: Option<i64>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct TaskLog {
-    pub task_uuid: TaskUuid,
-    pub ctime: i64,
-    pub level: LogLevel,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum LogLevel {
-    Info,
-    Warn,
-    Error,
-}
-
-// mesages
+// messages
 
 // start a task on a library
 endpoint!(StartTask);
@@ -86,3 +71,29 @@ pub struct StopTaskReq {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StopTaskResp {}
+
+// get a task
+endpoint!(GetTask);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetTaskReq {
+    pub task_uuid: TaskUuid
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetTaskResp {
+    pub task: Task,
+}
+
+// search tasks
+endpoint!(SearchTasks);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchTasksReq {
+    pub filter: Option<TaskStatus>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SearchTasksResp {
+    pub tasks: Vec<TaskUuid>,
+}
