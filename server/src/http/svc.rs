@@ -24,17 +24,20 @@ use tower_http::{
 };
 use tracing::{debug, error, instrument, Level};
 
-use crate::auth::{check::AuthCheck, msg::AuthMsg};
-use crate::db::msg::DbMsg;
-use crate::fs::msg::FsMsg;
-use crate::http::{
-    auth::{proxy_auth, CurrentUser},
-    AppError,
+use crate::{
+    auth::{check::AuthCheck, msg::AuthMsg},
+    db::msg::DbMsg,
+    fs::msg::FsMsg,
+    http::{
+        auth::{proxy_auth, CurrentUser},
+        AppError,
+    },
+    service::{
+        ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
+    },
+    task::msg::TaskMsg,
 };
-use crate::service::{
-    ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
-};
-use api::{auth::*, collection::*, comment::*, library::*, media::*};
+use api::{auth::*, collection::*, comment::*, library::*, media::*, task::*};
 use common::config::ESConfig;
 
 // http service
@@ -141,6 +144,7 @@ pub struct HttpEndpoint {
     auth_svc_sender: ESMSender,
     db_svc_sender: ESMSender,
     fs_svc_sender: ESMSender,
+    task_svc_sender: ESMSender,
 }
 
 #[async_trait]
@@ -154,6 +158,7 @@ impl ESInner for HttpEndpoint {
             auth_svc_sender: registry.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: registry.get(&ServiceType::Db).unwrap().clone(),
             fs_svc_sender: registry.get(&ServiceType::Fs).unwrap().clone(),
+            task_svc_sender: registry.get(&ServiceType::Task).unwrap().clone(),
         })
     }
 
@@ -247,9 +252,9 @@ impl HttpEndpoint {
             .route("/GetLibrary", post(get_library))
             .route("/SearchLibraries", post(search_libraries))
             .route("/SearchMediaInLibrary", post(search_media_in_library))
-            .route("/StartLibraryScan", post(start_library_scan))
-            .route("/GetLibraryScan", post(get_library_scan))
-            .route("/StopLibraryScan", post(stop_library_scan))
+            .route("/StartLibraryScan", post(start_library_scan)) // TODO -- remove me
+            .route("/StartTask", post(start_task))
+            .route("/StopTask", post(stop_task))
             .with_state(state.clone());
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant
@@ -1072,18 +1077,64 @@ async fn start_library_scan(
     Ok(Json(StartLibraryScanResp {}).into_response())
 }
 
-async fn get_library_scan(
+async fn start_task(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(_message): Json<GetLibraryScanReq>,
+    Json(message): Json<StartTaskReq>,
 ) -> Result<Response, AppError> {
-    todo!()
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state.owns_library(&uid, &message.library_uuid).await? {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .task_svc_sender
+        .send(
+            TaskMsg::StartTask {
+                resp: tx,
+                library_uuid: message.library_uuid,
+                task_type: message.task_type,
+                uid: TaskUid::User { uid },
+            }
+            .into(),
+        )
+        .await?;
+
+    let result = rx.await??;
+
+    Ok(Json(StartTaskResp { task_uuid: result }).into_response())
 }
 
-async fn stop_library_scan(
+async fn stop_task(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<StopLibraryScanReq>,
 ) -> Result<Response, AppError> {
-    todo!()
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state.owns_library(&uid, &message.library_uuid).await? {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .task_svc_sender
+        .send(
+            TaskMsg::StopTask {
+                resp: tx,
+                library_uuid: message.library_uuid,
+            }
+            .into(),
+        )
+        .await?;
+
+    rx.await??;
+
+    Ok(Json(StopTaskResp {}).into_response())
 }

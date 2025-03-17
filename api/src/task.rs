@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::endpoint;
 use crate::library::LibraryUuid;
 
 // structs and types
@@ -58,3 +59,30 @@ pub enum LogLevel {
     Warn,
     Error,
 }
+
+// mesages
+
+// start a task on a library
+endpoint!(StartTask);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartTaskReq {
+    pub library_uuid: LibraryUuid,
+    pub task_type: TaskType,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartTaskResp {
+    pub task_uuid: TaskUuid,
+}
+
+// stop a running task
+endpoint!(StopTask);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StopTaskReq {
+    pub library_uuid: LibraryUuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StopTaskResp {}

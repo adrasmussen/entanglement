@@ -14,7 +14,6 @@ use tokio::{
 use tracing::{debug, error, info, instrument, warn, Level};
 
 use crate::{
-    auth::check::AuthCheck,
     db::msg::DbMsg,
     service::{
         ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
@@ -23,10 +22,15 @@ use crate::{
 };
 use api::{
     library::LibraryUuid,
-    task::{Task, TaskStatus, TaskType, TaskUid, TaskUpdate},
+    task::{Task, TaskStatus, TaskType, TaskUid, TaskUpdate, TaskUuid},
 };
 use common::config::ESConfig;
 
+// task service
+//
+// several of the common library operations (scan, clean, run scripts, etc) take too long
+// for a single frontend api call.  instead, they are managed by this service, and send
+// their logs directly to the database.
 pub struct TaskService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
@@ -87,6 +91,18 @@ impl EntanglementService for TaskService {
     }
 }
 
+// task runner
+//
+// while tasks get a uuid from the database for record-keeping, the runtime identifier
+// is the library uuid -- only one task may run in a library at a time.  we also have
+// to deal with the issue of pre-task startup failures, which we solve via a three-
+// layer construction:
+//  1) start_task(), which reserves the library by putting None in the DashMap and then
+//     attempts to dispach the task (and removing the reservation if the dispatch fails)
+//  2) dispatch {} , a named closure returning a Result that records the task in the db
+//     and gets the uuid, then calls spawn_task()
+//  3) spawn_task(), a wrapper around the actual task future that awaits its completion
+//     and updates the database accordingly
 #[derive(Debug)]
 pub struct TaskRunner {
     config: Arc<ESConfig>,
@@ -97,7 +113,7 @@ pub struct TaskRunner {
 #[derive(Clone, Debug)]
 struct RunningTask {
     task: Task,
-    uuid: LibraryUuid,
+    uuid: TaskUuid,
     handle: Arc<JoinHandle<()>>,
 }
 
@@ -137,10 +153,12 @@ impl ESInner for TaskRunner {
     }
 }
 
-impl AuthCheck for TaskRunner {}
-
+// task spawn wrapper
+//
+// this wrapper ensures that the database is updated when the task completes,
+// instead of polling the DashMap and attempting to sync the result
 #[instrument(level=Level::DEBUG, skip(task_future, db_svc_sender))]
-fn spawn_task<F>(task_uuid: LibraryUuid, task_future: F, db_svc_sender: ESMSender) -> JoinHandle<()>
+fn spawn_task<F>(task_uuid: TaskUuid, task_future: F, db_svc_sender: ESMSender) -> JoinHandle<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
 {
@@ -218,6 +236,10 @@ impl ESTaskService for TaskRunner {
             }
         }
 
+        // the Result of this function indicates whether or not we can get a uuid from the database,
+        // and if we can actually launch the task into the executor
+        //
+        // on failure, start_task() will attempt to clean up what it can
         let dispatch = async {
             let (library_tx, library_rx) = channel();
 
@@ -259,7 +281,6 @@ impl ESTaskService for TaskRunner {
                 )
                 .await?;
 
-            // TODO -- a failure here will leave a dangling task in the database
             let task_uuid = task_rx.await??;
 
             debug!("task recorded in database");
@@ -291,6 +312,7 @@ impl ESTaskService for TaskRunner {
                 self.running_tasks.alter(&library_uuid, |_, _| Some(rt));
                 Ok(task_uuid)
             }
+            // TODO -- if AddTask succeeded, we should mark it as Failed here
             Err(err) => {
                 error!("failed to dispatch task: {err}");
                 self.running_tasks.remove(&library_uuid);
