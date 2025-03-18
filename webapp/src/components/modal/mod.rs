@@ -7,7 +7,8 @@ use comments::DeleteCommentModal;
 
 mod collections;
 use collections::{
-    AddMediaToCollectionModal, CreateCollectionModal, DeleteCollectionModal, EditCollectionModal, RmFromCollectionModal,
+    AddMediaToCollectionModal, CreateCollectionModal, DeleteCollectionModal, EditCollectionModal,
+    RmFromCollectionModal,
 };
 
 mod enhanced_media_modal;

@@ -11,7 +11,7 @@ use crate::{
     },
     Route,
 };
-use api::collection::*;
+use api::{collection::*, fold_set};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
@@ -73,7 +73,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     })?;
 
     // see GalleryInner for details
-    let collection_uuid = use_memo(use_reactive(&collection_uuid, |collection_uuid| collection_uuid));
+    let collection_uuid = use_memo(use_reactive(&collection_uuid, |collection_uuid| {
+        collection_uuid
+    }));
     let collection_future = use_resource(move || async move {
         let collection_uuid = collection_uuid();
         get_collection(&GetCollectionReq { collection_uuid }).await
@@ -85,7 +87,11 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         let collection_uuid = collection_uuid();
         let filter = media_search_signal();
 
-        search_media_in_collection(&SearchMediaInCollectionReq { collection_uuid, filter }).await
+        search_media_in_collection(&SearchMediaInCollectionReq {
+            collection_uuid,
+            filter,
+        })
+        .await
     });
 
     // see GalleryInner for details
@@ -123,6 +129,8 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let media = media_data.media;
 
     let formatted_time = local_time(collection.mtime);
+    let formatted_tags =
+        fold_set(collection.tags.clone()).unwrap_or_else(|_| "error parsing tags".to_string());
 
     rsx! {
         div { class: "container",
@@ -168,6 +176,18 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                     max-width: 700px;
                                 ",
                                 "{collection.note}"
+                            }
+                        }
+                        if !collection.tags.is_empty() {
+                            p { style: "
+                                    padding: var(--space-3);
+                                    background-color: var(--neutral-50);
+                                    border-radius: var(--radius-md);
+                                    font-style: italic;
+                                    color: var(--text-secondary);
+                                    max-width: 700px;
+                                ",
+                                "{formatted_tags}"
                             }
                         }
                     }

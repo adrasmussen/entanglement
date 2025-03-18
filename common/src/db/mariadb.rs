@@ -440,14 +440,15 @@ pub async fn add_collection(pool: Pool, collection: Collection) -> anyhow::Resul
     debug!({ collection_name = collection.name }, "adding collection");
 
     let mut result = r"
-        INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note)
+        INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags)
         SELECT
             UUID_SHORT(),
             :uid,
             :gid,
             :mtime,
             :name,
-            :note
+            :note,
+            :tags
         FROM
             DUAL
         WHERE NOT EXISTS(
@@ -464,6 +465,7 @@ pub async fn add_collection(pool: Pool, collection: Collection) -> anyhow::Resul
             "mtime" => Local::now().timestamp(),
             "name" => collection.name.clone(),
             "note" => collection.note,
+            "tags" => fold_set(collection.tags)?
         })
         .run(pool.get_conn().await?)
         .await?
@@ -482,11 +484,17 @@ pub async fn add_collection(pool: Pool, collection: Collection) -> anyhow::Resul
 }
 
 #[instrument(level=Level::DEBUG, skip_all)]
-pub async fn get_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyhow::Result<Option<Collection>> {
-    debug!({ collection_uuid = collection_uuid }, "getting collection details");
+pub async fn get_collection(
+    pool: Pool,
+    collection_uuid: CollectionUuid,
+) -> anyhow::Result<Option<Collection>> {
+    debug!(
+        { collection_uuid = collection_uuid },
+        "getting collection details"
+    );
 
     let mut result = r"
-        SELECT uid, gid, mtime, name, note FROM collections WHERE collection_uuid = :collection_uuid"
+        SELECT uid, gid, mtime, name, note, tags FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "collection_uuid" => collection_uuid,
         })
@@ -500,9 +508,12 @@ pub async fn get_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyh
         None => return Ok(None),
     };
 
-    let data = from_row_opt::<(String, String, i64, String, String)>(row)?;
+    let data = from_row_opt::<(String, String, i64, String, String, String)>(row)?;
 
-    debug!({ collection_uuid = collection_uuid }, "found collection details");
+    debug!(
+        { collection_uuid = collection_uuid },
+        "found collection details"
+    );
 
     Ok(Some(Collection {
         uid: data.0,
@@ -510,11 +521,15 @@ pub async fn get_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyh
         mtime: data.2,
         name: data.3,
         note: data.4,
+        tags: unfold_set(&data.5),
     }))
 }
 
 pub async fn delete_collection(pool: Pool, collection_uuid: CollectionUuid) -> anyhow::Result<()> {
-    debug!({ collection_uuid = collection_uuid }, "deleting media from collection");
+    debug!(
+        { collection_uuid = collection_uuid },
+        "deleting media from collection"
+    );
 
     r"
         DELETE FROM collection_contents WHERE collection_uuid = :collection_uuid"
@@ -563,6 +578,17 @@ pub async fn update_collection(
         UPDATE collections SET note = :note WHERE collection_uuid = :collection_uuid"
             .with(params! {
                 "note" => val.clone(),
+                "collection_uuid" => collection_uuid,
+            })
+            .run(pool.get_conn().await?)
+            .await?;
+    }
+
+    if let Some(val) = update.tags {
+        r"
+        UPDATE collections SET tags = :tags WHERE collection_uuid = :collection_uuid"
+            .with(params! {
+                "tags" => fold_set(val.clone())?,
                 "collection_uuid" => collection_uuid,
             })
             .run(pool.get_conn().await?)

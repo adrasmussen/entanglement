@@ -67,7 +67,7 @@ impl ESMRegistry {
     }
 
     pub fn get(&self, k: &ServiceType) -> Result<ESMSender> {
-        Ok(self.0.get(k).ok_or_else(|| anyhow::Error::msg("internal compile time error -- a service was started without a necessary dependency"))?.clone())
+        Ok(self.0.get(k).ok_or_else(|| anyhow::Error::msg(format!("internal compile time error -- a service was started without a necessary dependency ({:?})", k)))?.clone())
     }
 }
 

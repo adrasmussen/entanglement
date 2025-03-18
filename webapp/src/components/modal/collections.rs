@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
 use crate::components::modal::{ModalSize, ModernModal, MODAL_STACK};
-use api::{collection::*, auth::*, media::MediaUuid};
+use api::{auth::*, collection::*, media::MediaUuid, FOLDING_SEPARATOR, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CreateCollectionModalProps {
@@ -20,6 +20,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut collection_name = use_signal(|| String::new());
     let mut collection_group = use_signal(|| String::new());
     let mut collection_note = use_signal(|| String::new());
+    let mut collection_tags = use_signal(|| String::new());
 
     // Form validation state
     let mut name_error = use_signal(|| String::new());
@@ -69,10 +70,14 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         status_message.set("Creating collection...".into());
 
         match add_collection(&AddCollectionReq {
+            collection: Collection {
+            uid: "".to_string(),
             gid: collection_group(),
+            mtime: 0,
             name: collection_name(),
             note: collection_note(),
-        })
+            tags: unfold_set(&collection_tags()),
+        }})
         .await
         {
             Ok(resp) => {
@@ -204,31 +209,31 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                                                                                                                                                                                                                display: flex;
-                                                                                                                                                                                                                                flex-wrap: wrap;
-                                                                                                                                                                                                                                gap: var(--space-2);
-                                                                                                                                                                                                                            ",
+                                            display: flex;
+                                            flex-wrap: wrap;
+                                            gap: var(--space-2);
+                                        ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                                                                                                                                                                        display: inline-flex;
-                                                                                                                                                                                                                                        align-items: center;
-                                                                                                                                                                                                                                        padding: var(--space-1) var(--space-2);
-                                                                                                                                                                                                                                        background-color: var(--primary-light);
-                                                                                                                                                                                                                                        color: white;
-                                                                                                                                                                                                                                        border-radius: var(--radius-full);
-                                                                                                                                                                                                                                        font-size: 0.75rem;
-                                                                                                                                                                                                                                    ",
+                                                    display: inline-flex;
+                                                    align-items: center;
+                                                    padding: var(--space-1) var(--space-2);
+                                                    background-color: var(--primary-light);
+                                                    color: white;
+                                                    border-radius: var(--radius-full);
+                                                    font-size: 0.75rem;
+                                                ",
                                                 "{member}"
                                             }
                                         }
                                     }
                                     div { style: "
-                                                                                                                                                                                                                                margin-top: var(--space-2);
-                                                                                                                                                                                                                                font-size: 0.75rem;
-                                                                                                                                                                                                                                color: var(--text-tertiary);
-                                                                                                                                                                                                                            ",
+                                            margin-top: var(--space-2);
+                                            font-size: 0.75rem;
+                                            color: var(--text-tertiary);
+                                        ",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -266,6 +271,16 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                         value: "{collection_note}",
                         oninput: move |evt| collection_note.set(evt.value().clone()),
                         placeholder: "Add a description for this collection...",
+                    }
+                }
+                div { class: "form-group",
+                    label { class: "form-label", "Tags (optional)" }
+                    textarea {
+                        class: "form-textarea",
+                        rows: 3,
+                        value: "{collection_tags}",
+                        oninput: move |evt| collection_tags.set(evt.value().clone()),
+                        placeholder: format!("Add tags for this collection, separated by {}", FOLDING_SEPARATOR),
                     }
                 }
             }
@@ -333,6 +348,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
             update: CollectionUpdate {
                 name: Some(collection_name()),
                 note: Some(collection_note()),
+                tags: None
             },
         })
         .await
@@ -661,10 +677,10 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                                     div {
                                         class: "empty-state",
                                         style: "
-                                                                                                                                                                                                                                padding: var(--space-6);
-                                                                                                                                                                                                                                text-align: center;
-                                                                                                                                                                                                                                color: var(--text-tertiary);
-                                                                                                                                                                                                                            ",
+                                            padding: var(--space-6);
+                                            text-align: center;
+                                            color: var(--text-tertiary);
+                                        ",
                                         "No collections found. Try a different search term or create a new collection."
                                     }
                                 }
@@ -744,13 +760,13 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                     class: if is_selected { "collection-item selected" } else { "collection-item" },
                     style: {
                         let base_style = "
-                                                                                                            padding: var(--space-3);
-                                                                                                            border-bottom: 1px solid var(--border);
-                                                                                                            display: flex;
-                                                                                                            align-items: center;
-                                                                                                            cursor: pointer;
-                                                                                                            transition: background-color var(--transition-fast) var(--easing-standard);
-                                                                                                        ";
+                                padding: var(--space-3);
+                                border-bottom: 1px solid var(--border);
+                                display: flex;
+                                align-items: center;
+                                cursor: pointer;
+                                transition: background-color var(--transition-fast) var(--easing-standard);
+                            ";
                         if is_selected {
                             format!(
                                 "{}background-color: var(--primary-light); color: white;",
@@ -767,16 +783,15 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                         div {
                             style: {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
-                                format!(
-                                    "
-                                                                                                                                                            width: 18px;
-                                                                                                                                                            height: 18px;
-                                                                                                                                                            border-radius: 50%;
-                                                                                                                                                            border: 2px solid {};
-                                                                                                                                                            display: flex;
-                                                                                                                                                            align-items: center;
-                                                                                                                                                            justify-content: center;
-                                                                                                                                                        ",
+                                format!("
+                                    width: 18px;
+                                    height: 18px;
+                                    border-radius: 50%;
+                                    border: 2px solid {};
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                ",
                                     border_color,
                                 )
                             },

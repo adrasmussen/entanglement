@@ -31,7 +31,7 @@ impl EntanglementService for FileService {
     fn create(config: Arc<ESConfig>, sender_map: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        sender_map.insert(ServiceType::Fs, tx);
+        sender_map.insert(ServiceType::Fs, tx).expect("failed to insert sender for file service");
 
         FileService {
             config: config.clone(),

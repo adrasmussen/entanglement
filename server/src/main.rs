@@ -57,11 +57,13 @@ async fn main() -> anyhow::Result<()> {
     let db_svc = db::mariadb::MariaDBService::create(config.clone(), &registry);
     let fs_svc = fs::svc::FileService::create(config.clone(), &registry);
     let http_svc = http::svc::HttpService::create(config.clone(), &registry);
+    let task_svc = task::svc::TaskService::create(config.clone(), &registry);
 
     auth_svc.start(&registry).await?;
     db_svc.start(&registry).await?;
     fs_svc.start(&registry).await?;
     http_svc.start(&registry).await?;
+    task_svc.start(&registry).await?;
 
     info!("done");
 

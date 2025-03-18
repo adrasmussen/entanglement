@@ -670,7 +670,7 @@ async fn add_collection(
 
     // anyone may create an collection, but they must be in the group of the collection they create
     if !state
-        .is_group_member(&uid, HashSet::from([message.gid.clone()]))
+        .is_group_member(&uid, HashSet::from([message.collection.gid.clone()]))
         .await?
     {
         return Err(anyhow::Error::msg("User must be a member of collection group").into());
@@ -685,10 +685,11 @@ async fn add_collection(
                 resp: tx,
                 collection: Collection {
                     uid: uid,
-                    gid: message.gid,
+                    gid: message.collection.gid,
                     mtime: Local::now().timestamp(),
-                    name: message.name,
-                    note: message.note,
+                    name: message.collection.name,
+                    note: message.collection.note,
+                    tags: message.collection.tags,
                 },
             }
             .into(),

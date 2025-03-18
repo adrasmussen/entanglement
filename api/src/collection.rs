@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use crate::endpoint;
@@ -14,12 +16,14 @@ pub struct Collection {
     pub mtime: i64,
     pub name: String,
     pub note: String,
+    pub tags: HashSet<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CollectionUpdate {
     pub name: Option<String>,
     pub note: Option<String>,
+    pub tags: Option<HashSet<String>>,
 }
 
 // messages
@@ -29,9 +33,7 @@ endpoint!(AddCollection);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddCollectionReq {
-    pub gid: String,
-    pub name: String,
-    pub note: String,
+    pub collection: Collection,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
