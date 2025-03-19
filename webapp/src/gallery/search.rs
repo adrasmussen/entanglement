@@ -12,8 +12,9 @@ pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
 
     let mut advanced_expanded = use_signal(|| false);
+    let mut active_tab = use_signal(|| "text"); // Possible values: "text", "date", "metadata", "similar"
 
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let mut media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
     let media_future = use_resource(move || async move {
         let filter = media_search_signal();
@@ -26,7 +27,11 @@ pub fn GallerySearch() -> Element {
             onclick: move |_| {
                 advanced_expanded.set(!advanced_expanded());
             },
-            "Advanced"
+            if advanced_expanded() {
+                "Hide Advanced"
+            } else {
+                "Advanced"
+            }
         }
     };
 
@@ -67,19 +72,246 @@ pub fn GallerySearch() -> Element {
                                 animation: slide-down 0.2s ease-out;
                             ",
                             h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Search Options" }
+
+                            // Tabs navigation
                             div {
-                                class: "coming-soon",
+                                class: "tabs-navigation",
                                 style: "
                                     display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    padding: var(--space-6);
-                                    background-color: var(--surface);
-                                    border-radius: var(--radius-md);
-                                    color: var(--text-secondary);
-                                    font-style: italic;
+                                    border-bottom: 1px solid var(--neutral-200);
+                                    margin-bottom: var(--space-4);
                                 ",
-                                "Advanced search options coming soon..."
+
+                                button {
+                                    class: if active_tab() == "text" { "tab-button active" } else { "tab-button" },
+                                    style: "
+                                        padding: var(--space-2) var(--space-4);
+                                        background: none;
+                                        border: none;
+                                        border-bottom: 3px solid transparent;
+                                        cursor: pointer;
+                                        font-weight: 500;
+                                        color: var(--text-secondary);
+                                        transition: all var(--transition-fast) var(--easing-standard);
+                                        margin-right: var(--space-2);
+                                        ".to_string() + if active_tab() == "text" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                    onclick: move |_| active_tab.set("text"),
+
+                                    "Text Search"
+                                }
+
+                                button {
+                                    class: if active_tab() == "date" { "tab-button active" } else { "tab-button" },
+                                    style: "
+                                        padding: var(--space-2) var(--space-4);
+                                        background: none;
+                                        border: none;
+                                        border-bottom: 3px solid transparent;
+                                        cursor: pointer;
+                                        font-weight: 500;
+                                        color: var(--text-secondary);
+                                        transition: all var(--transition-fast) var(--easing-standard);
+                                        margin-right: var(--space-2);
+                                        ".to_string() + if active_tab() == "date" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                    onclick: move |_| active_tab.set("date"),
+
+                                    "Date Filters"
+                                }
+
+                                button {
+                                    class: if active_tab() == "metadata" { "tab-button active" } else { "tab-button" },
+                                    style: "
+                                        padding: var(--space-2) var(--space-4);
+                                        background: none;
+                                        border: none;
+                                        border-bottom: 3px solid transparent;
+                                        cursor: pointer;
+                                        font-weight: 500;
+                                        color: var(--text-secondary);
+                                        transition: all var(--transition-fast) var(--easing-standard);
+                                        margin-right: var(--space-2);
+                                        ".to_string() + if active_tab() == "metadata" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                    onclick: move |_| active_tab.set("metadata"),
+
+                                    "Metadata"
+                                }
+
+                                button {
+                                    class: if active_tab() == "similar" { "tab-button active" } else { "tab-button" },
+                                    style: "
+                                        padding: var(--space-2) var(--space-4);
+                                        background: none;
+                                        border: none;
+                                        border-bottom: 3px solid transparent;
+                                        cursor: pointer;
+                                        font-weight: 500;
+                                        color: var(--text-secondary);
+                                        transition: all var(--transition-fast) var(--easing-standard);
+                                        ".to_string() + if active_tab() == "similar" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                    onclick: move |_| active_tab.set("similar"),
+
+                                    "Similar Media"
+                                }
+                            }
+
+                            // Tab content
+                            div {
+                                class: "tab-content",
+                                style: "min-height: 200px;",
+
+                                match active_tab() {
+                                    "text" => rsx! {
+                                        div { class: "text-search-options",
+                                            div { class: "form-group",
+                                                label { class: "form-label", "Search Terms" }
+                                                input {
+                                                    class: "form-input",
+                                                    placeholder: "Enter keywords separated by spaces...",
+                                                    value: "{media_search_signal()}",
+                                                    oninput: move |evt| media_search_signal.set(evt.value().clone()),
+                                                }
+                                                div { class: "form-help", style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-1);",
+                                                    "Search in file names, descriptions, and tags"
+                                                }
+                                            }
+
+                                            div { style: "display: flex; gap: var(--space-4); margin-top: var(--space-4);",
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "Search Mode" }
+                                                    select { class: "form-select",
+                                                        option { value: "all", selected: true, "Match All Words" }
+                                                        option { value: "any", "Match Any Word" }
+                                                        option { value: "exact", "Exact Phrase" }
+                                                    }
+                                                }
+
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "Case Sensitive" }
+                                                    div { style: "display: flex; align-items: center; height: 38px;", // Match height of select
+                                                        input {
+                                                            type: "checkbox",
+                                                            id: "case-sensitive",
+                                                            style: "margin-right: var(--space-2);"
+                                                        }
+                                                        label { for: "case-sensitive", "Enable case sensitivity" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "date" => rsx! {
+                                        div { class: "date-filter-options",
+                                            div { style: "display: flex; gap: var(--space-4);",
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "From Date" }
+                                                    input { class: "form-input", type: "date" }
+                                                }
+
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "To Date" }
+                                                    input { class: "form-input", type: "date" }
+                                                }
+                                            }
+
+                                            div { class: "form-group", style: "margin-top: var(--space-4);",
+                                                label { class: "form-label", "Quick Date Ranges" }
+                                                div { style: "display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2);",
+                                                    button { class: "btn btn-sm btn-secondary", "Today" }
+                                                    button { class: "btn btn-sm btn-secondary", "This Week" }
+                                                    button { class: "btn btn-sm btn-secondary", "This Month" }
+                                                    button { class: "btn btn-sm btn-secondary", "This Year" }
+                                                    button { class: "btn btn-sm btn-secondary", "Last 30 Days" }
+                                                    button { class: "btn btn-sm btn-secondary", "Last 90 Days" }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "metadata" => rsx! {
+                                        div { class: "metadata-filter-options",
+                                            div { style: "display: flex; gap: var(--space-4);",
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "Media Type" }
+                                                    select { class: "form-select",
+                                                        option { value: "all", selected: true, "All Types" }
+                                                        option { value: "image", "Images Only" }
+                                                        option { value: "video", "Videos Only" }
+                                                        option { value: "audio", "Audio Only" }
+                                                    }
+                                                }
+
+                                                div { class: "form-group", style: "flex: 1;",
+                                                    label { class: "form-label", "Tags" }
+                                                    input { class: "form-input", placeholder: "Enter tags separated by |" }
+                                                }
+                                            }
+
+                                            div { class: "form-group", style: "margin-top: var(--space-4);",
+                                                label { class: "form-label", "Show Hidden Files" }
+                                                div { style: "display: flex; align-items: center;",
+                                                    input {
+                                                        type: "checkbox",
+                                                        id: "show-hidden",
+                                                        style: "margin-right: var(--space-2);"
+                                                    }
+                                                    label { for: "show-hidden", "Include hidden media in search results" }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "similar" => rsx! {
+                                        div { class: "similar-media-options",
+                                            p { style: "margin-bottom: var(--space-4); color: var(--text-secondary);",
+                                                "Find media that are similar to a specific item."
+                                            }
+
+                                            div { class: "form-group",
+                                                label { class: "form-label", "Media UUID" }
+                                                div { style: "display: flex; gap: var(--space-2);",
+                                                    input {
+                                                        class: "form-input",
+                                                        style: "flex-grow: 1;",
+                                                        placeholder: "Enter media UUID to find similar items"
+                                                    }
+                                                    button { class: "btn btn-secondary", "Browse..." }
+                                                }
+                                            }
+
+                                            div { class: "form-group", style: "margin-top: var(--space-4);",
+                                                label { class: "form-label", "Similarity Threshold" }
+                                                select { class: "form-select",
+                                                    option { value: "64", "Very Similar" }
+                                                    option { value: "84", selected: true, "Similar" }
+                                                    option { value: "106", "Somewhat Similar" }
+                                                    option { value: "128", "Broadly Similar" }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    _ => rsx! { div {} }
+                                }
+                            }
+
+                            // Action buttons
+                            div {
+                                class: "advanced-search-actions",
+                                style: "
+                                    display: flex;
+                                    justify-content: flex-end;
+                                    margin-top: var(--space-4);
+                                    padding-top: var(--space-4);
+                                    border-top: 1px solid var(--neutral-200);
+                                ",
+
+                                button {
+                                    class: "btn btn-secondary",
+                                    style: "margin-right: var(--space-2);",
+                                    "Reset Filters"
+                                }
+
+                                button {
+                                    class: "btn btn-primary",
+                                    "Apply Filters"
+                                }
                             }
                         }
                     }

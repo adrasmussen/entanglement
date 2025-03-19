@@ -9,6 +9,7 @@ pub use search::GallerySearch;
 mod detail;
 pub use detail::GalleryDetail;
 
+mod advanced;
 mod collections;
 mod comments;
 mod similar;

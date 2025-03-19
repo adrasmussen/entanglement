@@ -11,7 +11,7 @@ mod service;
 mod task;
 
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
-use common::config::read_config;
+use common::{config::read_config, db::{DbBackend, MariaDBBackend}};
 use service::{ESMRegistry, EntanglementService};
 
 // the outermost caller should definitely have a loop that periodically calls
@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     let registry = ESMRegistry::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);
-    let db_svc = db::mariadb::MariaDBService::create(config.clone(), &registry);
+    let db_svc = db::svc::DbService::<MariaDBBackend>::create(config.clone(), &registry);
     let fs_svc = fs::svc::FileService::create(config.clone(), &registry);
     let http_svc = http::svc::HttpService::create(config.clone(), &registry);
     let task_svc = task::svc::TaskService::create(config.clone(), &registry);
