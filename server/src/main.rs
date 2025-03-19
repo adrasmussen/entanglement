@@ -11,7 +11,7 @@ mod service;
 mod task;
 
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
-use common::{config::read_config, db::{DbBackend, MariaDBBackend}};
+use common::{config::read_config, db::MariaDBBackend};
 use service::{ESMRegistry, EntanglementService};
 
 // the outermost caller should definitely have a loop that periodically calls

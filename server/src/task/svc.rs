@@ -57,7 +57,7 @@ impl EntanglementService for TaskService {
 
     #[instrument(level=Level::DEBUG, skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> Result<()> {
-        info!("starting");
+        info!("starting task service");
 
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(TaskRunner::new(self.config.clone(), registry.clone())?);
@@ -86,7 +86,7 @@ impl EntanglementService for TaskService {
 
         self.handle.set(tokio::task::spawn(serve));
 
-        debug!("started");
+        debug!("started task service");
         Ok(())
     }
 }

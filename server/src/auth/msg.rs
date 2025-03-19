@@ -12,7 +12,7 @@ pub enum AuthMsg {
     },
     ClearAccessCache {
         resp: ESMResp<()>,
-        uuid: Vec<MediaUuid>,
+        media_uuid: Vec<MediaUuid>,
     },
     GroupsForUser {
         resp: ESMResp<HashSet<String>>,

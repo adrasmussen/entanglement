@@ -6,7 +6,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, instrument, Level};
+use tracing::{debug, error, instrument, Level, info};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
@@ -42,7 +42,7 @@ impl EntanglementService for FileService {
 
     #[instrument(level=Level::DEBUG, skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
-        // falliable stuff can happen here
+        info!("starting legacy file service");
 
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(FileScanner::new(self.config.clone(), registry.clone())?);
@@ -73,7 +73,7 @@ impl EntanglementService for FileService {
 
         self.handle.set(handle);
 
-        debug!("finished startup for file_service");
+        debug!("started legacy file service");
         Ok(())
     }
 }

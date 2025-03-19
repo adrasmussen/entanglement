@@ -5,7 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
-use tracing::{debug, instrument, Level};
+use tracing::{debug, instrument, Level, info};
 
 use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
@@ -24,6 +24,8 @@ pub struct MariaDBBackend {
 #[async_trait]
 impl DbBackend for MariaDBBackend {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
+        info!("creating MariaDB connection pool");
+
         Ok(Self {
             pool: Pool::new(config.mariadb_url.clone().as_str()),
         })

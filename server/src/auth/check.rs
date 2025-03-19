@@ -8,10 +8,30 @@ use tracing::{instrument, Level};
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ServiceType};
-use api::{collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid};
+use api::{
+    collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid,
+};
 
 #[async_trait]
 pub trait AuthCheck: ESInner + Debug {
+    #[instrument(level=Level::DEBUG)]
+    async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> Result<()> {
+        let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        auth_svc_sender
+            .send(
+                AuthMsg::ClearAccessCache {
+                    resp: tx,
+                    media_uuid: media_uuid,
+                }
+                .into(),
+            )
+            .await?;
+
+        rx.await?
+    }
+
     #[instrument(level=Level::DEBUG)]
     async fn groups_for_user(&self, uid: &String) -> Result<HashSet<String>> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
@@ -132,7 +152,11 @@ pub trait AuthCheck: ESInner + Debug {
     }
 
     #[instrument(level=Level::DEBUG)]
-    async fn can_access_collection(&self, uid: &String, collection_uuid: &CollectionUuid) -> Result<bool> {
+    async fn can_access_collection(
+        &self,
+        uid: &String,
+        collection_uuid: &CollectionUuid,
+    ) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -150,11 +174,16 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        self.is_group_member(&uid, HashSet::from([collection.gid])).await
+        self.is_group_member(&uid, HashSet::from([collection.gid]))
+            .await
     }
 
     #[instrument(level=Level::DEBUG)]
-    async fn owns_collection(&self, uid: &String, collection_uuid: &CollectionUuid) -> Result<bool> {
+    async fn owns_collection(
+        &self,
+        uid: &String,
+        collection_uuid: &CollectionUuid,
+    ) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
 

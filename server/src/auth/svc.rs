@@ -59,6 +59,8 @@ impl EntanglementService for AuthService {
 
     #[instrument(level=Level::DEBUG, skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
+        info!("starting auth service");
+
         let config = self.config.clone();
         let receiver = self.receiver.clone();
         let state = Arc::new(AuthCache::new(config.clone(), registry.clone())?);
@@ -127,12 +129,11 @@ impl EntanglementService for AuthService {
 
         self.handle.set(handle);
 
-        debug!("finished startup for auth_service");
+        debug!("started auth service");
         Ok(())
     }
 }
 
-// TODO -- add user/group regexes
 pub struct AuthCache {
     registry: ESMRegistry,
     authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
@@ -169,8 +170,8 @@ impl ESInner for AuthCache {
                 AuthMsg::ClearUserCache { resp, uid } => {
                     self.respond(resp, self.clear_user_cache(uid)).await
                 }
-                AuthMsg::ClearAccessCache { resp, uuid } => {
-                    self.respond(resp, self.clear_access_cache(uuid)).await
+                AuthMsg::ClearAccessCache { resp, media_uuid } => {
+                    self.respond(resp, self.clear_access_cache(media_uuid)).await
                 }
                 AuthMsg::GroupsForUser { resp, uid } => {
                     self.respond(resp, self.groups_for_user(uid)).await

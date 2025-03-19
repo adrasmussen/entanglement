@@ -22,7 +22,7 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, instrument, Level};
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
@@ -60,7 +60,8 @@ use common::config::ESConfig;
 //
 // second, it is the http service's job to enforce the correct auth
 // policy for each of its endpoints; the db service just makes edits
-// with none of the policy logic attached
+// with none of the policy logic attached.  crucially, this includes
+// clearing the access cache when collection contents are changed
 pub struct HttpService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
@@ -89,6 +90,8 @@ impl EntanglementService for HttpService {
 
     #[instrument(level=Level::DEBUG, skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
+        info!("starting http service");
+
         let receiver = Arc::clone(&self.receiver);
         let state = Arc::new(HttpEndpoint::new(self.config.clone(), registry.clone())?);
 
@@ -129,7 +132,7 @@ impl EntanglementService for HttpService {
         let msg_handle = tokio::task::spawn(msg_serve);
         self.msg_handle.set(msg_handle);
 
-        debug!("finished startup for http_service");
+        debug!("started http service");
         Ok(())
     }
 }
@@ -192,6 +195,8 @@ impl HttpEndpoint {
         self: Arc<Self>,
         socket: SocketAddr,
     ) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+        info!("starting axum/hyper http listener");
+
         let config = self.config.clone();
         let state = Arc::clone(&self);
 
@@ -310,7 +315,7 @@ impl HttpEndpoint {
             Err(anyhow::Error::msg("http_service http channel disconnected"))
         });
 
-        debug!("finished startup for serve_http");
+        debug!("started axum/hyper http listener");
         handle
     }
 }
@@ -841,6 +846,10 @@ async fn add_media_to_collection(
 
     rx.await??;
 
+    state
+        .clear_access_cache(Vec::from(&[message.media_uuid]))
+        .await?;
+
     Ok(Json(AddMediaToCollectionResp {}).into_response())
 }
 
@@ -878,6 +887,10 @@ async fn rm_media_from_collection(
         .await?;
 
     rx.await??;
+
+    state
+        .clear_access_cache(Vec::from(&[message.media_uuid]))
+        .await?;
 
     Ok(Json(RmMediaFromCollectionResp {}).into_response())
 }

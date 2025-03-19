@@ -4,22 +4,23 @@ use std::sync::Arc;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tracing::{debug, error, info, instrument, Level};
 
-use crate::db::{msg::DbMsg, ESDbRunner};
+use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
 use common::config::ESConfig;
 use common::db::DbBackend;
 
-pub struct DbService<T: DbBackend> {
+pub struct DbService<B: DbBackend> {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-    backend: PhantomData<T>,
+    backend: PhantomData<B>,
 }
 
 #[async_trait]
-impl<T: DbBackend> EntanglementService for DbService<T> {
-    type Inner = DbRunner<T>;
+impl<B: DbBackend> EntanglementService for DbService<B> {
+    type Inner = DbRunner<B>;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
@@ -32,15 +33,16 @@ impl<T: DbBackend> EntanglementService for DbService<T> {
             config: config.clone(),
             receiver: Arc::new(Mutex::new(rx)),
             handle: AsyncCell::new(),
-            backend: PhantomData::<T>,
+            backend: PhantomData::<B>,
         }
     }
 
+    #[instrument(level=Level::DEBUG, skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
-        // falliable stuff can happen here
+        info!("starting db service");
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(DbRunner::<T>::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(DbRunner::<B>::new(self.config.clone(), registry.clone())?);
 
         let serve = {
             async move {
@@ -49,13 +51,11 @@ impl<T: DbBackend> EntanglementService for DbService<T> {
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
                     tokio::task::spawn(async move {
-                        let esmstr = format!("{msg:?}");
-
                         match state.message_handler(msg).await {
                             Ok(()) => (),
-                            Err(err) => println!(
-                                "mysql_service failed to reply to message!\nError: {err}\nMessage: {esmstr}"
-                            ),
+                            Err(err) => {
+                                error!({service = "task", channel = "esm", error = %err})
+                            }
                         }
                     });
                 }
@@ -68,21 +68,23 @@ impl<T: DbBackend> EntanglementService for DbService<T> {
 
         self.handle.set(handle);
 
+        debug!("started db service");
+
         Ok(())
     }
 }
 
-pub struct DbRunner<T: DbBackend> {
+pub struct DbRunner<B: DbBackend> {
     registry: ESMRegistry,
-    backend: T,
+    backend: B,
 }
 
 #[async_trait]
-impl<T: DbBackend> ESInner for DbRunner<T> {
+impl<B: DbBackend> ESInner for DbRunner<B> {
     fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         Ok(DbRunner {
             registry: registry.clone(),
-            backend: T::new(config.clone())?,
+            backend: B::new(config.clone())?,
         })
     }
 
