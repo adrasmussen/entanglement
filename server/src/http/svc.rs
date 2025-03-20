@@ -482,7 +482,6 @@ async fn search_media(
         .send(
             DbMsg::SearchMedia {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 filter: message.filter,
             }
@@ -514,7 +513,6 @@ async fn similar_media(
         .send(
             DbMsg::SimilarMedia {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 media_uuid: message.media_uuid,
                 distance: message.distance,
@@ -914,7 +912,6 @@ async fn search_collections(
         .send(
             DbMsg::SearchCollections {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 filter: message.filter,
             }
@@ -949,7 +946,6 @@ async fn search_media_in_collection(
         .send(
             DbMsg::SearchMediaInCollection {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 collection_uuid: message.collection_uuid,
                 filter: message.filter,
@@ -1014,7 +1010,6 @@ async fn search_libraries(
         .send(
             DbMsg::SearchLibraries {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 filter: message.filter,
             }
@@ -1046,7 +1041,6 @@ async fn search_media_in_library(
         .send(
             DbMsg::SearchMediaInLibrary {
                 resp: tx,
-                uid: uid,
                 gid: gid,
                 library_uuid: message.library_uuid,
                 filter: message.filter,

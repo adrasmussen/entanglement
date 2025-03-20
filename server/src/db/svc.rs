@@ -122,23 +122,21 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 }
                 DbMsg::SearchMedia {
                     resp,
-                    uid,
                     gid,
                     filter,
                 } => {
-                    self.respond(resp, self.backend.search_media(uid, gid, filter))
+                    self.respond(resp, self.backend.search_media(gid, filter))
                         .await
                 }
                 DbMsg::SimilarMedia {
                     resp,
-                    uid,
                     gid,
                     media_uuid,
                     distance,
                 } => {
                     self.respond(
                         resp,
-                        self.backend.similar_media(uid, gid, media_uuid, distance),
+                        self.backend.similar_media(gid, media_uuid, distance),
                     )
                     .await
                 }
@@ -220,16 +218,14 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 }
                 DbMsg::SearchCollections {
                     resp,
-                    uid,
                     gid,
                     filter,
                 } => {
-                    self.respond(resp, self.backend.search_collections(uid, gid, filter))
+                    self.respond(resp, self.backend.search_collections(gid, filter))
                         .await
                 }
                 DbMsg::SearchMediaInCollection {
                     resp,
-                    uid,
                     gid,
                     collection_uuid,
                     filter,
@@ -237,7 +233,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(
                         resp,
                         self.backend
-                            .search_media_in_collection(uid, gid, collection_uuid, filter),
+                            .search_media_in_collection(gid, collection_uuid, filter),
                     )
                     .await
                 }
@@ -260,16 +256,14 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 }
                 DbMsg::SearchLibraries {
                     resp,
-                    uid,
                     gid,
                     filter,
                 } => {
-                    self.respond(resp, self.backend.search_libraries(uid, gid, filter))
+                    self.respond(resp, self.backend.search_libraries(gid, filter))
                         .await
                 }
                 DbMsg::SearchMediaInLibrary {
                     resp,
-                    uid,
                     gid,
                     library_uuid,
                     filter,
@@ -278,7 +272,6 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(
                         resp,
                         self.backend.search_media_in_library(
-                            uid,
                             gid,
                             library_uuid,
                             filter,

@@ -32,13 +32,11 @@ pub enum DbMsg {
     },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     },
     SimilarMedia {
         resp: ESMResp<Vec<MediaUuid>>,
-        uid: String,
         gid: HashSet<String>,
         media_uuid: MediaUuid,
         distance: i64,
@@ -93,13 +91,11 @@ pub enum DbMsg {
     },
     SearchCollections {
         resp: ESMResp<Vec<CollectionUuid>>,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     },
     SearchMediaInCollection {
         resp: ESMResp<Vec<MediaUuid>>,
-        uid: String,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: String,
@@ -121,13 +117,11 @@ pub enum DbMsg {
     },
     SearchLibraries {
         resp: ESMResp<Vec<LibraryUuid>>,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     },
     SearchMediaInLibrary {
         resp: ESMResp<Vec<MediaUuid>>,
-        uid: String,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         filter: String,

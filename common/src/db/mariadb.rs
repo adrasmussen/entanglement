@@ -5,17 +5,18 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
-use tracing::{debug, instrument, Level, info};
+use tracing::{debug, info, instrument, Level};
 
+use crate::{config::ESConfig, db::DbBackend};
 use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
+    task::{Task, TaskUuid, TaskStatus, TaskUpdate},
     unfold_set,
 };
-use crate::{config::ESConfig, db::DbBackend};
 
 pub struct MariaDBBackend {
     pool: Pool,
@@ -32,10 +33,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(level=Level::DEBUG, skip_all)]
-    async fn media_access_groups(
-        &self,
-        media_uuid: MediaUuid,
-    ) -> anyhow::Result<HashSet<String>> {
+    async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
         debug!({ media_uuid = media_uuid }, "finding media access groups");
 
         // for a given media_uuid, find all gids that match either:
@@ -259,11 +257,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(level=Level::DEBUG, skip_all)]
-    async fn update_media(
-        &self,
-        media_uuid: MediaUuid,
-        update: MediaUpdate,
-    ) -> anyhow::Result<()> {
+    async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()> {
         debug!({ media_uuid = media_uuid }, "updating media details");
 
         if let Some(val) = update.hidden {
@@ -327,7 +321,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn search_media(
         &self,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<MediaUuid>> {
@@ -340,39 +333,38 @@ impl DbBackend for MariaDBBackend {
                 media.media_uuid
             FROM
                 (
-                SELECT
-                    media_uuid
-                FROM
-                    (
                     SELECT
-                        collection_uuid
+                        media_uuid
                     FROM
-                        collections
-                    WHERE
-                        INSTR(:gid, gid) > 0
-                ) AS t1
-            INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
-            UNION
-            SELECT
-                media_uuid
-            FROM
-                (
-                SELECT
-                    library_uuid
-                FROM
-                    libraries
-                WHERE
-                    INSTR(:gid, gid) > 0
-            ) AS t2
-            INNER JOIN media ON t2.library_uuid = media.library_uuid
-            ) AS t3
-            INNER JOIN media ON t3.media_uuid = media.media_uuid
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                INSTR(:gid, gid) > 0
+                        ) AS t1
+                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
+                    UNION
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                library_uuid
+                            FROM
+                                libraries
+                            WHERE
+                                INSTR(:gid, gid) > 0
+                        ) AS t2
+                        INNER JOIN media ON t2.library_uuid = media.library_uuid
+                ) AS t3
+                INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                hidden = FALSE AND CONCAT(' ', date, note) LIKE :filter"
+                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
             .with(params! {
-                "uid" => uid,
                 "gid" => fold_set(gid)?,
-                "filter" => format!("%{}%", filter),
+                "filter" => filter,
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -390,7 +382,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn similar_media(
         &self,
-        uid: String,
         gid: HashSet<String>,
         media_uuid: MediaUuid,
         distance: i64,
@@ -404,37 +395,36 @@ impl DbBackend for MariaDBBackend {
                 media.media_uuid
             FROM
                 (
-                SELECT
-                    media_uuid
-                FROM
-                    (
                     SELECT
-                        collection_uuid
+                        media_uuid
                     FROM
-                        collections
-                    WHERE
-                        INSTR(:gid, gid) > 0
-                ) AS t1
-            INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
-            UNION
-            SELECT
-                media_uuid
-            FROM
-                (
-                SELECT
-                    library_uuid
-                FROM
-                    libraries
-                WHERE
-                    INSTR(:gid, gid) > 0
-            ) AS t2
-            INNER JOIN media ON t2.library_uuid = media.library_uuid
-            ) AS t3
-            INNER JOIN media ON t3.media_uuid = media.media_uuid
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                INSTR(:gid, gid) > 0
+                        ) AS t1
+                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
+                    UNION
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                library_uuid
+                            FROM
+                                libraries
+                            WHERE
+                                INSTR(:gid, gid) > 0
+                        ) AS t2
+                        INNER JOIN media ON t2.library_uuid = media.library_uuid
+                ) AS t3
+                INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                hidden = FALSE AND BIG_HAM((SELECT hash FROM media where media_uuid = :media_uuid), hash) < :distance"
+                media.hidden = FALSE AND BIG_HAM((SELECT hash FROM media WHERE media_uuid = :media_uuid), media.hash) < :distance"
         .with(params! {
-            "uid" => uid,
             "gid" => fold_set(gid)?,
             "media_uuid" => media_uuid,
             "distance" => distance,
@@ -713,7 +703,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn search_collections(
         &self,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<CollectionUuid>> {
@@ -724,9 +713,8 @@ impl DbBackend for MariaDBBackend {
             FROM
                 collections
             WHERE
-                INSTR(:gid, gid) > 0 AND CONCAT_WS(' ', name, note) LIKE :filter"
+                INSTR(:gid, gid) > 0 AND CONCAT_WS('|', name, note) LIKE :filter"
             .with(params! {
-                "uid" => uid,
                 "gid" => fold_set(gid)?,
                 "filter" => format!("%{}%", filter),
             })
@@ -746,7 +734,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn search_media_in_collection(
         &self,
-        uid: String,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: String,
@@ -758,24 +745,23 @@ impl DbBackend for MariaDBBackend {
                 media.media_uuid
             FROM
                 (
-                SELECT
-                    media_uuid
-                FROM
-                    (
                     SELECT
-                        collection_uuid
+                        media_uuid
                     FROM
-                        collections
-                    WHERE
-                        INSTR(:gid, gid) > 0 AND collection_uuid = :collection_uuid
-                    ) AS t2
-                INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                INSTR(:gid, gid) > 0 AND collection_uuid = :collection_uuid
+                        ) AS t2
+                        INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
-                WHERE
-                    hidden = FALSE AND CONCAT_WS(' ', DATE, note) LIKE :filter"
+            WHERE
+                media.hidden = FALSE AND CONCAT_WS('|', media.DATE, media.note) LIKE :filter"
         .with(params! {
-            "uid" => uid,
             "gid" => fold_set(gid)?,
             "collection_uuid" => collection_uuid,
             "filter" => format!("%{}%", filter),
@@ -900,7 +886,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn search_libraries(
         &self,
-        uid: String,
         gid: HashSet<String>,
         filter: String,
     ) -> anyhow::Result<Vec<LibraryUuid>> {
@@ -912,7 +897,6 @@ impl DbBackend for MariaDBBackend {
             WHERE
                 INSTR(:gid, gid) > 0 AND path LIKE :filter"
             .with(params! {
-                "uid" => uid,
                 "gid" => fold_set(gid)?,
                 "filter" => format!("%{}%", filter),
             })
@@ -932,7 +916,6 @@ impl DbBackend for MariaDBBackend {
     #[instrument(level=Level::DEBUG, skip_all)]
     async fn search_media_in_library(
         &self,
-        uid: String,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         filter: String,
@@ -947,18 +930,17 @@ impl DbBackend for MariaDBBackend {
                 media.media_uuid
             FROM
                 (
-                SELECT
-                    library_uuid
-                FROM
-                    libraries
-                WHERE
-                    INSTR(:gid, gid) > 0 AND library_uuid = :library_uuid
-            ) AS t1
-            INNER JOIN media ON t1.library_uuid = media.library_uuid
+                    SELECT
+                        library_uuid
+                    FROM
+                        libraries
+                    WHERE
+                        INSTR(:gid, gid) > 0 AND library_uuid = :library_uuid
+                ) AS t1
+                INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                hidden = :hidden AND CONCAT_WS(' ', date, note) LIKE :filter"
+                media.hidden = :hidden AND CONCAT_WS('|', media.date, media.note) LIKE :filter"
             .with(params! {
-                "uid" => uid,
                 "gid" => fold_set(gid)?,
                 "library_uuid" => library_uuid,
                 "hidden" => hidden,
@@ -1078,5 +1060,25 @@ impl DbBackend for MariaDBBackend {
         debug!({ comment_uuid = comment_uuid }, "updated comment");
 
         Ok(())
+    }
+
+    async fn add_task(&self, task: Task) -> Result<TaskUuid> {
+        todo!()
+    }
+
+    async fn get_task(&self, task_uuid: TaskUuid) -> Result<Task> {
+        todo!()
+    }
+
+    async fn delete_task(&self, task_uuid: TaskUuid) -> Result<()> {
+        todo!()
+    }
+
+    async fn update_task(&self, task_uuid: TaskUuid, update: TaskUpdate) -> Result<()> {
+        todo!()
+    }
+
+    async fn search_tasks(&self, filter: Option<TaskStatus>) -> Result<Vec<TaskUuid>> {
+        todo!()
     }
 }
