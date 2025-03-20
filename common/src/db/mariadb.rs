@@ -14,7 +14,7 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
-    task::{Task, TaskUuid, TaskStatus, TaskUpdate},
+    task::{Task, TaskStatus, TaskUpdate, TaskUuid},
     unfold_set,
 };
 
@@ -43,26 +43,19 @@ impl DbBackend for MariaDBBackend {
             SELECT
                 gid
             FROM
-                (
-                SELECT
-                    collection_uuid
-                FROM
-                    media
-                INNER JOIN collection_contents ON media.media_uuid = collection_contents.media_uuid
-                WHERE
-                    media.media_uuid = :media_uuid AND media.hidden = FALSE
-            ) AS t1
-            INNER JOIN collections ON t1.collection_uuid = collections.collection_uuid
+                collections
+            INNER JOIN collection_contents ON collections.collection_uuid = collection_contents.collection_uuid
+            INNER JOIN media ON collection_contents.media_uuid = media.media_uuid
+            WHERE
+                media.media_uuid = :media_uuid AND media.hidden = FALSE
             UNION
             SELECT
                 gid
             FROM
-                (
-                    libraries
-                INNER JOIN media ON libraries.library_uuid = media.library_uuid
-                )
+                libraries
+            INNER JOIN media ON libraries.library_uuid = media.library_uuid
             WHERE
-                media_uuid = :media_uuid"
+                media.media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
             })
@@ -713,7 +706,7 @@ impl DbBackend for MariaDBBackend {
             FROM
                 collections
             WHERE
-                INSTR(:gid, gid) > 0 AND CONCAT_WS('|', name, note) LIKE :filter"
+                INSTR(:gid, gid) > 0 AND MATCH(collections.name, collections.note, collections.tags) AGAINST(:filter)"
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "filter" => format!("%{}%", filter),
@@ -760,7 +753,7 @@ impl DbBackend for MariaDBBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE AND CONCAT_WS('|', media.DATE, media.note) LIKE :filter"
+                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
         .with(params! {
             "gid" => fold_set(gid)?,
             "collection_uuid" => collection_uuid,
@@ -939,7 +932,7 @@ impl DbBackend for MariaDBBackend {
                 ) AS t1
                 INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                media.hidden = :hidden AND CONCAT_WS('|', media.date, media.note) LIKE :filter"
+                media.hidden = :hidden AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "library_uuid" => library_uuid,

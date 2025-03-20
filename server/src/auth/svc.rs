@@ -44,7 +44,7 @@ impl EntanglementService for AuthService {
     type Inner = AuthCache;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(65536);
+        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
         registry
             .insert(ServiceType::Auth, tx)

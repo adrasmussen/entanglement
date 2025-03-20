@@ -2,13 +2,14 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-pub mod collection;
 pub mod auth;
+pub mod collection;
 pub mod comment;
 pub mod library;
-pub mod media;
-pub mod task;
 pub mod log;
+pub mod media;
+pub mod search;
+pub mod task;
 
 pub const ORIGINAL_PATH: &str = "originals";
 pub const THUMBNAIL_PATH: &str = "thumbnails";
