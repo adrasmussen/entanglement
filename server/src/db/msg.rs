@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{collection::*, comment::*, library::*, media::*, task::*};
+use api::{collection::*, comment::*, library::*, media::*, task::*, search::SearchFilter};
 
 use crate::service::*;
 
@@ -33,7 +33,7 @@ pub enum DbMsg {
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
-        filter: String,
+        filter: SearchFilter,
     },
     SimilarMedia {
         resp: ESMResp<Vec<MediaUuid>>,

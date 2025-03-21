@@ -14,6 +14,7 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
+    search::SearchFilter,
     task::{Task, TaskStatus, TaskUpdate, TaskUuid},
     unfold_set,
 };
@@ -315,13 +316,15 @@ impl DbBackend for MariaDBBackend {
     async fn search_media(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: SearchFilter,
     ) -> anyhow::Result<Vec<MediaUuid>> {
+        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
         //  * if the media is not hidden, is in an collection owned
         //    by a group containing the uid
-        let result = r"
+        let mut query  = r"
             SELECT
                 media.media_uuid
             FROM
@@ -354,7 +357,11 @@ impl DbBackend for MariaDBBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter IN BOOLEAN MODE)"
+                media.hidden = FALSE".to_owned();
+
+        query.push_str(&sql);
+
+        let result = query
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "filter" => filter,

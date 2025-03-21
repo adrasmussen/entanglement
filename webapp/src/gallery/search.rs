@@ -5,7 +5,7 @@ use crate::{
     components::{media_card::MediaCard, modal::ModalBox, search_bar::SearchBar},
     gallery::MEDIA_SEARCH_KEY,
 };
-use api::media::*;
+use api::{media::*, search::SearchFilter};
 
 #[component]
 pub fn GallerySearch() -> Element {
@@ -17,8 +17,17 @@ pub fn GallerySearch() -> Element {
     let mut media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
     let media_future = use_resource(move || async move {
-        let filter = media_search_signal();
-        search_media(&SearchMediaReq { filter }).await
+        // TODO -- this should use a more intelligent splitter
+        // that keeps quoted phrases together
+        let filter = media_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
+
+        search_media(&SearchMediaReq {
+            filter: SearchFilter::SubstringAny { filter },
+        })
+        .await
     });
 
     let action_button = rsx! {

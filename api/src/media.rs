@@ -77,7 +77,7 @@ endpoint!(SearchMedia);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchMediaReq {
-    pub filter: String,
+    pub filter: SearchFilter,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
