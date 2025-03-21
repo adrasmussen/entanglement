@@ -38,11 +38,7 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()>;
 
-    async fn search_media(
-        &self,
-        gid: HashSet<String>,
-        filter: String,
-    ) -> Result<Vec<MediaUuid>>;
+    async fn search_media(&self, gid: HashSet<String>, filter: String) -> Result<Vec<MediaUuid>>;
 
     async fn similar_media(
         &self,

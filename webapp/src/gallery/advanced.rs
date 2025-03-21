@@ -2,10 +2,39 @@ use dioxus::prelude::*;
 
 #[derive(Clone, PartialEq)]
 enum TabTarget {
-    Text,
-    Date,
-    Metadata,
-    Similar,
+    Search,
+    ShowCollection,
+    BulkSelect,
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct AdvancedContentProps {
+    tab_signal: Signal<TabTarget>,
+    media_search_signal: Signal<String>,
+}
+
+#[component]
+fn AdvancedContent(props: AdvancedContentProps) -> Element {
+    let tab_signal = props.tab_signal;
+
+    rsx! {
+        div {
+            class: "tab-content",
+            style: "min-height: 200px;",
+
+            match tab_signal() {
+                TabTarget::Search => {
+                    rsx!{"to do"}
+                }
+                TabTarget::ShowCollection => {
+                    rsx!{"to do"}
+                }
+                TabTarget::BulkSelect => {
+                    rsx!{"to do"}
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Props)]
@@ -39,5 +68,47 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
 
             "{text}"
         }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct AdvancedContainerProps {
+    media_search_signal: Signal<String>,
+}
+
+#[component]
+fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
+    let media_search_signal = props.media_search_signal;
+
+    let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::Search);
+
+    rsx! {
+        div {
+            class: "advanced-search-options",
+            style: "
+                margin-top: -16px;
+                margin-bottom: var(--space-6);
+                padding: var(--space-4);
+                background-color: var(--neutral-50);
+                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+                box-shadow: var(--shadow-sm);
+                border-top: 1px solid var(--neutral-200);
+                animation: slide-down 0.2s ease-out;
+            ",
+            h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Options" }
+        }
+        div {
+            class: "tabs-navigation",
+            style: "
+                display: flex;
+                border-bottom: 1px solid var(--neutral-200);
+                margin-bottom: var(--space-4);
+            ",
+            AdvancedTab {tab_signal: tab_signal, target: TabTarget::Search, text: "Search Options"}
+            AdvancedTab {tab_signal: tab_signal, target: TabTarget::ShowCollection, text: "Show Collections"}
+            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkSelect, text: "Bulk Select"}
+        }
+
+        AdvancedContent {tab_signal, media_search_signal}
     }
 }

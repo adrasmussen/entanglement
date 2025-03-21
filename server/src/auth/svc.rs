@@ -171,7 +171,8 @@ impl ESInner for AuthCache {
                     self.respond(resp, self.clear_user_cache(uid)).await
                 }
                 AuthMsg::ClearAccessCache { resp, media_uuid } => {
-                    self.respond(resp, self.clear_access_cache(media_uuid)).await
+                    self.respond(resp, self.clear_access_cache(media_uuid))
+                        .await
                 }
                 AuthMsg::GroupsForUser { resp, uid } => {
                     self.respond(resp, self.groups_for_user(uid)).await

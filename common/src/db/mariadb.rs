@@ -354,7 +354,7 @@ impl DbBackend for MariaDBBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
+                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter IN BOOLEAN MODE)"
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "filter" => filter,

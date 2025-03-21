@@ -7,9 +7,9 @@ use common::auth::{AuthnBackend, AuthzBackend};
 
 use crate::service::*;
 
+pub mod check;
 pub mod msg;
 pub mod svc;
-pub mod check;
 
 #[async_trait]
 trait ESAuthService: ESInner {

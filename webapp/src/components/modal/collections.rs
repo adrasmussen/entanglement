@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
 use crate::components::modal::{ModalSize, ModernModal, MODAL_STACK};
-use api::{auth::*, collection::*, media::MediaUuid, FOLDING_SEPARATOR, unfold_set};
+use api::{auth::*, collection::*, media::MediaUuid, unfold_set, FOLDING_SEPARATOR};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CreateCollectionModalProps {
@@ -71,17 +71,21 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
 
         match add_collection(&AddCollectionReq {
             collection: Collection {
-            uid: "".to_string(),
-            gid: collection_group(),
-            mtime: 0,
-            name: collection_name(),
-            note: collection_note(),
-            tags: unfold_set(&collection_tags()),
-        }})
+                uid: "".to_string(),
+                gid: collection_group(),
+                mtime: 0,
+                name: collection_name(),
+                note: collection_note(),
+                tags: unfold_set(&collection_tags()),
+            },
+        })
         .await
         {
             Ok(resp) => {
-                status_message.set(format!("Collection created with ID: {}", resp.collection_uuid));
+                status_message.set(format!(
+                    "Collection created with ID: {}",
+                    resp.collection_uuid
+                ));
                 update_signal.set(());
 
                 // Close the modal after a short delay to show success message
@@ -348,7 +352,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
             update: CollectionUpdate {
                 name: Some(collection_name()),
                 note: Some(collection_note()),
-                tags: None
+                tags: None,
             },
         })
         .await
@@ -742,7 +746,9 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
 
     // Fetch collection details
     let collection_future =
-        use_resource(move || async move { get_collection(&GetCollectionReq { collection_uuid }).await });
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
 
     let collection = &*collection_future.read();
 

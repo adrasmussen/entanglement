@@ -60,7 +60,11 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
             let mut library_details = Vec::new();
 
             for library_uuid in libraries.iter() {
-                match get_library(&GetLibraryReq { library_uuid: *library_uuid }).await {
+                match get_library(&GetLibraryReq {
+                    library_uuid: *library_uuid,
+                })
+                .await
+                {
                     Ok(resp) => library_details.push((*library_uuid, resp.library)),
                     Err(err) => {
                         tracing::error!("Failed to fetch library {library_uuid}: {err}");

@@ -14,7 +14,12 @@ pub fn ModernHome() -> Element {
     let stats_loaded = use_signal(|| false);
 
     use_future(move || {
-        to_owned![media_count, collections_count, libraries_count, stats_loaded];
+        to_owned![
+            media_count,
+            collections_count,
+            libraries_count,
+            stats_loaded
+        ];
         async move {
             // Simulate an API call
             // In a real implementation, you would fetch real data

@@ -2,8 +2,10 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::endpoint;
-use crate::{collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid};
+use crate::{
+    collection::CollectionUuid, comment::CommentUuid, endpoint, library::LibraryUuid,
+    search::SearchFilter,
+};
 
 // structs and types
 

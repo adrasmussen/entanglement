@@ -77,7 +77,7 @@ endpoint!(GetTask);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetTaskReq {
-    pub task_uuid: TaskUuid
+    pub task_uuid: TaskUuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

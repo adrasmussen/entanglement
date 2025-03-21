@@ -139,7 +139,7 @@ pub enum DbMsg {
     },
     DeleteTask {
         resp: ESMResp<()>,
-        task_uuid: LibraryUuid
+        task_uuid: LibraryUuid,
     },
     UpdateTask {
         resp: ESMResp<()>,
@@ -152,7 +152,7 @@ pub enum DbMsg {
     },
     AddLog {
         resp: ESMResp<()>,
-        log: String
+        log: String,
     },
     GetLog {
         resp: ESMResp<String>,
@@ -165,7 +165,7 @@ pub enum DbMsg {
     SearchLogs {
         resp: ESMResp<Vec<String>>,
         filter: String,
-    }
+    },
 }
 
 impl From<DbMsg> for ESM {

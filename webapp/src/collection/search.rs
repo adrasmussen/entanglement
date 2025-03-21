@@ -17,7 +17,8 @@ pub fn CollectionSearch() -> Element {
     let update_signal = use_signal(|| ());
 
     // Get search signal from local storage
-    let collection_search_signal = use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
+    let collection_search_signal =
+        use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
 
     // Fetch collections data
     let collection_future = use_resource(move || async move {

@@ -9,7 +9,7 @@ pub enum TaskMsg {
         resp: ESMResp<TaskUuid>,
         library_uuid: LibraryUuid,
         task_type: TaskType,
-        uid: TaskUid
+        uid: TaskUid,
     },
     StopTask {
         resp: ESMResp<()>,

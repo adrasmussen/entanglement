@@ -6,7 +6,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, instrument, Level, info};
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::db::msg::DbMsg;
 use crate::fs::{msg::*, scan::*, ESFileService};
@@ -31,7 +31,9 @@ impl EntanglementService for FileService {
     fn create(config: Arc<ESConfig>, sender_map: &ESMRegistry) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
 
-        sender_map.insert(ServiceType::Fs, tx).expect("failed to insert sender for file service");
+        sender_map
+            .insert(ServiceType::Fs, tx)
+            .expect("failed to insert sender for file service");
 
         FileService {
             config: config.clone(),
@@ -93,10 +95,7 @@ pub struct FileScanner {
 
 #[async_trait]
 impl ESInner for FileScanner {
-    fn new(
-        config: Arc<ESConfig>,
-        registry: ESMRegistry,
-    ) -> anyhow::Result<Self> {
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         Ok(FileScanner {
             config: config.clone(),
             registry: registry.clone(),
@@ -128,7 +127,6 @@ impl ESInner for FileScanner {
         }
     }
 }
-
 
 #[async_trait]
 impl ESFileService for FileScanner {

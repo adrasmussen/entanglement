@@ -120,11 +120,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(resp, self.backend.update_media(media_uuid, update))
                         .await
                 }
-                DbMsg::SearchMedia {
-                    resp,
-                    gid,
-                    filter,
-                } => {
+                DbMsg::SearchMedia { resp, gid, filter } => {
                     self.respond(resp, self.backend.search_media(gid, filter))
                         .await
                 }
@@ -134,11 +130,8 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     media_uuid,
                     distance,
                 } => {
-                    self.respond(
-                        resp,
-                        self.backend.similar_media(gid, media_uuid, distance),
-                    )
-                    .await
+                    self.respond(resp, self.backend.similar_media(gid, media_uuid, distance))
+                        .await
                 }
 
                 // comment messages
@@ -216,11 +209,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                DbMsg::SearchCollections {
-                    resp,
-                    gid,
-                    filter,
-                } => {
+                DbMsg::SearchCollections { resp, gid, filter } => {
                     self.respond(resp, self.backend.search_collections(gid, filter))
                         .await
                 }
@@ -254,11 +243,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(resp, self.backend.update_library(library_uuid, update))
                         .await
                 }
-                DbMsg::SearchLibraries {
-                    resp,
-                    gid,
-                    filter,
-                } => {
+                DbMsg::SearchLibraries { resp, gid, filter } => {
                     self.respond(resp, self.backend.search_libraries(gid, filter))
                         .await
                 }
@@ -271,12 +256,8 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 } => {
                     self.respond(
                         resp,
-                        self.backend.search_media_in_library(
-                            gid,
-                            library_uuid,
-                            filter,
-                            hidden,
-                        ),
+                        self.backend
+                            .search_media_in_library(gid, library_uuid, filter, hidden),
                     )
                     .await
                 }
