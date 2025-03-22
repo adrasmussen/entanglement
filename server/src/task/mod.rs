@@ -2,8 +2,12 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use tracing::error;
 
-use crate::service::ESInner;
+use crate::{
+    db::msg::DbMsg,
+    service::{ESInner, ESMSender},
+};
 use api::{
     library::LibraryUuid,
     task::{Task, TaskType, TaskUid},

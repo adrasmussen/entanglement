@@ -288,7 +288,7 @@ impl ESTaskService for TaskRunner {
             let handle = match task.task_type {
                 TaskType::ScanLibrary => spawn_task(
                     task_uuid,
-                    scan_library(self.config.clone(), self.registry.clone(), library),
+                    scan_library(self.config.clone(), self.registry.clone(), library, task_uuid),
                     db_svc_sender,
                 ),
                 _ => {

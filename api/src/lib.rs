@@ -6,7 +6,6 @@ pub mod auth;
 pub mod collection;
 pub mod comment;
 pub mod library;
-pub mod log;
 pub mod media;
 pub mod search;
 pub mod task;

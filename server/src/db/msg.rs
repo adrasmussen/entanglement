@@ -150,22 +150,6 @@ pub enum DbMsg {
         resp: ESMResp<Vec<TaskUuid>>,
         filter: Option<TaskStatus>,
     },
-    AddLog {
-        resp: ESMResp<()>,
-        log: String,
-    },
-    GetLog {
-        resp: ESMResp<String>,
-        log_uuid: String,
-    },
-    DeleteLog {
-        resp: ESMResp<()>,
-        log_uuid: String,
-    },
-    SearchLogs {
-        resp: ESMResp<Vec<String>>,
-        filter: String,
-    },
 }
 
 impl From<DbMsg> for ESM {
