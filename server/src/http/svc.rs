@@ -1112,9 +1112,9 @@ async fn start_task(
         )
         .await?;
 
-    let result = rx.await??;
+    rx.await??;
 
-    Ok(Json(StartTaskResp { task_uuid: result }).into_response())
+    Ok(Json(StartTaskResp {}).into_response())
 }
 
 async fn stop_task(

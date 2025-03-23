@@ -15,7 +15,6 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
     search::SearchFilter,
-    task::{Task, TaskStatus, TaskUpdate, TaskUuid},
     unfold_set,
 };
 
@@ -1060,25 +1059,5 @@ impl DbBackend for MariaDBBackend {
         debug!({ comment_uuid = comment_uuid }, "updated comment");
 
         Ok(())
-    }
-
-    async fn add_task(&self, task: Task) -> Result<TaskUuid> {
-        todo!()
-    }
-
-    async fn get_task(&self, task_uuid: TaskUuid) -> Result<Task> {
-        todo!()
-    }
-
-    async fn delete_task(&self, task_uuid: TaskUuid) -> Result<()> {
-        todo!()
-    }
-
-    async fn update_task(&self, task_uuid: TaskUuid, update: TaskUpdate) -> Result<()> {
-        todo!()
-    }
-
-    async fn search_tasks(&self, filter: Option<TaskStatus>) -> Result<Vec<TaskUuid>> {
-        todo!()
     }
 }

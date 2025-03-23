@@ -127,29 +127,6 @@ pub enum DbMsg {
         filter: String,
         hidden: bool,
     },
-
-    // task messages
-    AddTask {
-        resp: ESMResp<TaskUuid>,
-        task: Task,
-    },
-    GetTask {
-        resp: ESMResp<Task>,
-        task_uuid: TaskUuid,
-    },
-    DeleteTask {
-        resp: ESMResp<()>,
-        task_uuid: LibraryUuid,
-    },
-    UpdateTask {
-        resp: ESMResp<()>,
-        task_uuid: TaskUuid,
-        update: TaskUpdate,
-    },
-    SearchTasks {
-        resp: ESMResp<Vec<TaskUuid>>,
-        filter: Option<TaskStatus>,
-    },
 }
 
 impl From<DbMsg> for ESM {

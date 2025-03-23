@@ -6,7 +6,7 @@ use api::{library::LibraryUuid, task::*};
 #[derive(Debug)]
 pub enum TaskMsg {
     StartTask {
-        resp: ESMResp<TaskUuid>,
+        resp: ESMResp<()>,
         library_uuid: LibraryUuid,
         task_type: TaskType,
         uid: TaskUid,

@@ -24,7 +24,7 @@ pub trait ESTaskService: ESInner {
         library_uuid: LibraryUuid,
         task_type: TaskType,
         uid: TaskUid,
-    ) -> Result<LibraryUuid>;
+    ) -> Result<()>;
 
     async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()>;
 

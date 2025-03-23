@@ -10,7 +10,6 @@ use api::{search::SearchFilter,
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
-    task::{Task, TaskStatus, TaskUpdate, TaskUuid},
 };
 
 pub mod mariadb;
@@ -114,14 +113,4 @@ pub trait DbBackend: Send + Sync + 'static {
         filter: String,
         hidden: bool,
     ) -> Result<Vec<MediaUuid>>;
-
-    async fn add_task(&self, task: Task) -> Result<TaskUuid>;
-
-    async fn get_task(&self, task_uuid: TaskUuid) -> Result<Task>;
-
-    async fn delete_task(&self, task_uuid: TaskUuid) -> Result<()>;
-
-    async fn update_task(&self, task_uuid: TaskUuid, update: TaskUpdate) -> Result<()>;
-
-    async fn search_tasks(&self, filter: Option<TaskStatus>) -> Result<Vec<TaskUuid>>;
 }
