@@ -16,7 +16,13 @@ pub enum TaskMsg {
         library_uuid: LibraryUuid,
     },
     Status {
-        resp: ESMResp<HashMap<LibraryUuid, Task>>,
+        resp: ESMResp<Vec<Task>>,
+        library_uuid: LibraryUuid,
+    },
+    CompleteTask {
+        library_uuid: LibraryUuid,
+        status: TaskStatus,
+        end: i64,
     },
 }
 

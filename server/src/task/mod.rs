@@ -10,7 +10,7 @@ use crate::{
 };
 use api::{
     library::LibraryUuid,
-    task::{Task, TaskType, TaskUid},
+    task::{Task, TaskStatus, TaskType, TaskUid},
 };
 
 pub mod msg;
@@ -29,5 +29,10 @@ pub trait ESTaskService: ESInner {
     async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()>;
 
     // read the database for historical tasks and combine with current data
-    async fn status(&self) -> Result<HashMap<LibraryUuid, Task>>;
+    async fn status(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>>;
+
+    // message from spawned tasks when the watcher future completes or is aborted
+    //
+    // must be Result<()> because there is no responder
+    async fn complete_task(&self, library_uuid: LibraryUuid, status: TaskStatus, end: i64) -> Result<()>;
 }

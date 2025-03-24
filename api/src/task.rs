@@ -19,7 +19,6 @@ pub enum TaskStatus {
     Running,
     Success,
     Failure,
-    Orphaned,
     Aborted,
 }
 
