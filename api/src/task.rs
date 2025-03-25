@@ -33,6 +33,7 @@ pub struct Task {
     pub task_type: TaskType,
     pub uid: TaskUid,
     pub status: TaskStatus,
+    pub errors: Option<i64>,
     pub start: i64,
     pub end: Option<i64>,
 }

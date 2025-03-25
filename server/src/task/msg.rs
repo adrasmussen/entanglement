@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::service::{ESMResp, ESM};
 use api::{library::LibraryUuid, task::*};
 
@@ -20,8 +18,10 @@ pub enum TaskMsg {
         library_uuid: LibraryUuid,
     },
     CompleteTask {
+        resp: ESMResp<()>,
         library_uuid: LibraryUuid,
         status: TaskStatus,
+        errors: Option<i64>,
         end: i64,
     },
 }

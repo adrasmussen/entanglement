@@ -10,11 +10,11 @@ pub async fn scan_library(
     config: Arc<ESConfig>,
     registry: ESMRegistry,
     library_uuid: LibraryUuid
-) -> Result<()> {
+) -> Result<i64> {
     let db_svc_sender = registry.get(&ServiceType::Db)?;
 
 
     // create context construct to pass down into threads
 
-    Ok(())
+    Ok(0)
 }

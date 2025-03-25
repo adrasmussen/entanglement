@@ -34,5 +34,5 @@ pub trait ESTaskService: ESInner {
     // message from spawned tasks when the watcher future completes or is aborted
     //
     // must be Result<()> because there is no responder
-    async fn complete_task(&self, library_uuid: LibraryUuid, status: TaskStatus, end: i64) -> Result<()>;
+    async fn complete_task(&self, library_uuid: LibraryUuid, status: TaskStatus, errors: Option<i64>, end: i64) -> Result<()>;
 }

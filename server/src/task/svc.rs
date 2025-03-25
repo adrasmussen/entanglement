@@ -1,33 +1,25 @@
-use std::collections::HashMap;
-use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
-use dashmap::{DashMap, Entry, OccupiedEntry};
+use dashmap::{DashMap, Entry};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use tokio::{
-    sync::{
-        oneshot::{channel, Receiver, Sender},
-        Mutex, RwLock,
-    },
+    sync::{Mutex, RwLock},
     task::{spawn, JoinHandle},
 };
-use tracing::{debug, error, info, instrument, warn, Level};
-use tracing_subscriber::registry;
+use tracing::{debug, error, info, instrument, Level};
 
 use crate::{
     db::msg::DbMsg,
-    service::{
-        ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
-    },
+    service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
     task::{msg::TaskMsg, scan::scan_library, ESTaskService},
 };
 use api::{
     library::LibraryUuid,
-    task::{Task, TaskStatus, TaskType, TaskUid, TaskUuid},
+    task::{Task, TaskStatus, TaskType, TaskUid},
 };
 use common::config::ESConfig;
 
@@ -107,7 +99,7 @@ pub struct TaskRunner {
 #[derive(Debug)]
 struct RunningTask {
     task: Task,
-    cancel: Sender<()>,
+    cancel: tokio::sync::mpsc::Sender<()>,
     handle: JoinHandle<()>,
 }
 
@@ -145,10 +137,15 @@ impl ESInner for TaskRunner {
                     self.respond(resp, self.status(library_uuid)).await
                 }
                 TaskMsg::CompleteTask {
+                    resp,
                     library_uuid,
                     status,
+                    errors,
                     end,
-                } => self.complete_task(library_uuid, status, end).await,
+                } => {
+                    self.respond(resp, self.complete_task(library_uuid, status, errors, end))
+                        .await
+                }
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }
@@ -167,7 +164,7 @@ impl ESTaskService for TaskRunner {
         // library verification
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
 
-        let (db_tx, db_rx) = channel();
+        let (db_tx, db_rx) = tokio::sync::oneshot::channel();
 
         db_svc_sender
             .send(
@@ -182,6 +179,9 @@ impl ESTaskService for TaskRunner {
         db_rx.await??;
 
         // create the library's entry in the running task map if it doesn't exist
+        //
+        // this should be the only place that entries are put into the running DashMap,
+        // all other calls should error somehow
         let rt_entry = match self.running_tasks.entry(library_uuid) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
@@ -206,6 +206,7 @@ impl ESTaskService for TaskRunner {
             task_type: task_type.clone(),
             uid: uid,
             status: TaskStatus::Running,
+            errors: None,
             start: Local::now().timestamp(),
             end: None,
         };
@@ -213,13 +214,23 @@ impl ESTaskService for TaskRunner {
         // to abort the task, we can't simply drop the handle -- we need to explicitly call abort()
         // on either it or the associated abort handle.  thus, we create this channel and pacakge it
         // as part of the tracked state to connect with the twice-separated running task future
-        let (tx, rx) = channel::<()>();
+        //
+        // this an mpsc channel instead of oneshot so that we can clone the sender out of the struct
+        // easily (no extra Option<> layer or similar)
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(64);
 
         let sender = self.registry().get(&ServiceType::Task)?;
 
         // task futures
         //
-        // while tasks should produce tracing logs (tbc)
+        // each task is a Future<Output=Result<T>> that is spawned into the executor by a separate
+        // "watcher" future which uses the select! macro to await either the future or a cancellation
+        // signal carried by the above channel
+        //
+        // currently, T = i64, the number of non-fatal errors encountered by the task
+        //
+        // what "failed" means depends on the task -- since tasks should typically produce reasonable
+        // tracing logs, failure could either be catastrophic failure or a single error
         let task_future = match task_type {
             TaskType::ScanLibrary => {
                 scan_library(self.config.clone(), self.registry.clone(), library_uuid)
@@ -232,36 +243,46 @@ impl ESTaskService for TaskRunner {
 
             let abort_handle = task_handle.abort_handle();
 
-            let status = tokio::select! {
-                _ = rx => {
+            let (status, errors) = tokio::select! {
+                _ = rx.recv() => {
                     abort_handle.abort();
-                    TaskStatus::Aborted
+                    (TaskStatus::Aborted, None)
                 }
 
                 res = task_handle => {
                     match res {
-                        Ok(Ok(())) => TaskStatus::Success,
-                        Ok(Err(_)) => TaskStatus::Failure,
-                        Err(_) => TaskStatus::Unknown,
+                        Ok(Ok(errors)) => (TaskStatus::Success, Some(errors)),
+                        Ok(Err(_)) => (TaskStatus::Failure, None),
+                        Err(_) => (TaskStatus::Unknown, None),
                     }
 
                 }
 
             };
 
-            match sender
-                .send(
-                    TaskMsg::CompleteTask {
-                        library_uuid: library_uuid,
-                        status: status,
-                        end: Local::now().timestamp(),
-                    }
-                    .into(),
-                )
-                .await
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            match async {
+                sender
+                    .send(
+                        TaskMsg::CompleteTask {
+                            resp: tx,
+                            library_uuid: library_uuid,
+                            status: status,
+                            errors,
+                            end: Local::now().timestamp(),
+                        }
+                        .into(),
+                    )
+                    .await?;
+                rx.await??;
+
+                Result::<()>::Ok(())
+            }
+            .await
             {
                 Ok(_) => {}
-                Err(err) => error!("failed to send a message: {err}"),
+                Err(err) => error!("failed to send/receive completion message: {err}"),
             }
         };
 
@@ -278,29 +299,74 @@ impl ESTaskService for TaskRunner {
 
     #[instrument(level=Level::DEBUG)]
     async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()> {
-        todo!()
+        let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
+            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
+        })?;
+
+        let mut running_task = rt_entry.lock().await;
+
+        let running_task = running_task.as_mut().ok_or_else(|| {
+            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
+        })?;
+
+        running_task.cancel.send(()).await.map_err(|err| {
+            error!({library_uuid = library_uuid, task_start = running_task.task.start, task_type = ?running_task.task.task_type}, "failed to send cancellation message to task");
+            anyhow::Error::msg(format!("failed to send cancellation message to task: {err}"))})
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn status(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>> {
         todo!()
     }
 
+    #[instrument(level=Level::DEBUG)]
     async fn complete_task(
         &self,
         library_uuid: LibraryUuid,
         status: TaskStatus,
+        errors: Option<i64>,
         end: i64,
     ) -> Result<()> {
-        let rt_entry = match self.running_tasks.entry(library_uuid) {
+        let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
+            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
+        })?;
+
+        // hold the lock just long enough to take() the running task from the mutex
+        let completed_task = {
+            let mut running_task = rt_entry.lock().await;
+
+            // this should be the only place that tasks leave the running DashMap
+            let completed_task = running_task.take().ok_or_else(|| {
+                anyhow::Error::msg(format!("library {library_uuid} has no running task"))
+            })?;
+
+            Result::<RunningTask>::Ok(completed_task)
+        }?;
+
+        // create the library's entry in the history task map if it doesn't exist
+        //
+        // this should be the only place that entries are put into the history DashMap,
+        // all other calls should error somehow
+        let ring_entry = match self.task_history.entry(library_uuid) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                let v = Arc::new(Mutex::new(None));
+                let v = Arc::new(RwLock::new(AllocRingBuffer::new(64)));
                 entry.insert(v.clone());
                 v
             }
         };
 
-        let mut running_task = rt_entry.lock().await;
+        // grab the lock for the entirety of the archiving action
+        let mut ring = ring_entry.write().await;
+
+        ring.push(Task {
+            task_type: completed_task.task.task_type,
+            uid: completed_task.task.uid,
+            status: status,
+            errors: errors,
+            start: completed_task.task.start,
+            end: Some(end),
+        });
 
         Ok(())
     }
