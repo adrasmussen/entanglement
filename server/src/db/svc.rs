@@ -261,7 +261,6 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                _ => panic!(),
             },
             _ => Err(anyhow::Error::msg("not implemented")),
         }

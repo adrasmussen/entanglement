@@ -20,10 +20,10 @@ use service::{ESMRegistry, EntanglementService};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("entanglement server starting up, processing config file...");
+    info!("entanglement server starting up, processing config file");
 
     // temporary dummy configuration -- this will eventually come from a parser
     let config = read_config(PathBuf::from(
@@ -31,9 +31,7 @@ async fn main() -> anyhow::Result<()> {
     ))
     .await;
 
-    info!("done");
-
-    info!("performing filesystem sanity checks...");
+    info!("performing filesystem sanity checks");
 
     // sanity checks
     checks::create_temp_file(&config.media_srcdir).expect_err("media_srcdir is writeable");
@@ -46,9 +44,7 @@ async fn main() -> anyhow::Result<()> {
     checks::subdir_exists(&config, SLICE_PATH)
         .expect("could not create video slice path in media_srvdir");
 
-    info!("done");
-
-    info!("starting core services...");
+    info!("starting core services");
 
     // start the core services
     let registry = ESMRegistry::new();
@@ -64,8 +60,6 @@ async fn main() -> anyhow::Result<()> {
     fs_svc.start(&registry).await?;
     http_svc.start(&registry).await?;
     task_svc.start(&registry).await?;
-
-    info!("done");
 
     info!("startup complete!");
 

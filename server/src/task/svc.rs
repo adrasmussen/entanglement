@@ -11,7 +11,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::{spawn, JoinHandle},
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument, Level, Instrument, span};
 
 use crate::{
     db::msg::DbMsg,
@@ -103,7 +103,7 @@ pub struct TaskRunner {
 struct RunningTask {
     task: Task,
     cancel: tokio::sync::mpsc::Sender<()>,
-    handle: JoinHandle<()>,
+    _handle: JoinHandle<()>,
 }
 
 #[async_trait]
@@ -172,13 +172,15 @@ impl ESInner for TaskRunner {
 #[async_trait]
 impl ESTaskService for TaskRunner {
 
-    #[instrument(level=Level::DEBUG, skip(self))]
+    #[instrument(level=Level::INFO, skip(self))]
     async fn start_task(
         &self,
         library_uuid: LibraryUuid,
         task_type: TaskType,
         uid: TaskUid,
     ) -> Result<()> {
+        debug!("task pre-startup verification");
+
         // library verification
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
 
@@ -231,6 +233,8 @@ impl ESTaskService for TaskRunner {
             end: None,
         };
 
+        debug!({task = ?task}, "created new task struct");
+
         // to abort the task, we can't simply drop the handle -- we need to explicitly call abort()
         // on either it or the associated abort handle.  thus, we create this channel and package it
         // as part of the tracked state to connect with the twice-separated running task future
@@ -269,7 +273,7 @@ impl ESTaskService for TaskRunner {
         // to either await its completion or cancel, and send a message either way
         let watcher = async move {
             // TODO -- get real spans for this function
-            debug!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "task watcher starting");
+            debug!("task watcher starting");
 
             let task_handle = spawn(task_future);
 
@@ -277,10 +281,10 @@ impl ESTaskService for TaskRunner {
             // associated with the join handle
             let abort_handle = task_handle.abort_handle();
 
-            debug!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "task watcher waiting");
+            debug!("task watcher waiting");
             let (status, errors) = tokio::select! {
                 _ = rx.recv() => {
-                    info!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "aborting task");
+                    info!("aborting task");
                     abort_handle.abort();
                     (TaskStatus::Aborted, None)
                 }
@@ -295,6 +299,8 @@ impl ESTaskService for TaskRunner {
                 }
 
             };
+
+            info!("task complete");
 
             // since the watcher future should not be able to fail, we collect all of the various
             // failure modes and print their errors
@@ -320,9 +326,9 @@ impl ESTaskService for TaskRunner {
             .await
             {
                 Ok(_) => {}
-                Err(err) => error!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "failed to send/receive completion message: {err}"),
+                Err(err) => error!("failed to send/receive completion message: {err}"),
             }
-        };
+        }.instrument(span!(Level::INFO, "task_watcher", start = start));
 
         // strictly speaking, we're not using this handle for anything and dropping it does not
         // abort the future.  however, it's possible we will need it later for shutdown logic
@@ -331,7 +337,7 @@ impl ESTaskService for TaskRunner {
         *running_task = Some(RunningTask {
             task: task,
             cancel: tx,
-            handle: handle,
+            _handle: handle,
         });
 
         Ok(())
@@ -360,7 +366,7 @@ impl ESTaskService for TaskRunner {
         todo!()
     }
 
-    #[instrument(level=Level::DEBUG, skip(self))]
+    #[instrument(level=Level::INFO, skip(self))]
     async fn complete_task(
         &self,
         library_uuid: LibraryUuid,
@@ -382,7 +388,7 @@ impl ESTaskService for TaskRunner {
                 anyhow::Error::msg(format!("library {library_uuid} has no running task"))
             })?;
 
-            info!({start = completed_task.task.start}, "task complete!");
+            debug!({start = completed_task.task.start}, "library task slot freed");
 
             Result::<RunningTask>::Ok(completed_task)
         }?;
@@ -411,6 +417,8 @@ impl ESTaskService for TaskRunner {
             start: completed_task.task.start,
             end: Some(end),
         });
+
+        info!({start = completed_task.task.start}, "task saved to history");
 
         Ok(())
     }
