@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::pin::Pin;
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
@@ -15,7 +16,7 @@ use tracing::{debug, error, info, instrument, Level};
 use crate::{
     db::msg::DbMsg,
     service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
-    task::{msg::TaskMsg, scan::scan_library, ESTaskService},
+    task::{msg::TaskMsg, scan::scan_library, sleep_task, ESTaskService},
 };
 use api::{
     library::LibraryUuid,
@@ -92,7 +93,9 @@ impl EntanglementService for TaskService {
 pub struct TaskRunner {
     config: Arc<ESConfig>,
     registry: ESMRegistry,
-    running_tasks: DashMap<LibraryUuid, Arc<Mutex<Option<RunningTask>>>>,
+    // has an extra layer of abstraction (Option<_>) so that we can hold the lock
+    // until the task successfully starts without blocking the DashMap
+    running_tasks: DashMap<LibraryUuid, Arc<RwLock<Option<RunningTask>>>>,
     task_history: DashMap<LibraryUuid, Arc<RwLock<AllocRingBuffer<Task>>>>,
 }
 
@@ -152,9 +155,24 @@ impl ESInner for TaskRunner {
     }
 }
 
+// task runner
+//
+// there is a highly nontrivial interlock between start_task() and complete_task().
+//
+// specifically, start_task() will put a task into the running_task Option, provided
+// that none exists, holding the lock until that task has been successfully launched
+// into the executor.  it saves the task metadata and cancel channel sender.
+//
+// then complete_task() will remove the task, provided that it exists, and push it
+// to the head of the history ring buffer.  it holds the lock just long enough to
+// call take() on the Option.
+//
+// when inserting into either DashMap, we first check if the key is populated, and
+// create it if not.
 #[async_trait]
 impl ESTaskService for TaskRunner {
-    #[instrument(level=Level::DEBUG)]
+
+    #[instrument(level=Level::DEBUG, skip(self))]
     async fn start_task(
         &self,
         library_uuid: LibraryUuid,
@@ -185,7 +203,7 @@ impl ESTaskService for TaskRunner {
         let rt_entry = match self.running_tasks.entry(library_uuid) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                let v = Arc::new(Mutex::new(None));
+                let v = Arc::new(RwLock::new(None));
                 entry.insert(v.clone());
                 v
             }
@@ -195,24 +213,26 @@ impl ESTaskService for TaskRunner {
         //
         // since this locks independently of the history and we only want one
         // thread attempting to start a task, this is reasonable
-        let mut running_task = rt_entry.lock().await;
+        let mut running_task = rt_entry.write().await;
 
         match *running_task {
             Some(_) => return Err(anyhow::Error::msg("task already running")),
             None => {}
         }
 
+        let start = Local::now().timestamp();
+
         let task = Task {
             task_type: task_type.clone(),
             uid: uid,
             status: TaskStatus::Running,
             errors: None,
-            start: Local::now().timestamp(),
+            start: start,
             end: None,
         };
 
         // to abort the task, we can't simply drop the handle -- we need to explicitly call abort()
-        // on either it or the associated abort handle.  thus, we create this channel and pacakge it
+        // on either it or the associated abort handle.  thus, we create this channel and package it
         // as part of the tracked state to connect with the twice-separated running task future
         //
         // this an mpsc channel instead of oneshot so that we can clone the sender out of the struct
@@ -231,20 +251,36 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        let task_future = match task_type {
+        let task_future: Pin<Box<dyn futures::Future<Output = Result<i64>> + Send>> = match task_type {
             TaskType::ScanLibrary => {
-                scan_library(self.config.clone(), self.registry.clone(), library_uuid)
+                Box::pin(scan_library(self.config.clone(), self.registry.clone(), library_uuid))
+            }
+            TaskType::RunScripts => {
+                Box::pin(sleep_task(library_uuid))
             }
             _ => return Err(anyhow::Error::msg("unsupported task")),
         };
 
+        info!({start = start}, "starting task");
+
+        // watcher thread
+        //
+        // this is a wrapper future around the actual task, which lets us use tokio::select!
+        // to either await its completion or cancel, and send a message either way
         let watcher = async move {
+            // TODO -- get real spans for this function
+            debug!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "task watcher starting");
+
             let task_handle = spawn(task_future);
 
+            // we have to create an abort handle because select! takes ownership of the future
+            // associated with the join handle
             let abort_handle = task_handle.abort_handle();
 
+            debug!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "task watcher waiting");
             let (status, errors) = tokio::select! {
                 _ = rx.recv() => {
+                    info!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "aborting task");
                     abort_handle.abort();
                     (TaskStatus::Aborted, None)
                 }
@@ -260,6 +296,8 @@ impl ESTaskService for TaskRunner {
 
             };
 
+            // since the watcher future should not be able to fail, we collect all of the various
+            // failure modes and print their errors
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             match async {
@@ -282,10 +320,12 @@ impl ESTaskService for TaskRunner {
             .await
             {
                 Ok(_) => {}
-                Err(err) => error!("failed to send/receive completion message: {err}"),
+                Err(err) => error!({library_uuid = library_uuid, task_type = ?task_type.clone(), start = start}, "failed to send/receive completion message: {err}"),
             }
         };
 
+        // strictly speaking, we're not using this handle for anything and dropping it does not
+        // abort the future.  however, it's possible we will need it later for shutdown logic
         let handle = spawn(watcher);
 
         *running_task = Some(RunningTask {
@@ -303,7 +343,8 @@ impl ESTaskService for TaskRunner {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
         })?;
 
-        let mut running_task = rt_entry.lock().await;
+        // the cancel channel requires a mutable borrow, so we need the write() lock
+        let mut running_task = rt_entry.write().await;
 
         let running_task = running_task.as_mut().ok_or_else(|| {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
@@ -319,7 +360,7 @@ impl ESTaskService for TaskRunner {
         todo!()
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument(level=Level::DEBUG, skip(self))]
     async fn complete_task(
         &self,
         library_uuid: LibraryUuid,
@@ -327,18 +368,21 @@ impl ESTaskService for TaskRunner {
         errors: Option<i64>,
         end: i64,
     ) -> Result<()> {
+        // check if the task exists
         let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
         })?;
 
-        // hold the lock just long enough to take() the running task from the mutex
+        // hold the option lock just long enough to take() the running task from the mutex
         let completed_task = {
-            let mut running_task = rt_entry.lock().await;
+            let mut running_task = rt_entry.write().await;
 
             // this should be the only place that tasks leave the running DashMap
             let completed_task = running_task.take().ok_or_else(|| {
                 anyhow::Error::msg(format!("library {library_uuid} has no running task"))
             })?;
+
+            info!({start = completed_task.task.start}, "task complete!");
 
             Result::<RunningTask>::Ok(completed_task)
         }?;
@@ -356,7 +400,7 @@ impl ESTaskService for TaskRunner {
             }
         };
 
-        // grab the lock for the entirety of the archiving action
+        // grab the ring buffer lock for the entirety of the archiving action
         let mut ring = ring_entry.write().await;
 
         ring.push(Task {
