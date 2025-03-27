@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
@@ -11,7 +11,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::{spawn, JoinHandle},
 };
-use tracing::{debug, error, info, instrument, Level, Instrument, span};
+use tracing::{debug, error, info, instrument, span, Instrument, Level};
 
 use crate::{
     db::msg::DbMsg,
@@ -136,8 +136,8 @@ impl ESInner for TaskRunner {
                 TaskMsg::StopTask { resp, library_uuid } => {
                     self.respond(resp, self.stop_task(library_uuid)).await
                 }
-                TaskMsg::Status { resp, library_uuid } => {
-                    self.respond(resp, self.status(library_uuid)).await
+                TaskMsg::ShowTasks { resp, library_uuid } => {
+                    self.respond(resp, self.show_tasks(library_uuid)).await
                 }
                 TaskMsg::CompleteTask {
                     resp,
@@ -171,8 +171,7 @@ impl ESInner for TaskRunner {
 // create it if not.
 #[async_trait]
 impl ESTaskService for TaskRunner {
-
-    #[instrument(level=Level::INFO, skip(self))]
+    #[instrument(skip(self))]
     async fn start_task(
         &self,
         library_uuid: LibraryUuid,
@@ -251,21 +250,23 @@ impl ESTaskService for TaskRunner {
         // "watcher" future which uses the select! macro to await either the future or a cancellation
         // signal carried by the above channel
         //
-        // currently, T = i64, the number of non-fatal errors encountered by the task
+        // currently, T = i64, the number of non-fatal errors encountered by the task.  in the future,
+        // it could be a Box<dyn TaskReport> or similar
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        let task_future: Pin<Box<dyn futures::Future<Output = Result<i64>> + Send>> = match task_type {
-            TaskType::ScanLibrary => {
-                Box::pin(scan_library(self.config.clone(), self.registry.clone(), library_uuid))
-            }
-            TaskType::RunScripts => {
-                Box::pin(sleep_task(library_uuid))
-            }
-            _ => return Err(anyhow::Error::msg("unsupported task")),
-        };
+        let task_future: Pin<Box<dyn futures::Future<Output = Result<i64>> + Send>> =
+            match task_type {
+                TaskType::ScanLibrary => Box::pin(scan_library(
+                    self.config.clone(),
+                    self.registry.clone(),
+                    library_uuid,
+                )),
+                TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
+                _ => return Err(anyhow::Error::msg("unsupported task")),
+            };
 
-        info!({start = start}, "starting task");
+        info!({ start = start }, "starting task");
 
         // watcher thread
         //
@@ -328,7 +329,8 @@ impl ESTaskService for TaskRunner {
                 Ok(_) => {}
                 Err(err) => error!("failed to send/receive completion message: {err}"),
             }
-        }.instrument(span!(Level::INFO, "task_watcher", start = start));
+        }
+        .instrument(span!(Level::INFO, "task_watcher", start = start));
 
         // strictly speaking, we're not using this handle for anything and dropping it does not
         // abort the future.  however, it's possible we will need it later for shutdown logic
@@ -343,7 +345,7 @@ impl ESTaskService for TaskRunner {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument(skip(self))]
     async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()> {
         let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
@@ -356,17 +358,40 @@ impl ESTaskService for TaskRunner {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
         })?;
 
+        info!({ start = running_task.task.start }, "stopping task");
+
         running_task.cancel.send(()).await.map_err(|err| {
-            error!({library_uuid = library_uuid, task_start = running_task.task.start, task_type = ?running_task.task.task_type}, "failed to send cancellation message to task");
+            error!({library_uuid = library_uuid, task_type = ?running_task.task.task_type, start = running_task.task.start}, "failed to send cancellation message to task");
             anyhow::Error::msg(format!("failed to send cancellation message to task: {err}"))})
     }
 
-    #[instrument(level=Level::DEBUG)]
-    async fn status(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>> {
-        todo!()
+    #[instrument(skip(self))]
+    async fn show_tasks(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>> {
+        debug!("finding tasks");
+
+        let mut out = Vec::new();
+
+        match self.running_tasks.get(&library_uuid) {
+            None => {}
+            Some(entry) => match entry.read().await.as_ref() {
+                None => {}
+                Some(rt) => out.push(rt.task.clone()),
+            },
+        };
+
+        match self.task_history.get(&library_uuid) {
+            None => {}
+            Some(entry) => {
+                let ring = entry.read().await;
+
+                out.append(&mut ring.iter().map(|e| e.clone()).collect::<Vec<Task>>())
+            }
+        };
+
+        Ok(out)
     }
 
-    #[instrument(level=Level::INFO, skip(self))]
+    #[instrument(skip(self))]
     async fn complete_task(
         &self,
         library_uuid: LibraryUuid,
@@ -388,7 +413,10 @@ impl ESTaskService for TaskRunner {
                 anyhow::Error::msg(format!("library {library_uuid} has no running task"))
             })?;
 
-            debug!({start = completed_task.task.start}, "library task slot freed");
+            debug!(
+                { start = completed_task.task.start },
+                "library task slot freed"
+            );
 
             Result::<RunningTask>::Ok(completed_task)
         }?;
@@ -418,7 +446,10 @@ impl ESTaskService for TaskRunner {
             end: Some(end),
         });
 
-        info!({start = completed_task.task.start}, "task saved to history");
+        info!(
+            { start = completed_task.task.start },
+            "task saved to history"
+        );
 
         Ok(())
     }

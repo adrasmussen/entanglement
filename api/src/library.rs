@@ -78,36 +78,3 @@ pub struct SearchMediaInLibraryReq {
 pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
 }
-
-// start a scan on a library
-endpoint!(StartLibraryScan);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StartLibraryScanReq {
-    pub library_uuid: LibraryUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StartLibraryScanResp {}
-
-// get status of the library scanner engine
-endpoint!(GetLibraryScan);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetLibraryScanReq {}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetLibraryScanResp {
-    pub jobs: HashMap<LibraryUuid, LibraryScanJob>,
-}
-
-// get status of the library scanner engine
-endpoint!(StopLibraryScan);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StopLibraryScanReq {
-    pub library_uuid: LibraryUuid,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StopLibraryScanResp {}

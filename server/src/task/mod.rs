@@ -22,7 +22,7 @@ pub trait ESTaskService: ESInner {
 
     async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()>;
 
-    async fn status(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>>;
+    async fn show_tasks(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>>;
 
     async fn complete_task(
         &self,
@@ -37,7 +37,7 @@ pub trait ESTaskService: ESInner {
 #[tracing::instrument]
 async fn sleep_task(library_uuid: LibraryUuid) -> Result<i64> {
     tracing::info!("info from task");
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(100)).await;
 
     Ok(-1)
 }

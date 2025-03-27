@@ -27,7 +27,6 @@ use tracing::{debug, error, info, instrument, Level};
 use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
     db::msg::DbMsg,
-    fs::msg::FsMsg,
     http::{
         auth::{proxy_auth, CurrentUser},
         AppError,
@@ -146,7 +145,6 @@ pub struct HttpEndpoint {
     registry: ESMRegistry,
     auth_svc_sender: ESMSender,
     db_svc_sender: ESMSender,
-    fs_svc_sender: ESMSender,
     task_svc_sender: ESMSender,
 }
 
@@ -160,7 +158,6 @@ impl ESInner for HttpEndpoint {
             // compile-time problem and not a runtime problem
             auth_svc_sender: registry.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: registry.get(&ServiceType::Db).unwrap().clone(),
-            fs_svc_sender: registry.get(&ServiceType::Fs).unwrap().clone(),
             task_svc_sender: registry.get(&ServiceType::Task).unwrap().clone(),
         })
     }
@@ -257,9 +254,9 @@ impl HttpEndpoint {
             .route("/GetLibrary", post(get_library))
             .route("/SearchLibraries", post(search_libraries))
             .route("/SearchMediaInLibrary", post(search_media_in_library))
-            .route("/StartLibraryScan", post(start_library_scan)) // TODO -- remove me
             .route("/StartTask", post(start_task))
             .route("/StopTask", post(stop_task))
+            .route("/ShowTasks", post(show_tasks))
             .with_state(state.clone());
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant
@@ -1055,36 +1052,6 @@ async fn search_media_in_library(
     Ok(Json(SearchMediaInLibraryResp { media: result }).into_response())
 }
 
-async fn start_library_scan(
-    State(state): State<Arc<HttpEndpoint>>,
-    Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<StartLibraryScanReq>,
-) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_library(&uid, &message.library_uuid).await? {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    }
-
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    state
-        .fs_svc_sender
-        .send(
-            FsMsg::ScanLibrary {
-                resp: tx,
-                library_uuid: message.library_uuid,
-            }
-            .into(),
-        )
-        .await?;
-
-    rx.await??;
-
-    Ok(Json(StartLibraryScanResp {}).into_response())
-}
-
 async fn start_task(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
@@ -1120,7 +1087,7 @@ async fn start_task(
 async fn stop_task(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Json(message): Json<StopLibraryScanReq>,
+    Json(message): Json<StopTaskReq>,
 ) -> Result<Response, AppError> {
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -1145,4 +1112,34 @@ async fn stop_task(
     rx.await??;
 
     Ok(Json(StopTaskResp {}).into_response())
+}
+
+async fn show_tasks(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<ShowTasksReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    if !state.owns_library(&uid, &message.library_uuid).await? {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .task_svc_sender
+        .send(
+            TaskMsg::ShowTasks {
+                resp: tx,
+                library_uuid: message.library_uuid,
+            }
+            .into(),
+        )
+        .await?;
+
+    let result = rx.await??;
+
+    Ok(Json(ShowTasksResp {tasks: result}).into_response())
 }

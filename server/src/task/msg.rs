@@ -13,7 +13,7 @@ pub enum TaskMsg {
         resp: ESMResp<()>,
         library_uuid: LibraryUuid,
     },
-    Status {
+    ShowTasks {
         resp: ESMResp<Vec<Task>>,
         library_uuid: LibraryUuid,
     },
