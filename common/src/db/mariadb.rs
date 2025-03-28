@@ -5,7 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
-use tracing::{debug, info, instrument, Level};
+use tracing::{debug, info, instrument};
 
 use crate::{config::ESConfig, db::DbBackend};
 use api::{
@@ -32,7 +32,7 @@ impl DbBackend for MariaDBBackend {
         })
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
         debug!({ media_uuid = media_uuid }, "finding media access groups");
 
@@ -75,7 +75,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     // media queries
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
         debug!({ media_path = media.path }, "adding media");
 
@@ -134,7 +134,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
@@ -225,7 +225,7 @@ impl DbBackend for MariaDBBackend {
         )))
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
         debug!({ media_path = path }, "searching for media by path");
 
@@ -249,7 +249,7 @@ impl DbBackend for MariaDBBackend {
         Ok(Some(data))
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()> {
         debug!({ media_uuid = media_uuid }, "updating media details");
 
@@ -311,7 +311,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn search_media(
         &self,
         gid: HashSet<String>,
@@ -378,7 +378,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn similar_media(
         &self,
         gid: HashSet<String>,
@@ -442,7 +442,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     // collection queries
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_collection(&self, collection: Collection) -> anyhow::Result<CollectionUuid> {
         debug!({ collection_name = collection.name }, "adding collection");
 
@@ -490,7 +490,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn get_collection(
         &self,
         collection_uuid: CollectionUuid,
@@ -561,7 +561,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn update_collection(
         &self,
         collection_uuid: CollectionUuid,
@@ -616,7 +616,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_media_to_collection(
         &self,
         media_uuid: MediaUuid,
@@ -667,7 +667,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn rm_media_from_collection(
         &self,
         media_uuid: MediaUuid,
@@ -699,7 +699,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
@@ -730,7 +730,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
@@ -779,7 +779,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     // library queries
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
         // since we require that libraries have unique paths, it might seem like we want
         // to use that as the primary key.  but those strings might be arbitrarily complex,
@@ -825,7 +825,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
         debug!({ library_uuid = library_uuid }, "getting library details");
 
@@ -857,7 +857,7 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn update_library(
         &self,
         library_uuid: LibraryUuid,
@@ -882,7 +882,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
@@ -912,7 +912,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
@@ -959,7 +959,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     // comment queries
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid> {
         debug!({ media_uuid = comment.media_uuid }, "adding comment");
 
@@ -989,7 +989,7 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>> {
         debug!({ comment_uuid = comment_uuid }, "getting comment details");
 
@@ -1020,7 +1020,7 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<()> {
         debug!({ comment_uuid = comment_uuid }, "deleting comment");
 
@@ -1037,7 +1037,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn update_comment(
         &self,
         comment_uuid: CommentUuid,

@@ -53,7 +53,7 @@ impl EntanglementService for TaskService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    #[instrument(skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> Result<()> {
         info!("starting task service");
 

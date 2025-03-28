@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument};
 
 use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
@@ -37,7 +37,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    #[instrument(skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         info!("starting db service");
 

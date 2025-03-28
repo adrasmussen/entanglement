@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use api::THUMBNAIL_PATH;
 
-use crate::service::*;
 use api::{media::MediaUuid, ORIGINAL_PATH};
 use common::config::ESConfig;
 

@@ -5,7 +5,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use regex::Regex;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     auth::{msg::AuthMsg, ESAuthService},
@@ -57,7 +57,7 @@ impl EntanglementService for AuthService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    #[instrument(skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         info!("starting auth service");
 
@@ -300,7 +300,7 @@ impl ESAuthService for AuthCache {
     }
 
     // authz
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
         info!({provider = %provider});
 
@@ -395,7 +395,7 @@ impl ESAuthService for AuthCache {
     }
 
     // authn
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
         info!({provider = %provider});
 

@@ -22,7 +22,7 @@ use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
@@ -87,7 +87,7 @@ impl EntanglementService for HttpService {
         }
     }
 
-    #[instrument(level=Level::DEBUG, skip(self, registry))]
+    #[instrument(skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
         info!("starting http service");
 
@@ -187,7 +187,7 @@ impl HttpEndpoint {
     //
     // specifically axum::serve() doesn't really play nice with TLS, which we'll want
     // to offer as an option eventually
-    #[instrument(level=Level::DEBUG, skip_all)]
+    #[instrument(skip_all)]
     async fn serve_http(
         self: Arc<Self>,
         socket: SocketAddr,
