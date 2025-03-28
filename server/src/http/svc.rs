@@ -1141,5 +1141,5 @@ async fn show_tasks(
 
     let result = rx.await??;
 
-    Ok(Json(ShowTasksResp {tasks: result}).into_response())
+    Ok(Json(ShowTasksResp { tasks: result }).into_response())
 }

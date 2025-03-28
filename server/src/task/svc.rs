@@ -143,11 +143,14 @@ impl ESInner for TaskRunner {
                     resp,
                     library_uuid,
                     status,
-                    errors,
+                    warnings,
                     end,
                 } => {
-                    self.respond(resp, self.complete_task(library_uuid, status, errors, end))
-                        .await
+                    self.respond(
+                        resp,
+                        self.complete_task(library_uuid, status, warnings, end),
+                    )
+                    .await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),
@@ -227,7 +230,7 @@ impl ESTaskService for TaskRunner {
             task_type: task_type.clone(),
             uid: uid,
             status: TaskStatus::Running,
-            errors: None,
+            warnings: None,
             start: start,
             end: None,
         };
@@ -283,7 +286,7 @@ impl ESTaskService for TaskRunner {
             let abort_handle = task_handle.abort_handle();
 
             debug!("task watcher waiting");
-            let (status, errors) = tokio::select! {
+            let (status, warnings) = tokio::select! {
                 _ = rx.recv() => {
                     info!("aborting task");
                     abort_handle.abort();
@@ -292,16 +295,19 @@ impl ESTaskService for TaskRunner {
 
                 res = task_handle => {
                     match res {
-                        Ok(Ok(errors)) => (TaskStatus::Success, Some(errors)),
-                        Ok(Err(_)) => (TaskStatus::Failure, None),
+                        Ok(Ok(warnings)) => {
+                            info!("task succeeded");
+                            (TaskStatus::Success, Some(warnings))},
+                        Ok(Err(err)) => {
+                            error!("task failed: {err}");
+                            (TaskStatus::Failure, None)
+                        },
                         Err(_) => (TaskStatus::Unknown, None),
                     }
 
                 }
 
             };
-
-            info!("task complete");
 
             // since the watcher future should not be able to fail, we collect all of the various
             // failure modes and print their errors
@@ -314,7 +320,7 @@ impl ESTaskService for TaskRunner {
                             resp: tx,
                             library_uuid: library_uuid,
                             status: status,
-                            errors,
+                            warnings,
                             end: Local::now().timestamp(),
                         }
                         .into(),
@@ -396,7 +402,7 @@ impl ESTaskService for TaskRunner {
         &self,
         library_uuid: LibraryUuid,
         status: TaskStatus,
-        errors: Option<i64>,
+        warnings: Option<i64>,
         end: i64,
     ) -> Result<()> {
         // check if the task exists
@@ -441,7 +447,7 @@ impl ESTaskService for TaskRunner {
             task_type: completed_task.task.task_type,
             uid: completed_task.task.uid,
             status: status,
-            errors: errors,
+            warnings: warnings,
             start: completed_task.task.start,
             end: Some(end),
         });

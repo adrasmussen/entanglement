@@ -5,11 +5,12 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::config::ESConfig;
-use api::{search::SearchFilter,
+use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
+    search::SearchFilter,
 };
 
 pub mod mariadb;
@@ -37,7 +38,11 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()>;
 
-    async fn search_media(&self, gid: HashSet<String>, filter: SearchFilter) -> Result<Vec<MediaUuid>>;
+    async fn search_media(
+        &self,
+        gid: HashSet<String>,
+        filter: SearchFilter,
+    ) -> Result<Vec<MediaUuid>>;
 
     async fn similar_media(
         &self,

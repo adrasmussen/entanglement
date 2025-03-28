@@ -15,7 +15,6 @@ pub mod msg;
 pub enum ServiceType {
     Auth,
     Db,
-    Fs,
     Http,
     Task,
 }
@@ -35,7 +34,6 @@ pub type ESMResp<T> = tokio::sync::oneshot::Sender<Result<T>>;
 pub enum ESM {
     Auth(crate::auth::msg::AuthMsg),
     Db(crate::db::msg::DbMsg),
-    Fs(crate::fs::msg::FsMsg),
     _Http(crate::http::msg::HttpMsg),
     _Svc(crate::service::msg::Svc),
     Task(crate::task::msg::TaskMsg),

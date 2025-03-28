@@ -21,7 +21,7 @@ pub enum TaskMsg {
         resp: ESMResp<()>,
         library_uuid: LibraryUuid,
         status: TaskStatus,
-        errors: Option<i64>,
+        warnings: Option<i64>,
         end: i64,
     },
 }

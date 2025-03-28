@@ -1,5 +1,7 @@
 use std::{
+    collections::HashSet,
     fs::{canonicalize, metadata},
+    os::unix::fs::symlink,
     path::PathBuf,
     sync::{
         atomic::{AtomicI64, Ordering},
@@ -7,23 +9,44 @@ use std::{
     },
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+use chrono::Local;
 use tokio::task::JoinSet;
-use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
+use tracing::{debug, error, instrument, span, warn, Instrument, Level};
 use walkdir::WalkDir;
 
 use crate::{
     db::msg::DbMsg,
+    fs::{media_original_path, media_thumbnail_path},
     service::{ESMRegistry, ESMSender, ServiceType},
 };
-use api::library::LibraryUuid;
-use common::config::ESConfig;
+use api::{
+    library::LibraryUuid,
+    media::{Media, MediaMetadata},
+};
+use common::{
+    config::ESConfig,
+    media::{
+        image::{create_image_thumbnail, process_image},
+        MediaData,
+    },
+};
 
 #[derive(Clone, Debug)]
 struct ScanContext {
+    config: Arc<ESConfig>,
+    library_uuid: LibraryUuid,
     db_svc_sender: ESMSender,
 }
 
+// library scanner task
+//
+// this task processes all of the media in a particular library concurrently and in parallel.  it
+// walks the directory tree, extracting metadata and adding new media to the database, then adding
+// symlinks so that transfer services can access the files.
+//
+// in its current implementation, the only critical failures (that return Err) are in the setup,
+// or with the database connection -- any per-file problems are reported back as warnings.
 #[instrument(skip(config, registry))]
 pub async fn scan_library(
     config: Arc<ESConfig>,
@@ -51,9 +74,13 @@ pub async fn scan_library(
         .ok_or_else(|| anyhow::Error::msg("library does not exist"))?;
 
     // create context construct to pass down into threads
-    let error_count = Arc::new(AtomicI64::new(0));
+    let warnings = Arc::new(AtomicI64::new(0));
 
-    let context = Arc::new(ScanContext { db_svc_sender });
+    let context = Arc::new(ScanContext {
+        config: config.clone(),
+        library_uuid: library_uuid,
+        db_svc_sender: db_svc_sender,
+    });
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
@@ -64,14 +91,24 @@ pub async fn scan_library(
         .contents_first(true)
         .into_iter()
     {
+        // check this first so that a database channel closure doesn't generate a ton of logs
+        if context.db_svc_sender.is_closed() {
+            return Err(anyhow::Error::msg("database esm channel dropped"));
+        };
+
+        // we allow this to be configurable so that we don't swamp the media server when registering
+        // a large collection of media
         while tasks.len() > 8 {
             tasks.join_next().await;
         }
 
+        // under most normal circumstances/well-behaved filesystems, none of these operations should
+        // fail, but we need to catch them regardless
         let entry = match entry {
             Ok(entry) => entry,
             Err(ref err) => {
                 warn!({entry = ?entry}, "failed to parse DirEntry: {err}");
+                warnings.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         };
@@ -80,6 +117,7 @@ pub async fn scan_library(
             Ok(path) => path,
             Err(err) => {
                 warn!({path = ?entry.path()}, "failed to canonicalize path: {err}");
+                warnings.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         };
@@ -88,34 +126,45 @@ pub async fn scan_library(
             Ok(meta) => meta,
             Err(err) => {
                 warn!({path = ?path}, "failed to parse metadata: {err}");
+                warnings.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         };
 
+        // clone the global state needed by register_media and its error handler
         let context = context.clone();
-        let error_count = error_count.clone();
+        let warnings = warnings.clone();
 
+        // process the media and register it with the database
+        //
+        // to allow for easy error propagation, we let register_media() return Result<()> and then
+        // turn that error into a warning (since it won't actually stop the rest of the processing)
+        //
+        // importantly, those warnings should be attached to the span associated with path, so we
+        // set up the span outside instead of using #[instrument]
         if meta.is_file() {
             tasks.spawn({
-                // TODO -- fight the borrow checker to get path into the span data
+                let span = span!(Level::INFO, "register_media", path = ?path);
                 async move {
-                match register_media(context, path).await {
-                    Ok(()) => {}
-                    Err(err) => {
-                        warn!("scan error: {err}");
-                        error_count.fetch_add(1, Ordering::Relaxed);
+                    match register_media(context, path).await {
+                        Ok(()) => {}
+                        Err(err) => {
+                            warn!("scan error: {err}");
+                            warnings.fetch_add(1, Ordering::Relaxed);
+                        }
                     }
                 }
-            }.instrument(span!(Level::INFO, "register_media"))});
+                .instrument(span)
+            });
         };
     }
 
     tasks.join_all().await;
 
-    let error_count = match Arc::into_inner(error_count) {
+    let error_count = match Arc::into_inner(warnings) {
         Some(v) => v.into_inner(),
         None => {
-            error!("internal error: unpacking error_count Arc returned None");
+            error!("internal error: unpacking warning Arc returned None");
             -1
         }
     };
@@ -124,13 +173,88 @@ pub async fn scan_library(
 }
 
 // maybe this can return a uuid so that we can link in the fs_walker
-#[instrument(skip(context))]
 async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> Result<()> {
     debug!("started processing media");
 
-    std::fs::File::open("/does/not/exist").context("i'm a teapot")?;
+    // first, check if the media already exists in the database
+    let pathstr = path
+        .to_str()
+        .ok_or_else(|| anyhow::Error::msg("failed to convert path to str"))?
+        .to_owned();
 
-    // rename to warning count
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    todo!()
+    context
+        .db_svc_sender
+        .send(
+            DbMsg::GetMediaUuidByPath {
+                resp: tx,
+                path: pathstr.clone(),
+            }
+            .into(),
+        )
+        .await?;
+
+    if rx.await??.is_some() {
+        return Ok(());
+    }
+
+    // match the metadata collector via file extension
+    let ext = path
+        .extension()
+        .map(|f| f.to_str())
+        .flatten()
+        .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
+
+    let media_data: MediaData = match ext {
+        "jpg" | "png" | "tiff" => process_image(&path).await?,
+        _ => return Err(anyhow::Error::msg("no metadata collector for extension")),
+    };
+
+    // once we have the metadata, we assemble the Media struct and send it to the database
+    let media = Media {
+        library_uuid: context.library_uuid,
+        path: pathstr.clone(),
+        hash: media_data.hash,
+        mtime: Local::now().timestamp(),
+        hidden: false,
+        date: media_data.date,
+        note: "".to_owned(),
+        tags: HashSet::new(),
+        metadata: media_data.metadata.clone(),
+    };
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    context
+        .db_svc_sender
+        .send(
+            DbMsg::AddMedia {
+                resp: tx,
+                media: media,
+            }
+            .into(),
+        )
+        .await?;
+
+    let media_uuid = rx.await??;
+
+    // once the media is successfully registered, we create the symlink and thumbnails
+    //
+    // cleaner tasks will also re-create these if something goes wrong
+    symlink(
+        path.clone(),
+        media_original_path(context.config.clone(), media_uuid),
+    )?;
+
+    match media_data.metadata {
+        MediaMetadata::Image => create_image_thumbnail(
+            path.clone(),
+            media_thumbnail_path(context.config.clone(), media_uuid),
+        )?,
+        _ => return Err(anyhow::Error::msg("no thumbnail method found")),
+    }
+
+    debug!("finished processing media");
+    Ok(())
 }
