@@ -4,7 +4,9 @@ use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
 use crate::components::modal::{ModalSize, ModernModal, MODAL_STACK};
-use api::{auth::*, collection::*, media::MediaUuid, unfold_set, FOLDING_SEPARATOR};
+use api::{
+    auth::*, collection::*, media::MediaUuid, search::SearchFilter, unfold_set, FOLDING_SEPARATOR,
+};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CreateCollectionModalProps {
@@ -560,9 +562,15 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
 
     // Fetch collections based on search term
     let collections_future = use_resource(move || async move {
-        let filter = collection_search_signal();
+        let filter = collection_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
 
-        search_collections(&SearchCollectionsReq { filter }).await
+        search_collections(&SearchCollectionsReq {
+            filter: SearchFilter::SubstringAny { filter },
+        })
+        .await
     });
 
     // Handle submission

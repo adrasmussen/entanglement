@@ -251,13 +251,13 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     resp,
                     gid,
                     library_uuid,
-                    filter,
                     hidden,
+                    filter,
                 } => {
                     self.respond(
                         resp,
                         self.backend
-                            .search_media_in_library(gid, library_uuid, filter, hidden),
+                            .search_media_in_library(gid, library_uuid, hidden, filter),
                     )
                     .await
                 }

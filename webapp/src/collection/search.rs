@@ -10,7 +10,7 @@ use crate::{
         search_bar::SearchBar,
     },
 };
-use api::collection::*;
+use api::{collection::*, search::SearchFilter};
 
 #[component]
 pub fn CollectionSearch() -> Element {
@@ -24,8 +24,15 @@ pub fn CollectionSearch() -> Element {
     let collection_future = use_resource(move || async move {
         // Read the update signal to trigger a refresh when needed
         update_signal.read();
-        let filter = collection_search_signal();
-        search_collections(&SearchCollectionsReq { filter }).await
+        let filter = collection_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
+
+        search_collections(&SearchCollectionsReq {
+            filter: SearchFilter::SubstringAny { filter },
+        })
+        .await
     });
 
     // Create action button for search bar - positioned on the right

@@ -92,7 +92,7 @@ pub enum DbMsg {
     SearchCollections {
         resp: ESMResp<Vec<CollectionUuid>>,
         gid: HashSet<String>,
-        filter: String,
+        filter: SearchFilter,
     },
     SearchMediaInCollection {
         resp: ESMResp<Vec<MediaUuid>>,
@@ -124,8 +124,8 @@ pub enum DbMsg {
         resp: ESMResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
-        filter: SearchFilter,
         hidden: bool,
+        filter: SearchFilter,
     },
 }
 

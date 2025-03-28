@@ -1040,8 +1040,8 @@ async fn search_media_in_library(
                 resp: tx,
                 gid: gid,
                 library_uuid: message.library_uuid,
-                filter: message.filter,
                 hidden: message.hidden,
+                filter: message.filter,
             }
             .into(),
         )

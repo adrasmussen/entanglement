@@ -84,16 +84,17 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let media_future = use_resource(move || async move {
         update_signal();
         let library_uuid = library_uuid();
+        let hidden = show_hidden();
         let filter = media_search_signal()
             .split_whitespace()
             .map(|s| s.to_owned())
             .collect();
-        let hidden = show_hidden();
+
 
         search_media_in_library(&SearchMediaInLibraryReq {
             library_uuid,
-            filter: SearchFilter::SubstringAny { filter },
             hidden,
+            filter: SearchFilter::SubstringAny { filter },
         })
         .await
     });
@@ -186,6 +187,9 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             span { "Group: {library.gid}" }
                             span { "Last scanned: {formatted_time}" }
                             span { "File count: {library.count}" }
+                        }
+                        div {
+                            span { "task info here?" }
                         }
                     }
                     // Action buttons

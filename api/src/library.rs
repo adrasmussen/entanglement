@@ -67,8 +67,8 @@ endpoint!(SearchMediaInLibrary);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchMediaInLibraryReq {
     pub library_uuid: LibraryUuid,
-    pub filter: SearchFilter,
     pub hidden: bool,
+    pub filter: SearchFilter,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

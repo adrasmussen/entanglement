@@ -88,7 +88,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: SearchFilter,
     ) -> Result<Vec<CollectionUuid>>;
 
     async fn search_media_in_collection(
@@ -115,7 +115,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         uuid: LibraryUuid,
-        filter: SearchFilter,
         hidden: bool,
+        filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>>;
 }

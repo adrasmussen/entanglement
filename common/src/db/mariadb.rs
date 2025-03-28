@@ -703,19 +703,27 @@ impl DbBackend for MariaDBBackend {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: SearchFilter,
     ) -> anyhow::Result<Vec<CollectionUuid>> {
+        let (sql, filter) =
+            filter.format_mariadb("collections.name, collections.note, collections.tags");
+
         // for a given uid and filter, find all collections owned by groups that contain that uid
-        let result = r"
+        let mut query = r"
             SELECT
                 collection_uuid
             FROM
                 collections
             WHERE
-                INSTR(:gid, gid) > 0 AND MATCH(collections.name, collections.note, collections.tags) AGAINST(:filter)"
+                INSTR(:gid, gid) > 0"
+            .to_owned();
+
+        query.push_str(&sql);
+
+        let result = query
             .with(params! {
                 "gid" => fold_set(gid)?,
-                "filter" => format!("%{}%", filter),
+                "filter" => filter,
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -769,7 +777,7 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "collection_uuid" => collection_uuid,
-                "filter" => format!("%{}%", filter),
+                "filter" => filter,
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -923,8 +931,8 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
-        filter: SearchFilter,
         hidden: bool,
+        filter: SearchFilter,
     ) -> anyhow::Result<Vec<MediaUuid>> {
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
@@ -956,7 +964,7 @@ impl DbBackend for MariaDBBackend {
                 "gid" => fold_set(gid)?,
                 "library_uuid" => library_uuid,
                 "hidden" => hidden,
-                "filter" => format!("%{}%", filter),
+                "filter" => filter,
             })
             .run(self.pool.get_conn().await?)
             .await?
