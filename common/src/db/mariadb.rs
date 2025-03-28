@@ -735,11 +735,13 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: String,
+        filter: SearchFilter,
     ) -> anyhow::Result<Vec<MediaUuid>> {
+        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+
         // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
         // provided that the collection is owned by a group containing the uid
-        let result = r"
+        let mut query = r"
             SELECT
                 media.media_uuid
             FROM
@@ -759,16 +761,20 @@ impl DbBackend for MariaDBBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
-        .with(params! {
-            "gid" => fold_set(gid)?,
-            "collection_uuid" => collection_uuid,
-            "filter" => format!("%{}%", filter),
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
+                media.hidden = FALSE".to_owned();
+
+        query.push_str(&sql);
+
+        let result = query
+            .with(params! {
+                "gid" => fold_set(gid)?,
+                "collection_uuid" => collection_uuid,
+                "filter" => format!("%{}%", filter),
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
         let data = result
             .into_iter()
@@ -917,14 +923,16 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
-        filter: String,
+        filter: SearchFilter,
         hidden: bool,
     ) -> anyhow::Result<Vec<MediaUuid>> {
+        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+
         // for a given uid, filter, hidden state and library_uuid, find all media in that collection
         // provided that the library is owned by a group containing the uid
         //
         // note that this is the only search query where media with "hidden = true" can be found
-        let result = r"
+        let mut query = r"
             SELECT
                 media.media_uuid
             FROM
@@ -938,7 +946,12 @@ impl DbBackend for MariaDBBackend {
                 ) AS t1
                 INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                media.hidden = :hidden AND MATCH(media.path, media.date, media.note, media.tags) AGAINST(:filter)"
+                media.hidden = :hidden"
+            .to_owned();
+
+        query.push_str(&sql);
+
+        let result = query
             .with(params! {
                 "gid" => fold_set(gid)?,
                 "library_uuid" => library_uuid,

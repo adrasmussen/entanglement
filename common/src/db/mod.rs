@@ -95,7 +95,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: String,
+        filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>>;
 
     // library functions
@@ -115,7 +115,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         uuid: LibraryUuid,
-        filter: String,
+        filter: SearchFilter,
         hidden: bool,
     ) -> Result<Vec<MediaUuid>>;
 }

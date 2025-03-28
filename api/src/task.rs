@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::endpoint;
-use crate::library::LibraryUuid;
+use crate::{endpoint, library::LibraryUuid};
 
 // structs and types
 pub type TaskUuid = i64;

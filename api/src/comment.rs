@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::endpoint;
-use crate::media::MediaUuid;
+use crate::{endpoint, media::MediaUuid};
 
 // structs and types
 

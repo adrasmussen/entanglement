@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::endpoint;
-use crate::media::MediaUuid;
+use crate::{endpoint, media::MediaUuid, search::SearchFilter};
 
 // structs and types
 
@@ -125,7 +124,7 @@ endpoint!(SearchMediaInCollection);
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SearchMediaInCollectionReq {
     pub collection_uuid: CollectionUuid,
-    pub filter: String,
+    pub filter: SearchFilter,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

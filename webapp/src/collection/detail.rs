@@ -11,7 +11,7 @@ use crate::{
     },
     Route,
 };
-use api::{collection::*, fold_set};
+use api::{collection::*, fold_set, search::SearchFilter};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
@@ -50,7 +50,7 @@ fn CollectionError(props: CollectionErrorProps) -> Element {
     rsx! {
         div { class: "container error-state",
             h1 { "Error Loading Collection" }
-            p { "There was an error loading the media: {props.message}" }
+            p { "There was an error loading the collection: {props.message}" }
             Link { to: Route::CollectionSearch {}, class: "btn btn-primary", "Return to Collections" }
         }
     }
@@ -85,11 +85,14 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let media_future = use_resource(move || async move {
         update_signal();
         let collection_uuid = collection_uuid();
-        let filter = media_search_signal();
+        let filter = media_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
 
         search_media_in_collection(&SearchMediaInCollectionReq {
             collection_uuid,
-            filter,
+            filter: SearchFilter::SubstringAny { filter },
         })
         .await
     });
@@ -100,7 +103,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let collection_data = &*collection_future.read();
     let collection_data = match collection_data.clone().transpose().show(|error| {
         rsx! {
-            CollectionError { message: format!("There was an error loading the collection: {error}") }
+            CollectionError { message: format!("There was an error fetching the collection metadata: {error}") }
         }
     })? {
         Some(v) => v,

@@ -9,7 +9,7 @@ use crate::{
     library::MEDIA_SEARCH_KEY,
     Route,
 };
-use api::library::*;
+use api::{library::*, search::SearchFilter};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryDetailProps {
@@ -84,12 +84,15 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let media_future = use_resource(move || async move {
         update_signal();
         let library_uuid = library_uuid();
-        let filter = media_search_signal();
+        let filter = media_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
         let hidden = show_hidden();
 
         search_media_in_library(&SearchMediaInLibraryReq {
             library_uuid,
-            filter,
+            filter: SearchFilter::SubstringAny { filter },
             hidden,
         })
         .await
@@ -101,7 +104,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let library_data = &*library_future.read();
     let library_data = match library_data.clone().transpose().show(|error| {
         rsx! {
-            LibraryError { message: format!("There was an error loading the library: {error}") }
+            LibraryError { message: format!("There was an error fetching the library metadata: {error}") }
         }
     })? {
         Some(v) => v,
@@ -203,7 +206,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                 storage_key: MEDIA_SEARCH_KEY,
                 placeholder: "Search media in this library...",
                 status: format!(
-                    "Found {} items in this library{}",
+                    "Found {} items{}",
                     media.len(),
                     if show_hidden() { " (including hidden)" } else { "" },
                 ),
