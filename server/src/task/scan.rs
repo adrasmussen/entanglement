@@ -21,7 +21,7 @@ use crate::{
     service::{ESMRegistry, ESMSender, ServiceType},
 };
 use api::{
-    library::LibraryUuid,
+    library::{LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata},
 };
 use common::{
@@ -74,6 +74,7 @@ pub async fn scan_library(
         .ok_or_else(|| anyhow::Error::msg("library does not exist"))?;
 
     // create context construct to pass down into threads
+    let file_count = Arc::new(AtomicI64::new(0));
     let warnings = Arc::new(AtomicI64::new(0));
 
     let context = Arc::new(ScanContext {
@@ -132,8 +133,9 @@ pub async fn scan_library(
         };
 
         // clone the global state needed by register_media and its error handler
-        let context = context.clone();
+        let file_count = file_count.clone();
         let warnings = warnings.clone();
+        let context = context.clone();
 
         // process the media and register it with the database
         //
@@ -147,7 +149,9 @@ pub async fn scan_library(
                 let span = span!(Level::INFO, "register_media", path = ?path);
                 async move {
                     match register_media(context, path).await {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            file_count.fetch_add(1, Ordering::Relaxed);
+                        }
                         Err(err) => {
                             warn!("scan error: {err}");
                             warnings.fetch_add(1, Ordering::Relaxed);
@@ -161,7 +165,15 @@ pub async fn scan_library(
 
     tasks.join_all().await;
 
-    let error_count = match Arc::into_inner(warnings) {
+    let file_count = match Arc::into_inner(file_count) {
+        Some(v) => v.into_inner(),
+        None => {
+            error!("internal error: unpacking file_count Arc returned None");
+            -1
+        }
+    };
+
+    let warnings = match Arc::into_inner(warnings) {
         Some(v) => v.into_inner(),
         None => {
             error!("internal error: unpacking warning Arc returned None");
@@ -169,7 +181,26 @@ pub async fn scan_library(
         }
     };
 
-    Ok(error_count)
+    // send the updated count to the library
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    context
+        .db_svc_sender
+        .send(
+            DbMsg::UpdateLibrary {
+                resp: tx,
+                library_uuid: library_uuid,
+                update: LibraryUpdate {
+                    count: Some(file_count),
+                },
+            }
+            .into(),
+        )
+        .await?;
+
+    rx.await??;
+
+    Ok(warnings)
 }
 
 // maybe this can return a uuid so that we can link in the fs_walker

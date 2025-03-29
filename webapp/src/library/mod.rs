@@ -6,6 +6,7 @@ use dioxus_router::prelude::*;
 use crate::Route;
 
 mod table;
+mod taskbar;
 
 mod detail;
 pub use detail::LibraryDetail;

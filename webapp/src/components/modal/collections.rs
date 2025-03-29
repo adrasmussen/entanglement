@@ -153,6 +153,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                             class: "form-input",
                             r#type: "text",
                             value: "{collection_group}",
+                            // TODO -- have this delay or have a "show members" button
                             oninput: move |evt| collection_group.set(evt.value().clone()),
                             placeholder: "users",
                             style: "flex: 1;",
@@ -354,6 +355,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
             update: CollectionUpdate {
                 name: Some(collection_name()),
                 note: Some(collection_note()),
+                // TODO -- add tag-editing field
                 tags: None,
             },
         })

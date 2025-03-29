@@ -367,7 +367,7 @@ impl ESTaskService for TaskRunner {
         info!({ start = running_task.task.start }, "stopping task");
 
         running_task.cancel.send(()).await.map_err(|err| {
-            error!({library_uuid = library_uuid, task_type = ?running_task.task.task_type, start = running_task.task.start}, "failed to send cancellation message to task");
+            error!({library_uuid = library_uuid, task_type = %running_task.task.task_type, start = running_task.task.start}, "failed to send cancellation message to task");
             anyhow::Error::msg(format!("failed to send cancellation message to task: {err}"))})
     }
 
@@ -390,7 +390,10 @@ impl ESTaskService for TaskRunner {
             Some(entry) => {
                 let ring = entry.read().await;
 
-                out.append(&mut ring.iter().map(|e| e.clone()).collect::<Vec<Task>>())
+                let mut vec = ring.to_vec();
+                vec.reverse();
+                out.append(&mut vec);
+                //out.append(&mut ring.iter().map(|e| e.clone()).collect::<Vec<Task>>())
             }
         };
 

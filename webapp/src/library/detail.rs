@@ -1,12 +1,10 @@
-// webapp/src/library/detail.rs
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
     common::{local_time, storage::*},
     components::{modal::ModalBox, search_bar::SearchBar},
-    library::MEDIA_SEARCH_KEY,
+    library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
 };
 use api::{library::*, search::SearchFilter};
@@ -49,9 +47,7 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
         div { class: "container error-state",
             h1 { "Error Loading Library" }
             p { "There was an error loading the library: {props.message}" }
-            Link { to: Route::LibrarySearch {}, class: "btn btn-primary",
-                "Return to Libraries"
-            }
+            Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
         }
     }
 }
@@ -155,9 +151,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     rsx! {
         div { class: "container",
             // breadcrumb navigation
-            div {
-                class: "breadcrumb",
-                style: "margin-bottom: var(--space-4);",
+            div { class: "breadcrumb", style: "margin-bottom: var(--space-4);",
                 Link { to: Route::LibrarySearch {}, "Libraries" }
                 span { " / " }
                 span { "{library.path}" }
@@ -188,19 +182,16 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             span { "Last scanned: {formatted_time}" }
                             span { "File count: {library.count}" }
                         }
-                        div {
-                            span { "task info here?" }
-                        }
+                        TaskBar { library_uuid }
                     }
                     // Action buttons
                     div { style: "display: flex; gap: var(--space-2);",
                         button {
                             class: "btn btn-secondary",
                             onclick: move |_| {
-                                // Placeholder for scan action
                                 tracing::info!("Start scan for library {library_uuid}");
                             },
-                            "Scan Library"
+                            "Start Task"
                         }
                     }
                 }
@@ -272,10 +263,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                         margin-top: var(--space-4);
                     ",
                     for media_uuid in media.iter() {
-                        crate::components::media_card::MediaCard {
-                            key: "{media_uuid}",
-                            media_uuid: *media_uuid,
-                        }
+                        crate::components::media_card::MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
                     }
                 }
             }

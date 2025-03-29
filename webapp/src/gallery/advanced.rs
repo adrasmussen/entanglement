@@ -3,8 +3,8 @@ use dioxus::prelude::*;
 #[derive(Clone, PartialEq)]
 enum TabTarget {
     Search,
-    ShowCollection,
-    BulkSelect,
+    BulkTagEdit,
+    BulkCollectionEdit,
 }
 
 #[derive(Clone, PartialEq, Props)]
@@ -26,10 +26,10 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
                 TabTarget::Search => {
                     rsx!{"to do"}
                 }
-                TabTarget::ShowCollection => {
+                TabTarget::BulkTagEdit => {
                     rsx!{"to do"}
                 }
-                TabTarget::BulkSelect => {
+                TabTarget::BulkCollectionEdit => {
                     rsx!{"to do"}
                 }
             }
@@ -105,8 +105,8 @@ fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
                 margin-bottom: var(--space-4);
             ",
             AdvancedTab {tab_signal: tab_signal, target: TabTarget::Search, text: "Search Options"}
-            AdvancedTab {tab_signal: tab_signal, target: TabTarget::ShowCollection, text: "Show Collections"}
-            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkSelect, text: "Bulk Select"}
+            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkTagEdit, text: "Show Collections"}
+            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkCollectionEdit, text: "Bulk Select"}
         }
 
         AdvancedContent {tab_signal, media_search_signal}

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{endpoint, library::LibraryUuid};
@@ -73,4 +75,26 @@ pub struct ShowTasksReq {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ShowTasksResp {
     pub tasks: Vec<Task>,
+}
+
+// display implmentations
+impl Display for TaskType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl Display for TaskUid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::User { uid } => write!(f, "{uid}"),
+            Self::System => write!(f, "system"),
+        }
+    }
 }
