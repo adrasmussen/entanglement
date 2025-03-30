@@ -136,44 +136,19 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                 span { "Media Details" }
             }
 
-            // New side-by-side layout with independent scrolling
-            div {
-                class: "media-detail-page",
-                style: "
-                    display: flex;
-                    gap: var(--space-6);
-                    position: relative;
-                    height: calc(100vh - 160px);
-                ",
+            // Side-by-side layout with independent scrolling
+            div { class: "media-detail-page",
 
                 // Left column - Media display (fixed position)
-                div {
-                    class: "media-detail-main",
-                    style: "
-                        flex: 0 0 50%;
-                        max-width: 50%;
-                        position: sticky;
-                        top: var(--header-height);
-                        height: fit-content;
-                        max-height: calc(100vh - 140px);
-                        overflow: hidden;
-                    ",
+                div { class: "media-detail-main",
 
-                    // Image display
+                    // Main media display
                     div { class: "media-detail-view",
                         match media.metadata {
                             MediaMetadata::Image => rsx! {
                                 img {
-                                    src: full_link(media_uuid()),
-                                    alt: media.note.clone(),
                                     class: "media-detail-image",
-                                    style: "
-                                        width: 100%;
-                                        border-radius: var(--radius-lg);
-                                        cursor: pointer;
-                                        max-height: calc(100vh - 280px);
-                                        object-fit: contain;
-                                    ",
+                                    src: full_link(media_uuid()),
                                     onclick: move |_| {
                                         MODAL_STACK.with_mut(|v| v.push(Modal::EnhancedImageView(media_uuid())));
                                     },
@@ -181,14 +156,9 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                             },
                             MediaMetadata::Video => rsx! {
                                 video {
-                                    controls: true,
-                                    src: full_link(media_uuid()),
                                     class: "media-detail-video",
-                                    style: "
-                                        width: 100%;
-                                        border-radius: var(--radius-lg);
-                                        max-height: calc(100vh - 280px);
-                                    ",
+                                    src: full_link(media_uuid()),
+                                    controls: true,
                                 }
                             },
                             _ => rsx! {
@@ -203,15 +173,6 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                 // Right column - All metadata, collections, and comments (scrollable)
                 div {
                     class: "media-detail-sidebar",
-                    style: "
-                        flex: 1;
-                        display: flex;
-                        flex-direction: column;
-                        gap: var(--space-6);
-                        overflow-y: auto;
-                        max-height: calc(100vh - 140px);
-                        padding-right: var(--space-2);
-                    ",
 
                     // Media metadata form
                     div { class: "detail-section",
@@ -380,17 +341,23 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         }
                     }
 
-                    // Collections section - using our new component
+                    // Collections section
+                    //
+                    // currently, all relevant state changes happen through modals
+                    // which have the update_signal already
                     CollectionTable { collection_uuids, media_uuid }
 
-                    // Use our new comments component
+                    // Comments section
+                    //
+                    // while some comment actions are in modals, creating comments
+                    // requires its own update_signal hook
                     CommentList {
                         comment_uuids,
                         media_uuid,
                         update_signal,
                     }
 
-                    // Add some padding at the bottom to ensure good scrolling
+                    // padding at the bottom to ensure good scrolling
                     div { style: "height: var(--space-4);" }
                 }
             }

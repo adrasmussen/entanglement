@@ -169,6 +169,25 @@ pub const BASE_COMPONENTS: &str = r#"
 }
 
 /* Standard image display in detail view */
+
+.media-detail-page {
+  display: flex;
+  gap: var(--space-6);
+  position: relative;
+  height: calc(100vh - 160px);
+}
+
+.media-detail-main {
+  flex: 0 0 50%;
+  max-width: 50%;
+  position: sticky;
+  top: var(--header-height);
+  height: fit-content;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
 .media-detail-view {
   position: relative;
   display: flex;
@@ -179,15 +198,33 @@ pub const BASE_COMPONENTS: &str = r#"
 
 .media-detail-image {
   max-width: 100%;
-  max-height: 80vh; /* Limit height to 80% of viewport height */
   object-fit: contain; /* Maintain aspect ratio */
   border-radius: var(--radius-lg);
-  cursor: zoom-in;
   transition: transform var(--transition-normal) var(--easing-standard);
+  width: 100%;
+  cursor: pointer;
+  max-height: calc(100vh - 280px);
+
 }
 
 .media-detail-image:hover {
   transform: scale(1.02);
+}
+
+.media-detail-video {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  max-height: calc(100vh - 280px);
+}
+
+.media-detail-sidebar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  overflow-y: auto;
+  max-height: calc(100vh - 140px);
+  padding-right: var(--space-2);
 }
 
 .image-controls {

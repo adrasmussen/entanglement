@@ -11,7 +11,7 @@ use crate::{
     },
     Route,
 };
-use api::{collection::*, fold_set, search::SearchFilter, FOLDING_SEPARATOR};
+use api::{collection::*, fold_set, search::SearchFilter};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
