@@ -11,7 +11,7 @@ use crate::{
     },
     Route,
 };
-use api::{collection::*, fold_set, search::SearchFilter};
+use api::{collection::*, fold_set, search::SearchFilter, FOLDING_SEPARATOR};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
@@ -133,7 +133,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
     let formatted_time = local_time(collection.mtime);
     let formatted_tags =
-        fold_set(collection.tags.clone()).unwrap_or_else(|_| "error parsing tags".to_string());
+        fold_set(collection.tags.clone()).unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
     rsx! {
         div { class: "container",
@@ -190,7 +190,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                     color: var(--text-secondary);
                                     max-width: 700px;
                                 ",
-                                "{formatted_tags}"
+                                "Tags: {formatted_tags}"
                             }
                         }
                     }
