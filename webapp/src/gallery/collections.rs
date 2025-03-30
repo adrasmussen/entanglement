@@ -28,7 +28,10 @@ pub fn CollectionTable(props: CollectionTableProps) -> Element {
                     }
                 }
             },
-            CollectionTableInner { collection_uuids: props.collection_uuids, media_uuid: props.media_uuid }
+            CollectionTableInner {
+                collection_uuids: props.collection_uuids,
+                media_uuid: props.media_uuid,
+            }
         }
     }
 }
@@ -134,7 +137,9 @@ fn CollectionTableInner(props: CollectionTableInnerProps) -> Element {
                                                         class: "btn btn-sm btn-danger",
                                                         onclick: move |_| {
                                                             MODAL_STACK
-                                                                .with_mut(|v| { v.push(Modal::RmMediaFromCollection(media_uuid, collection_id)) });
+                                                                .with_mut(|v| {
+                                                                    v.push(Modal::RmMediaFromCollection(media_uuid, collection_id))
+                                                                });
                                                         },
                                                         "Remove"
                                                     }

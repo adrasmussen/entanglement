@@ -33,7 +33,10 @@ pub fn TaskBar(props: TaskBarProps) -> Element {
                         }
                     }
                 },
-                TaskBarInner { update_signal: props.update_signal, library_uuid: props.library_uuid }
+                TaskBarInner {
+                    update_signal: props.update_signal,
+                    library_uuid: props.library_uuid,
+                }
             }
         }
     }
@@ -92,20 +95,22 @@ fn TaskBarInner(props: TaskBarInnerProps) -> Element {
                         span { "Current task:" }
                         span { "{v.task_type} running, started by {v.uid} at {start}" }
                         div { style: "display: flex; gap: var(--space-2);",
-                        button {
-                            class: "btn btn-danger",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::StopTask(library_uuid())));
-                            },
-                            "Stop Task"
+                            button {
+                                class: "btn btn-danger",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.push(Modal::StopTask(library_uuid())));
+                                },
+                                "Stop Task"
+                            }
                         }
-                    }
                     }
                 }
                 _ => {
                     rsx! {
                         span { "Current task:" }
-                        span { "{v.task_type} returned {v.status}, started by {v.uid} at {start} ended at {end} with {warnings} warnings" }
+                        span {
+                            "{v.task_type} returned {v.status}, started by {v.uid} at {start} ended at {end} with {warnings} warnings"
+                        }
                     }
                 }
             }

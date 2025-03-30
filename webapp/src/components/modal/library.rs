@@ -207,12 +207,20 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                         }
                     }
                 }
-                _ => rsx! {p { class: "confirmation-message", "No running task found" }},
+                _ => rsx! {
+                    p { class: "confirmation-message", "No running task found" }
+                },
             },
-            None => rsx! {p { class: "confirmation-message", "Library has not run any tasks" }},
+            None => rsx! {
+                p { class: "confirmation-message", "Library has not run any tasks" }
+            },
         },
-        Ok(None) => rsx! {p { class: "confirmation-message", "future still resolving" }},
-        Err(err) => rsx! {p { class: "confirmation-message", "Error fetching tasks: {err}" }},
+        Ok(None) => rsx! {
+            p { class: "confirmation-message", "future still resolving" }
+        },
+        Err(err) => rsx! {
+            p { class: "confirmation-message", "Error fetching tasks: {err}" }
+        },
     };
 
     let footer = rsx! {
@@ -223,8 +231,6 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
-                    // normally cancel wouldn't need to re-run the futures, but if we hit the error cases
-                    // in the task future, we want this to refresh and thus hide the spurious button
                     if !show_cancel_button {
                         update_signal.set(());
                     }
@@ -233,34 +239,35 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                 "Cancel"
             }
             if show_cancel_button {
-            button {
-                class: "btn btn-danger",
-                onclick: move |_| async move {
-                    match stop_task(
-                            &StopTaskReq {
-                                library_uuid: library_uuid,
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            status_message.set("Task stopped".into());
-                            update_signal.set(());
-                            let timeout = Timeout::new(
-                                1500,
-                                move || {
-                                    MODAL_STACK.with_mut(|v| v.pop());
+                button {
+                    class: "btn btn-danger",
+                    onclick: move |_| async move {
+                        match stop_task(
+                                &StopTaskReq {
+                                    library_uuid: library_uuid,
                                 },
-                            );
-                            timeout.forget();
+                            )
+                            .await
+                        {
+                            Ok(_) => {
+                                status_message.set("Task stopped".into());
+                                update_signal.set(());
+                                let timeout = Timeout::new(
+                                    1500,
+                                    move || {
+                                        MODAL_STACK.with_mut(|v| v.pop());
+                                    },
+                                );
+                                timeout.forget();
+                            }
+                            Err(err) => {
+                                status_message.set(format!("Error: {}", err));
+                            }
                         }
-                        Err(err) => {
-                            status_message.set(format!("Error: {}", err));
-                        }
-                    }
-                },
-                "Stop task"
-            }}
+                    },
+                    "Stop task"
+                }
+            }
         }
     };
 
@@ -269,9 +276,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
             title: "Confirm library task stop",
             size: ModalSize::Small,
             footer,
-            div { class: "confirmation-content",
-                {modal_body}
-            }
+            div { class: "confirmation-content", {modal_body} }
         }
     }
 }

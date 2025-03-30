@@ -101,7 +101,13 @@ pub fn GallerySearch() -> Element {
                                         color: var(--text-secondary);
                                         transition: all var(--transition-fast) var(--easing-standard);
                                         margin-right: var(--space-2);
-                                        ".to_string() + if active_tab() == "text" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                        "
+                                        .to_string()
+                                        + if active_tab() == "text" {
+                                            "color: var(--primary); border-bottom-color: var(--primary);"
+                                        } else {
+                                            ""
+                                        },
                                     onclick: move |_| active_tab.set("text"),
 
                                     "Text Search"
@@ -119,7 +125,13 @@ pub fn GallerySearch() -> Element {
                                         color: var(--text-secondary);
                                         transition: all var(--transition-fast) var(--easing-standard);
                                         margin-right: var(--space-2);
-                                        ".to_string() + if active_tab() == "date" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                        "
+                                        .to_string()
+                                        + if active_tab() == "date" {
+                                            "color: var(--primary); border-bottom-color: var(--primary);"
+                                        } else {
+                                            ""
+                                        },
                                     onclick: move |_| active_tab.set("date"),
 
                                     "Date Filters"
@@ -137,7 +149,13 @@ pub fn GallerySearch() -> Element {
                                         color: var(--text-secondary);
                                         transition: all var(--transition-fast) var(--easing-standard);
                                         margin-right: var(--space-2);
-                                        ".to_string() + if active_tab() == "metadata" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                        "
+                                        .to_string()
+                                        + if active_tab() == "metadata" {
+                                            "color: var(--primary); border-bottom-color: var(--primary);"
+                                        } else {
+                                            ""
+                                        },
                                     onclick: move |_| active_tab.set("metadata"),
 
                                     "Metadata"
@@ -154,7 +172,13 @@ pub fn GallerySearch() -> Element {
                                         font-weight: 500;
                                         color: var(--text-secondary);
                                         transition: all var(--transition-fast) var(--easing-standard);
-                                        ".to_string() + if active_tab() == "similar" { "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                                        "
+                                        .to_string()
+                                        + if active_tab() == "similar" {
+                                            "color: var(--primary); border-bottom-color: var(--primary);"
+                                        } else {
+                                            ""
+                                        },
                                     onclick: move |_| active_tab.set("similar"),
 
                                     "Similar Media"
@@ -162,9 +186,7 @@ pub fn GallerySearch() -> Element {
                             }
 
                             // Tab content
-                            div {
-                                class: "tab-content",
-                                style: "min-height: 200px;",
+                            div { class: "tab-content", style: "min-height: 200px;",
 
                                 match active_tab() {
                                     "text" => rsx! {
@@ -177,7 +199,9 @@ pub fn GallerySearch() -> Element {
                                                     value: "{media_search_signal()}",
                                                     oninput: move |evt| media_search_signal.set(evt.value().clone()),
                                                 }
-                                                div { class: "form-help", style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-1);",
+                                                div {
+                                                    class: "form-help",
+                                                    style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-1);",
                                                     "Search in file names, descriptions, and tags"
                                                 }
                                             }
@@ -196,11 +220,11 @@ pub fn GallerySearch() -> Element {
                                                     label { class: "form-label", "Case Sensitive" }
                                                     div { style: "display: flex; align-items: center; height: 38px;", // Match height of select
                                                         input {
-                                                            type: "checkbox",
+                                                            r#type: "checkbox",
                                                             id: "case-sensitive",
-                                                            style: "margin-right: var(--space-2);"
+                                                            style: "margin-right: var(--space-2);",
                                                         }
-                                                        label { for: "case-sensitive", "Enable case sensitivity" }
+                                                        label { r#for: "case-sensitive", "Enable case sensitivity" }
                                                     }
                                                 }
                                             }
@@ -211,12 +235,12 @@ pub fn GallerySearch() -> Element {
                                             div { style: "display: flex; gap: var(--space-4);",
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "From Date" }
-                                                    input { class: "form-input", type: "date" }
+                                                    input { class: "form-input", r#type: "date" }
                                                 }
 
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "To Date" }
-                                                    input { class: "form-input", type: "date" }
+                                                    input { class: "form-input", r#type: "date" }
                                                 }
                                             }
 
@@ -256,11 +280,11 @@ pub fn GallerySearch() -> Element {
                                                 label { class: "form-label", "Show Hidden Files" }
                                                 div { style: "display: flex; align-items: center;",
                                                     input {
-                                                        type: "checkbox",
+                                                        r#type: "checkbox",
                                                         id: "show-hidden",
-                                                        style: "margin-right: var(--space-2);"
+                                                        style: "margin-right: var(--space-2);",
                                                     }
-                                                    label { for: "show-hidden", "Include hidden media in search results" }
+                                                    label { r#for: "show-hidden", "Include hidden media in search results" }
                                                 }
                                             }
                                         }
@@ -277,7 +301,7 @@ pub fn GallerySearch() -> Element {
                                                     input {
                                                         class: "form-input",
                                                         style: "flex-grow: 1;",
-                                                        placeholder: "Enter media UUID to find similar items"
+                                                        placeholder: "Enter media UUID to find similar items",
                                                     }
                                                     button { class: "btn btn-secondary", "Browse..." }
                                                 }
@@ -294,7 +318,9 @@ pub fn GallerySearch() -> Element {
                                             }
                                         }
                                     },
-                                    _ => rsx! { div {} }
+                                    _ => rsx! {
+                                        div {}
+                                    },
                                 }
                             }
 
@@ -315,10 +341,7 @@ pub fn GallerySearch() -> Element {
                                     "Reset Filters"
                                 }
 
-                                button {
-                                    class: "btn btn-primary",
-                                    "Apply Filters"
-                                }
+                                button { class: "btn btn-primary", "Apply Filters" }
                             }
                         }
                     }

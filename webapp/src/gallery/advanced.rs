@@ -18,19 +18,17 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
     let tab_signal = props.tab_signal;
 
     rsx! {
-        div {
-            class: "tab-content",
-            style: "min-height: 200px;",
+        div { class: "tab-content", style: "min-height: 200px;",
 
             match tab_signal() {
                 TabTarget::Search => {
-                    rsx!{"to do"}
+                    rsx! { "to do" }
                 }
                 TabTarget::BulkTagEdit => {
-                    rsx!{"to do"}
+                    rsx! { "to do" }
                 }
                 TabTarget::BulkCollectionEdit => {
-                    rsx!{"to do"}
+                    rsx! { "to do" }
                 }
             }
         }
@@ -63,7 +61,13 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
                 color: var(--text-secondary);
                 transition: all var(--transition-fast) var(--easing-standard);
                 margin-right: var(--space-2);
-                ".to_string() + if &*tab_signal.read() == &target{ "color: var(--primary); border-bottom-color: var(--primary);" } else { "" },
+                "
+                .to_string()
+                + if &*tab_signal.read() == &target {
+                    "color: var(--primary); border-bottom-color: var(--primary);"
+                } else {
+                    ""
+                },
             onclick: move |_| tab_signal.set(target.clone()),
 
             "{text}"
@@ -104,11 +108,23 @@ fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
                 border-bottom: 1px solid var(--neutral-200);
                 margin-bottom: var(--space-4);
             ",
-            AdvancedTab {tab_signal: tab_signal, target: TabTarget::Search, text: "Search Options"}
-            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkTagEdit, text: "Show Collections"}
-            AdvancedTab {tab_signal: tab_signal, target: TabTarget::BulkCollectionEdit, text: "Bulk Select"}
+            AdvancedTab {
+                tab_signal,
+                target: TabTarget::Search,
+                text: "Search Options",
+            }
+            AdvancedTab {
+                tab_signal,
+                target: TabTarget::BulkTagEdit,
+                text: "Show Collections",
+            }
+            AdvancedTab {
+                tab_signal,
+                target: TabTarget::BulkCollectionEdit,
+                text: "Bulk Select",
+            }
         }
 
-        AdvancedContent {tab_signal, media_search_signal}
+        AdvancedContent { tab_signal, media_search_signal }
     }
 }

@@ -89,17 +89,21 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             }
             Modal::RmMediaFromCollection(media_uuid, collection_uuid) => {
                 rsx! {
-                    RmFromCollectionModal { update_signal, media_uuid, collection_uuid }
+                    RmFromCollectionModal {
+                        update_signal,
+                        media_uuid,
+                        collection_uuid,
+                    }
                 }
             }
             Modal::StartTask(library_uuid) => {
                 rsx! {
-                    StartTaskModal {update_signal, library_uuid }
+                    StartTaskModal { update_signal, library_uuid }
                 }
             }
             Modal::StopTask(library_uuid) => {
                 rsx! {
-                    StopTaskModal {update_signal, library_uuid }
+                    StopTaskModal { update_signal, library_uuid }
                 }
             }
         },
