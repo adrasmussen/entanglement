@@ -1,10 +1,7 @@
 use dioxus::prelude::*;
 
-use crate::{
-    common::stream::full_link,
-    components::{modal::ModernModal, modal::MODAL_STACK},
-};
-use api::media::*;
+use crate::components::{modal::ModernModal, modal::MODAL_STACK};
+use api::{full_link, media::*};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct EnhancedMediaModalProps {

@@ -2,12 +2,11 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    common::stream::full_link,
     components::modal::{Modal, ModalBox, MODAL_STACK},
     gallery::{collections::CollectionTable, comments::CommentList, similar::SimilarMedia},
     Route,
 };
-use api::{fold_set, media::*, unfold_set};
+use api::{fold_set, media::*, unfold_set, full_link};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {

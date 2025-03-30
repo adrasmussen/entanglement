@@ -36,7 +36,7 @@ use crate::{
     },
     task::msg::TaskMsg,
 };
-use api::{auth::*, collection::*, comment::*, library::*, media::*, task::*};
+use api::{auth::*, collection::*, comment::*, library::*, media::*, task::*, HTTP_URL_ROOT};
 use common::config::ESConfig;
 
 // http service
@@ -197,13 +197,17 @@ impl HttpEndpoint {
         let config = self.config.clone();
         let state = Arc::clone(&self);
 
-        // app -- the WASM webapp
-
-        // this controls which route actually serves the app
+        // http root
         //
-        // if running behind a reverse proxy, this URL can be configured (as well as the
-        // frontend setting in dioxsus.toml)
-        let app_url_root = config.http_url_root.clone();
+        // this controls the root of the url for all entanglement http behavior, i.e.
+        // the http://<ip:port>/<root>/... part prepended to all requests.
+        //
+        // ideally, this would be set via a commandline parameter, but Dioxus makes
+        // that a bit tricky.  for now, we set it here and in Dioxus.toml, see the
+        // definition in api/lib.rs.
+        let app_url_root = HTTP_URL_ROOT.to_owned();
+
+        // app -- the WASM webapp
 
         // this is the filesystem location of the /dist folder created by the dioxsus
         // build process
@@ -260,7 +264,8 @@ impl HttpEndpoint {
             .with_state(state.clone());
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant
-        // middleware from the rest of the http module
+        // middleware from the rest of the http module.  these must match the defitions used in the
+        // api crate (for the )
         //
         // the fallback here is a bit weird, we need to be careful that it redirects properly with
         // the app router's own fallback

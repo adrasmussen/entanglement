@@ -24,8 +24,11 @@ pub struct ESConfig {
     // ip and port for http server
     pub http_socket: String,
 
-    // http url root, useful for reverse proxies
-    pub http_url_root: String,
+    // http url root, since we should be running behind a
+    // reverse proxy
+    //
+    // currently set at compile time, see api lib.rs
+    //pub http_url_root: String,
 
     // location of wasm app
     pub http_doc_root: String,

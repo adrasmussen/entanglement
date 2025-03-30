@@ -1,5 +1,4 @@
 pub mod storage;
-pub mod stream;
 pub mod style;
 
 use chrono::{Local, TimeZone};

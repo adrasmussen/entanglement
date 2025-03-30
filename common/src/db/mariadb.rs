@@ -129,8 +129,6 @@ impl DbBackend for MariaDBBackend {
 
         debug!({media_path = media.path, media_uuid = data}, "added media");
 
-        // TODO -- add in the missing INSERT statements for the metadata tables
-
         Ok(data)
     }
 

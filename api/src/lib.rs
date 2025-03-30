@@ -10,9 +10,22 @@ pub mod media;
 pub mod search;
 pub mod task;
 
+// filesystem/http paths
+//
+// these paths are used to control where under the media_srvdir the server will create
+// symlinks, thumbnails, and so on.  since the /media route on the http server points
+// to the media_srvdir directory, these also control the urls used for downloading.
 pub const ORIGINAL_PATH: &str = "originals";
 pub const THUMBNAIL_PATH: &str = "thumbnails";
 pub const SLICE_PATH: &str = "slices";
+
+// http url root
+//
+// until we figure out how to have dioxus dynamically fetch the revese proxy settings
+// from the server at runtime, we have to set this constant here AND in Dioxus.toml.
+//
+// when running behind a reverse proxy, the upstream settings must also match.
+pub const HTTP_URL_ROOT: &str = "entanglement";
 
 // set folding
 //
@@ -92,13 +105,19 @@ impl From<anyhow::Error> for WebError {
     }
 }
 
-// TODO -- this needs to be modified for the reverse proxy, too
+// endpoints
+//
+// these functions control how the webapp communicates with the server, either by
+// create the future directly or by providing a String that is interpreted by the
+// browser (img or a tags)
+
 #[macro_export]
 macro_rules! endpoint {
     ($name:ident) => {
         paste::paste!{
             pub async fn [<$name:snake>](req: &[<$name:camel Req>]) -> Result<[<$name:camel Resp>], crate::WebError> {
-                let resp = gloo_net::http::Request::post(format!("/entanglement/api/{}", stringify!([<$name:camel>])).as_str())
+                use crate::HTTP_URL_ROOT;
+                let resp = gloo_net::http::Request::post(format!("/{}/api/{}", HTTP_URL_ROOT, stringify!([<$name:camel>])).as_str())
                     .json(&req.clone())?
                     .send()
                     .await?;
@@ -111,4 +130,12 @@ macro_rules! endpoint {
             }
         }
     };
+}
+
+pub fn full_link(media_uuid: media::MediaUuid) -> String {
+    format!("/{HTTP_URL_ROOT}/media/{ORIGINAL_PATH}/{media_uuid}")
+}
+
+pub fn thumbnail_link(media_uuid: media::MediaUuid) -> String {
+    format!("/{HTTP_URL_ROOT}/media/{THUMBNAIL_PATH}/{media_uuid}")
 }

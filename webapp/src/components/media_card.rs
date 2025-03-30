@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::stream::thumbnail_link, Route};
-use api::media::*;
+use crate::Route;
+use api::{thumbnail_link, media::*};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaCardProps {

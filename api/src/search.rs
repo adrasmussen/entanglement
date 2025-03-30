@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 // useful to us since it doesn't match partial words.  it is very likely that we will
 // need to have more fine-grained control over both the queries and the structure, so
 // all of this should be considered work-in-progress
+//
+// TODO -- to use the Substring filters more optimally, we need a better splitting
+// algorithm than whitespace so as to keep quoted phrases together
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SearchFilter {

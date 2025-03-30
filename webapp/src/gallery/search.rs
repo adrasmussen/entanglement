@@ -12,13 +12,11 @@ pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
 
     let mut advanced_expanded = use_signal(|| false);
-    let mut active_tab = use_signal(|| "text"); // Possible values: "text", "date", "metadata", "similar"
+    let mut active_tab = use_signal(|| "text");
 
     let mut media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
     let media_future = use_resource(move || async move {
-        // TODO -- this should use a more intelligent splitter
-        // that keeps quoted phrases together
         let filter = media_search_signal()
             .split_whitespace()
             .map(|s| s.to_owned())
