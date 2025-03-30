@@ -277,7 +277,7 @@ impl HttpEndpoint {
             .nest(&format!("/{app_url_root}/app"), app_router)
             .nest(&format!("/{app_url_root}/media"), media_router)
             .nest(&format!("/{app_url_root}/api"), api_router)
-            .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
+            .fallback(move || async move { Redirect::permanent(&format!("/{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
             .route_layer(middleware::from_fn_with_state(
                 config.authn_proxy_header.clone().unwrap(),
