@@ -1,6 +1,11 @@
 use std::path::PathBuf;
 
-use tracing::info;
+use tracing::{info, Level};
+use tracing_subscriber::{
+    filter::FilterFn,
+    layer::{Layer, SubscriberExt},
+    util::SubscriberInitExt,
+};
 
 mod auth;
 mod checks;
@@ -19,8 +24,13 @@ use service::{ESMRegistry, EntanglementService};
 // gracefully stop the server after logging whatever the error was
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+    let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
+        .with_max_level_hint(Level::INFO);
+
+    let fmt_layer = tracing_subscriber::fmt::layer();
+
+    tracing_subscriber::registry()
+        .with(fmt_layer.with_filter(crate_filter))
         .init();
 
     info!("entanglement server starting up, processing config file");

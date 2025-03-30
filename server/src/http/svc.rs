@@ -274,9 +274,9 @@ impl HttpEndpoint {
         //
         // TODO -- generalize the auth middleware correctly
         let router = Router::new()
-            .nest(&format!("{app_url_root}/app"), app_router)
-            .nest(&format!("{app_url_root}/media"), media_router)
-            .nest(&format!("{app_url_root}/api"), api_router)
+            .nest(&format!("/{app_url_root}/app"), app_router)
+            .nest(&format!("/{app_url_root}/media"), media_router)
+            .nest(&format!("/{app_url_root}/api"), api_router)
             .fallback(move || async move { Redirect::permanent(&format!("{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
             .route_layer(middleware::from_fn_with_state(
@@ -304,7 +304,7 @@ impl HttpEndpoint {
                 let io = hyper_util::rt::TokioIo::new(stream);
 
                 tokio::task::spawn(async move {
-                    match hyper_util::server::conn::auto::Builder::new(
+                    match hyper::server::conn::http2::Builder::new(
                         hyper_util::rt::TokioExecutor::new(),
                     )
                     .serve_connection(io, service.clone())
@@ -370,6 +370,7 @@ async fn stream_media(
     let reader_stream = ReaderStream::new(file_handle);
 
     // TODO -- use mime_guess to follow the symlink and add the correct mime type
+    // TODO -- double check the cache controls header/if-modified-since
     Ok(axum::body::Body::from_stream(reader_stream).into_response())
 }
 
