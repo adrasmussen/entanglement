@@ -32,6 +32,10 @@ pub const HTTP_URL_ROOT: &str = "entanglement";
 // some databases do not support a column type of set/vec/list, so we need a consistent
 // method to convert String <> HashSet.  fixing the folding scheme/separator means that
 // we can use substring methods in the database to check for elements in the set.
+//
+// these methods are also used in the webapp, which adds the awkward requirement that
+// the separator be commonly-found on keyboards.  eventually, better text input methods
+// could remove this requirement.
 pub const FOLDING_SEPARATOR: &str = "|";
 
 pub fn fold_set(set: HashSet<String>) -> anyhow::Result<String> {
@@ -70,6 +74,11 @@ pub fn unfold_set(str: &str) -> HashSet<String> {
     set
 }
 
+// weberror
+//
+// anyhow::Error does not implement serde::de::StdError, which prevents it from being used
+// in Dioxus's ErrorBoundary handle_error logic.  thus, we create this mostly-transparent
+// wrapper and connect it to both anyhow and the gloo_net errors returned by the api calls
 #[derive(Clone, Debug)]
 pub struct WebError(Arc<anyhow::Error>);
 
@@ -77,9 +86,7 @@ impl WebError {
     pub fn new() -> Self {
         WebError(Arc::new(anyhow::Error::msg("")))
     }
-}
 
-impl WebError {
     pub fn msg(msg: String) -> Self {
         WebError(Arc::new(anyhow::Error::msg(msg)))
     }
