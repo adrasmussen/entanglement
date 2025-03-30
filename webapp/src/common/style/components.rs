@@ -315,6 +315,155 @@ pub const BASE_COMPONENTS: &str = r#"
   100% { background-position: 200% 0; }
 }
 
+/* Collection Selection Item */
+.collection-item {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color var(--transition-fast) var(--easing-standard);
+}
+
+.collection-item.selected {
+  background-color: var(--primary-light);
+  color: white;
+}
+
+.collection-item:not(.selected):hover {
+  background-color: var(--neutral-50);
+}
+
+.collection-radio {
+  margin-right: var(--space-3);
+}
+
+.collection-radio-outer {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--neutral-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collection-item.selected .collection-radio-outer {
+  border-color: white;
+}
+
+.collection-radio-inner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: white;
+}
+
+.collection-info {
+  flex: 1;
+}
+
+.collection-name {
+  font-weight: 500;
+}
+
+.collection-meta {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.collection-item.selected .collection-meta {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.collection-item.error {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--error);
+}
+
+.collection-item.loading {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Task Option Selection */
+.task-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.task-option {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-fast) var(--easing-standard);
+}
+
+.task-option.selected {
+  background-color: var(--primary-light);
+  color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.task-option:not(.selected):hover {
+  background-color: var(--neutral-50);
+  border-color: var(--neutral-300);
+}
+
+.task-radio {
+  margin-right: var(--space-3);
+}
+
+.task-radio-outer {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--neutral-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-option.selected .task-radio-outer {
+  border-color: white;
+}
+
+.task-radio-inner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: white;
+}
+
+.task-icon {
+  margin-right: var(--space-3);
+  font-size: 1.25rem;
+}
+
+.task-info {
+  flex: 1;
+}
+
+.task-name {
+  font-weight: 500;
+}
+
+.task-description {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.task-option.selected .task-description {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+
 /* Layout utilities */
 .container {
   width: 100%;
