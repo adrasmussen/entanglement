@@ -1,7 +1,9 @@
-use std::collections::HashSet;
-use std::net::{SocketAddr, SocketAddrV6};
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    net::{SocketAddr, SocketAddrV6},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use anyhow;
 use async_cell::sync::AsyncCell;
@@ -367,6 +369,7 @@ async fn stream_media(
 
     let reader_stream = ReaderStream::new(file_handle);
 
+    // TODO -- use mime_guess to follow the symlink and add the correct mime type
     Ok(axum::body::Body::from_stream(reader_stream).into_response())
 }
 
