@@ -193,20 +193,23 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
 
     let modal_body = match tasks.clone().transpose() {
         Ok(Some(resp)) => match resp.tasks.first() {
-            Some(task) => {
-                show_cancel_button = true;
-                rsx! {
-                    p { class: "confirmation-message", "Are you sure you want to stop this task?" }
-                    div {
-                        class: "media-info",
-                        style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                        p { "Type: {task.task_type}" }
-                        p { "User: {task.uid}" }
-                        p { "Start time: {local_time(task.start)}" }
+            Some(task) => match task.status {
+                TaskStatus::Running => {
+                    show_cancel_button = true;
+                    rsx! {
+                        p { class: "confirmation-message", "Are you sure you want to stop this task?" }
+                        div {
+                            class: "media-info",
+                            style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                            p { "Type: {task.task_type}" }
+                            p { "User: {task.uid}" }
+                            p { "Start time: {local_time(task.start)}" }
+                        }
                     }
                 }
-            }
-            None => rsx! {p { class: "confirmation-message", "No running task found" }},
+                _ => rsx! {p { class: "confirmation-message", "No running task found" }},
+            },
+            None => rsx! {p { class: "confirmation-message", "Library has not run any tasks" }},
         },
         Ok(None) => rsx! {p { class: "confirmation-message", "future still resolving" }},
         Err(err) => rsx! {p { class: "confirmation-message", "Error fetching tasks: {err}" }},
@@ -220,6 +223,11 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
+                    // normally cancel wouldn't need to re-run the futures, but if we hit the error cases
+                    // in the task future, we want this to refresh and thus hide the spurious button
+                    if !show_cancel_button {
+                        update_signal.set(());
+                    }
                     MODAL_STACK.with_mut(|v| v.pop());
                 },
                 "Cancel"

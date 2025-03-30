@@ -82,6 +82,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
 
     let libraries = libraries.clone();
 
+    // TODO -- reorganize actions/use tasks instead
     match libraries {
         Some(library_details) => {
             rsx! {

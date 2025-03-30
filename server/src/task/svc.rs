@@ -276,7 +276,6 @@ impl ESTaskService for TaskRunner {
         // this is a wrapper future around the actual task, which lets us use tokio::select!
         // to either await its completion or cancel, and send a message either way
         let watcher = async move {
-            // TODO -- get real spans for this function
             debug!("task watcher starting");
 
             let task_handle = spawn(task_future);

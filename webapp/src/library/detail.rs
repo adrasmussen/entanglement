@@ -31,7 +31,7 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                     }
                 }
             },
-            LibraryInner { library_uuid: props.library_uuid }
+            LibraryInner { update_signal, library_uuid: props.library_uuid }
         }
     }
 }
@@ -54,12 +54,13 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 struct LibraryInnerProps {
+    update_signal: Signal<()>,
     library_uuid: String,
 }
 
 #[component]
 fn LibraryInner(props: LibraryInnerProps) -> Element {
-    let update_signal = use_signal(|| ());
+    let update_signal = props.update_signal;
     let library_uuid = props.library_uuid.parse::<LibraryUuid>().show(|_| {
         let message = "The library_uuid could not be parsed".to_string();
         rsx! {
@@ -182,7 +183,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             span { "Last scanned: {formatted_time}" }
                             span { "File count: {library.count}" }
                         }
-                        TaskBar { library_uuid }
+                        TaskBar { update_signal, library_uuid }
                     }
                     // Action buttons
                     div { style: "display: flex; gap: var(--space-2);",
