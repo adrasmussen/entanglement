@@ -3,7 +3,11 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::local_time, Route};
+use crate::{
+    common::local_time,
+    components::modal::{Modal, MODAL_STACK},
+    Route,
+};
 use api::library::*;
 
 #[derive(Clone, PartialEq, Props)]
@@ -116,7 +120,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                             }
                         }
                         tbody {
-                            for (library_uuid , library) in library_details {
+                            for (library_uuid, library) in library_details {
                                 tr {
                                     key: "{library_uuid}",
                                     style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
@@ -159,19 +163,20 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     // Actions column
                                     td { style: "padding: var(--space-3); text-align: right;",
                                         button {
-                                            class: "btn btn-secondary btn-sm",
+                                            class: "btn btn-secondary",
+                                            style: "margin-right: var(--space-2);",
+                                            onclick: move |_| {
+                                                MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid)));
+                                            },
+                                            "Start Task"
+                                        }
+                                        button {
+                                            class: "btn btn-secondary",
                                             style: "margin-right: var(--space-2);",
                                             onclick: move |_| {
                                                 tracing::info!("Scan library {library_uuid} clicked");
                                             },
-                                            "Scan"
-                                        }
-                                        Link {
-                                            to: Route::LibraryDetail {
-                                                library_uuid: library_uuid.to_string(),
-                                            },
-                                            class: "btn btn-primary btn-sm",
-                                            "Browse"
+                                            "Task History"
                                         }
                                     }
                                 }

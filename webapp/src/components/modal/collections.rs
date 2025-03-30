@@ -30,6 +30,8 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut group_error = use_signal(|| String::new());
 
     // Display the users of the given group
+    //
+    // TODO -- this needs debounced, or maybe a button to check explicity
     let group_future = use_resource(move || async move {
         let gid = collection_group();
 
@@ -157,7 +159,6 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                             class: "form-input",
                             r#type: "text",
                             value: "{collection_group}",
-                            // TODO -- have this delay or have a "show members" button
                             oninput: move |evt| collection_group.set(evt.value().clone()),
                             placeholder: "users",
                             style: "flex: 1;",
@@ -369,7 +370,6 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
             update: CollectionUpdate {
                 name: Some(collection_name()),
                 note: Some(collection_note()),
-                // TODO -- add tag-editing field
                 tags: if valid_tags {
                     Some(unfold_set(&collection_tags()))
                 } else {
