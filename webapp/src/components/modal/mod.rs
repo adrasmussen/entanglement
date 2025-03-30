@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 
-use api::{collection::CollectionUuid, comment::CommentUuid, media::MediaUuid};
+use api::{
+    collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid,
+};
 
 mod comments;
 use comments::DeleteCommentModal;
@@ -13,6 +15,9 @@ use collections::{
 
 mod enhanced_media_modal;
 use enhanced_media_modal::EnhancedMediaModal;
+
+mod library;
+use library::{StartTaskModal, StopTaskModal};
 
 // global modal signal
 //
@@ -33,6 +38,8 @@ pub enum Modal {
     DeleteCollection(CollectionUuid),
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
+    StartTask(LibraryUuid),
+    StopTask(LibraryUuid),
 }
 
 // ModalBox
@@ -83,6 +90,16 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             Modal::RmMediaFromCollection(media_uuid, collection_uuid) => {
                 rsx! {
                     RmFromCollectionModal { update_signal, media_uuid, collection_uuid }
+                }
+            }
+            Modal::StartTask(library_uuid) => {
+                rsx! {
+                    StartTaskModal {update_signal, library_uuid }
+                }
+            }
+            Modal::StopTask(library_uuid) => {
+                rsx! {
+                    StopTaskModal {update_signal, library_uuid }
                 }
             }
         },

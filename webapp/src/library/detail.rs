@@ -3,7 +3,7 @@ use dioxus_router::prelude::*;
 
 use crate::{
     common::{local_time, storage::*},
-    components::{modal::ModalBox, search_bar::SearchBar},
+    components::{modal::{MODAL_STACK, ModalBox, Modal}, search_bar::SearchBar},
     library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
 };
@@ -189,7 +189,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                         button {
                             class: "btn btn-secondary",
                             onclick: move |_| {
-                                tracing::info!("Start scan for library {library_uuid}");
+                                MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid())));
                             },
                             "Start Task"
                         }

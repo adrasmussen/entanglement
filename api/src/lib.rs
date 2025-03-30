@@ -66,6 +66,12 @@ impl WebError {
     }
 }
 
+impl WebError {
+    pub fn msg(msg: String) -> Self {
+        WebError(Arc::new(anyhow::Error::msg(msg)))
+    }
+}
+
 impl Display for WebError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
