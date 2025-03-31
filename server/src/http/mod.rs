@@ -3,8 +3,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+pub mod api;
 pub mod auth;
 pub mod msg;
+pub mod stream;
 pub mod svc;
 
 // copied verbatim from https://github.com/tokio-rs/axum/blob/main/examples/anyhow-error-response/src/main.rs

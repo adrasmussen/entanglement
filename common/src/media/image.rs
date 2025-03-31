@@ -1,13 +1,26 @@
 use std::path::PathBuf;
 
+use anyhow::Result;
 use blockhash::blockhash256;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
-use tracing::debug;
+use tracing::{info_span, debug, instrument};
 
 use crate::media::MediaData;
 use api::media::MediaMetadata;
 
-pub async fn process_image(path: &PathBuf) -> anyhow::Result<MediaData> {
+pub fn hash_image(path: &PathBuf) -> Result<String> {
+    let span = info_span!("hash_image", path=?path);
+    let _ = span.enter();
+
+    let image = image::open(path)?;
+
+    let hash = blockhash256(&image);
+
+    Ok(hash.to_string())
+}
+
+#[instrument]
+pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
     debug!("starting processing image");
 
     // exif processing
@@ -28,15 +41,12 @@ pub async fn process_image(path: &PathBuf) -> anyhow::Result<MediaData> {
         None => String::from(""),
     };
 
-    // perceptual hashing
-    let image = image::open(path)?;
-
-    let hash = blockhash256(&image);
+    let hash = hash_image(path)?;
 
     debug!("finshed processing image");
 
     Ok(MediaData {
-        hash: hash.to_string(),
+        hash: hash,
         date: datetime_original,
         metadata: MediaMetadata::Image,
     })
@@ -45,7 +55,10 @@ pub async fn process_image(path: &PathBuf) -> anyhow::Result<MediaData> {
 pub fn create_image_thumbnail(
     original_path: PathBuf,
     thumbnail_path: PathBuf,
-) -> anyhow::Result<()> {
+) -> Result<()> {
+    let span = info_span!("create_image_thumbnail", original_path=?original_path);
+    let _ = span.enter();
+
     debug!("started creating thumbnail");
 
     let mut decoder = ImageReader::open(original_path.clone())?.into_decoder()?;

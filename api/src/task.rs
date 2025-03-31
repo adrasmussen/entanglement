@@ -12,6 +12,8 @@ pub enum TaskType {
     ScanLibrary,
     CleanLibrary,
     RunScripts,
+    //VerifyMime,
+    //AsyncTranscode,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
