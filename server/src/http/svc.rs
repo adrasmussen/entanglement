@@ -14,15 +14,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
-
 use tokio::sync::Mutex;
-
 use tower::Service;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 use tracing::{debug, error, info, instrument};
+use regex::Regex;
 
 use crate::{
     auth::check::AuthCheck,
@@ -33,6 +32,8 @@ use crate::{
 };
 use api::HTTP_URL_ROOT;
 use common::config::ESConfig;
+
+pub const RANGE_REGEX: &str = r"(\d*)-(\d*)";
 
 // http service
 //
@@ -141,6 +142,7 @@ pub struct HttpEndpoint {
     pub(super) auth_svc_sender: ESMSender,
     pub(super) db_svc_sender: ESMSender,
     pub(super) task_svc_sender: ESMSender,
+    pub(super) range_regex: Arc<Regex>,
 }
 
 #[async_trait]
@@ -154,6 +156,7 @@ impl ESInner for HttpEndpoint {
             auth_svc_sender: registry.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: registry.get(&ServiceType::Db).unwrap().clone(),
             task_svc_sender: registry.get(&ServiceType::Task).unwrap().clone(),
+            range_regex: Arc::new(Regex::new(RANGE_REGEX)?),
         })
     }
 
