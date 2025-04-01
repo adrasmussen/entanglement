@@ -322,6 +322,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
                                 button {
                                     class: "btn btn-secondary",
+                                    // don't submit despite being part of the form
                                     r#type: "button",
                                     onclick: move |_| {
                                         let link = full_link(media_uuid());

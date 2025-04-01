@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow;
+use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use axum::{
@@ -14,14 +14,20 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use hyper::{body::Incoming, server::conn::http2::Builder, service::service_fn};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use regex::Regex;
-use tokio::sync::Mutex;
+use tokio::{
+    net::TcpListener,
+    sync::Mutex,
+    task::{spawn, JoinHandle},
+};
 use tower::Service;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, info, instrument, warn, Instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     auth::check::AuthCheck,
@@ -60,8 +66,8 @@ pub const RANGE_REGEX: &str = r"(\d*)-(\d*)";
 pub struct HttpService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<ESMReceiver>>,
-    msg_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
-    hyper_handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    msg_handle: AsyncCell<JoinHandle<Result<()>>>,
+    hyper_handle: AsyncCell<JoinHandle<Result<()>>>,
 }
 
 #[async_trait]
@@ -84,7 +90,7 @@ impl EntanglementService for HttpService {
     }
 
     #[instrument(skip(self, registry))]
-    async fn start(&self, registry: &ESMRegistry) -> anyhow::Result<()> {
+    async fn start(&self, registry: &ESMRegistry) -> Result<()> {
         info!("starting http service");
 
         let receiver = Arc::clone(&self.receiver);
@@ -147,7 +153,7 @@ pub struct HttpEndpoint {
 
 #[async_trait]
 impl ESInner for HttpEndpoint {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
         Ok(HttpEndpoint {
             config: config.clone(),
             registry: registry.clone(),
@@ -165,7 +171,7 @@ impl ESInner for HttpEndpoint {
     }
 
     // currently there are no useful messages for this service to respond to
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+    async fn message_handler(&self, esm: ESM) -> Result<()> {
         match esm {
             _ => Err(anyhow::Error::msg("not implemented")),
         }
@@ -186,10 +192,7 @@ impl HttpEndpoint {
     // specifically axum::serve() doesn't really play nice with TLS, which we'll want
     // to offer as an option eventually
     #[instrument(skip_all)]
-    async fn serve_http(
-        self: Arc<Self>,
-        socket: SocketAddr,
-    ) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+    async fn serve_http(self: Arc<Self>, socket: SocketAddr) -> JoinHandle<Result<()>> {
         info!("starting axum/hyper http listener");
 
         let config = self.config.clone();
@@ -281,33 +284,36 @@ impl HttpEndpoint {
             ));
 
         // everything from here follows the normal hyper/axum on tokio setup
-        let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
-            router.clone().call(request)
-        });
+        let service = service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
         // for the moment, we just panic if the socket is in use
-        let listener = tokio::net::TcpListener::bind(socket)
+        let listener = TcpListener::bind(socket)
             .await
             .expect("http_service failed to bind tcp socket");
 
         // the main http server loop
         //
         // we want to return the handle to the caller, not the future, and so we just spawn it here
-        let handle = tokio::task::spawn(async move {
+        let handle = spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
                 let service = service.clone();
 
-                let io = hyper_util::rt::TokioIo::new(stream);
+                let io = TokioIo::new(stream);
 
-                tokio::task::spawn(async move {
-                    match hyper::server::conn::http2::Builder::new(
-                        hyper_util::rt::TokioExecutor::new(),
-                    )
-                    .serve_connection(io, service.clone())
-                    .await
+                spawn(async move {
+                    match Builder::new(TokioExecutor::new())
+                        .serve_connection(io, service.clone())
+                        .await
                     {
                         Ok(()) => (),
-                        Err(err) => warn!({service = "http_service", conn = "http", error = ?err}),
+                        Err(err) => {
+                            // this is a hamfisted and abi-unstable way to filter out connection errors
+                            if format!("{err:?}").contains("Io") {
+                                debug!({service = "http_service", conn = "http", error = ?err})
+                            } else {
+                                warn!({service = "http_service", conn = "http", error = ?err})
+                            }
+                        }
                     }
                 });
             }
