@@ -14,14 +14,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use regex::Regex;
 use tokio::sync::Mutex;
 use tower::Service;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
-use tracing::{debug, error, info, instrument};
-use regex::Regex;
+use tracing::{debug, error, info, instrument, warn, Instrument};
 
 use crate::{
     auth::check::AuthCheck,
@@ -307,7 +307,7 @@ impl HttpEndpoint {
                     .await
                     {
                         Ok(()) => (),
-                        Err(err) => error!({service = "http_service", conn = "http", error = %err}),
+                        Err(err) => warn!({service = "http_service", conn = "http", error = ?err}),
                     }
                 });
             }

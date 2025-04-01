@@ -322,6 +322,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
                                 button {
                                     class: "btn btn-secondary",
+                                    r#type: "button",
                                     onclick: move |_| {
                                         let link = full_link(media_uuid());
                                         let window = web_sys::window().expect("no global window exists");

@@ -2,9 +2,9 @@ use dioxus::prelude::*;
 
 #[derive(Clone, PartialEq)]
 enum TabTarget {
-    Search,
-    BulkTagEdit,
-    BulkCollectionEdit,
+    _Search,
+    _BulkTagEdit,
+    _BulkCollectionEdit,
 }
 
 #[derive(Clone, PartialEq, Props)]
@@ -21,13 +21,13 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
         div { class: "tab-content", style: "min-height: 200px;",
 
             match tab_signal() {
-                TabTarget::Search => {
+                TabTarget::_Search => {
                     rsx! { "to do" }
                 }
-                TabTarget::BulkTagEdit => {
+                TabTarget::_BulkTagEdit => {
                     rsx! { "to do" }
                 }
-                TabTarget::BulkCollectionEdit => {
+                TabTarget::_BulkCollectionEdit => {
                     rsx! { "to do" }
                 }
             }
@@ -84,7 +84,7 @@ struct AdvancedContainerProps {
 fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
     let media_search_signal = props.media_search_signal;
 
-    let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::Search);
+    let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::_Search);
 
     rsx! {
         div {
@@ -110,17 +110,17 @@ fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
             ",
             AdvancedTab {
                 tab_signal,
-                target: TabTarget::Search,
+                target: TabTarget::_Search,
                 text: "Search Options",
             }
             AdvancedTab {
                 tab_signal,
-                target: TabTarget::BulkTagEdit,
+                target: TabTarget::_BulkTagEdit,
                 text: "Show Collections",
             }
             AdvancedTab {
                 tab_signal,
-                target: TabTarget::BulkCollectionEdit,
+                target: TabTarget::_BulkCollectionEdit,
                 text: "Bulk Select",
             }
         }
