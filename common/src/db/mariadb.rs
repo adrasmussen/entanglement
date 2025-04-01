@@ -420,7 +420,9 @@ impl DbBackend for MariaDBBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE AND BIG_HAM((SELECT hash FROM media WHERE media_uuid = :media_uuid), media.hash) < :distance"
+                media.hidden = FALSE
+                AND media.hash != ''
+                AND BIG_HAM((SELECT hash FROM media WHERE media_uuid = :media_uuid), media.hash) < :distance"
         .with(params! {
             "gid" => fold_set(gid)?,
             "media_uuid" => media_uuid,
