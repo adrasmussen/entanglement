@@ -68,7 +68,7 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                         TaskOption {
                             task_type: TaskType::ScanLibrary,
                             title: "Scan Library",
-                            description: "Scan the library for new or modified files and update the database.",
+                            description: "Scan the library for new files and update the database.",
                             icon: "🔍",
                             is_selected: selected_task() == TaskType::ScanLibrary,
                             on_select: move |_| selected_task.set(TaskType::ScanLibrary),
@@ -104,9 +104,9 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                             }
                             ul { style: "margin-top: var(--space-2); margin-left: var(--space-4); list-style-type: disc;",
                                 li { "New files will be added to the database." }
-                                li { "Modified files will have their metadata updated." }
                                 li { "Thumbnails will be generated for new media." }
-                                li { "Tags and metadata will be extracted where possible." }
+                                li { "Metadata will be extracted where possible." }
+                                li { "Coming soon: scripts will run to update metadata and tags." }
                             }
                         },
                         TaskType::CleanLibrary => rsx! {
@@ -114,9 +114,10 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                                 "This task will check for database entries that no longer exist in the filesystem and mark them accordingly."
                             }
                             ul { style: "margin-top: var(--space-2); margin-left: var(--space-4); list-style-type: disc;",
-                                li { "Missing files will be marked in the database." }
-                                li { "No files will be deleted from the filesystem." }
-                                li { "References to missing files will remain in collections." }
+                                li { "Missing symlinks to registered media will be recreated."}
+                                li { "Removed originals will have their database entries and thumbnails removed." }
+                                li { "References to missing files will be removed from collections." }
+                                li { "No originals will be deleted from the filesystem." }
                             }
                         },
                         TaskType::RunScripts => rsx! {
@@ -125,12 +126,11 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                                 li { "Custom metadata extraction may be performed." }
                                 li { "Format conversions may run if configured." }
                                 li { "Automated tagging may be performed." }
-                                li { "Results will be logged and can be viewed in the task history." }
                             }
                         },
                     }
                     p { style: "margin-top: var(--space-3); font-style: italic; color: var(--text-tertiary);",
-                        "Note: Tasks run in the background and you can continue using the application while they run."
+                        "Note: Tasks run in the background and you can continue using the application while they run.  For logs, contact the admins."
                     }
                 }
             }

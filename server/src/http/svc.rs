@@ -266,7 +266,7 @@ impl HttpEndpoint {
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant
         // middleware from the rest of the http module.  these must match the defitions used in the
-        // api crate (for the )
+        // api crate endpoint macro, link functions, and Dioxus.toml
         //
         // the fallback here is a bit weird, we need to be careful that it redirects properly with
         // the app router's own fallback
