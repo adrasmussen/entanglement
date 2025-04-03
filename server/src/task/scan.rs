@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     fs::{canonicalize, metadata},
+    hash::{DefaultHasher, Hash, Hasher},
     os::unix::fs::symlink,
     path::PathBuf,
     sync::{
@@ -11,7 +12,10 @@ use std::{
 
 use anyhow::Result;
 use chrono::Local;
-use tokio::task::JoinSet;
+use tokio::{
+    fs::{create_dir_all, remove_dir_all},
+    task::JoinSet,
+};
 use tracing::{debug, error, instrument, span, warn, Instrument, Level};
 use walkdir::WalkDir;
 
@@ -28,6 +32,7 @@ use common::{
     config::ESConfig,
     media::{
         image::{create_image_thumbnail, process_image},
+        video::{create_video_thumbnail, process_video},
         MediaData,
     },
 };
@@ -137,6 +142,12 @@ pub async fn scan_library(
         let warnings = warnings.clone();
         let context = context.clone();
 
+        // tasks have a scratch directory that is cleaned up on completion
+        let mut hasher = DefaultHasher::new();
+        path.hash(&mut hasher);
+
+        let scratchdir = PathBuf::from(format!("/tmp/entanglement/{}", hasher.finish()));
+
         // process the media and register it with the database
         //
         // to allow for easy error propagation, we let register_media() return Result<()> and then
@@ -145,10 +156,12 @@ pub async fn scan_library(
         // importantly, those warnings should be attached to the span associated with path, so we
         // set up the span outside instead of using #[instrument]
         if meta.is_file() {
+            create_dir_all(&scratchdir).await?;
+
             tasks.spawn({
                 let span = span!(Level::INFO, "register_media", path = ?path);
                 async move {
-                    match register_media(context, path).await {
+                    match register_media(context, path, &scratchdir).await {
                         Ok(()) => {
                             file_count.fetch_add(1, Ordering::Relaxed);
                         }
@@ -157,6 +170,7 @@ pub async fn scan_library(
                             warnings.fetch_add(1, Ordering::Relaxed);
                         }
                     }
+                    remove_dir_all(&scratchdir).await;
                 }
                 .instrument(span)
             });
@@ -204,7 +218,11 @@ pub async fn scan_library(
 }
 
 // maybe this can return a uuid so that we can link in the fs_walker
-async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> Result<()> {
+async fn register_media(
+    context: Arc<ScanContext>,
+    path: PathBuf,
+    scratchdir: &PathBuf,
+) -> Result<()> {
     debug!("started processing media");
 
     // first, check if the media already exists in the database
@@ -239,6 +257,7 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> Result<()> 
 
     let media_data: MediaData = match ext {
         "jpg" | "png" | "tiff" => process_image(&path).await?,
+        "mp4" => process_video(&path, &scratchdir).await?,
         _ => return Err(anyhow::Error::msg("no metadata collector for extension")),
     };
 
@@ -283,6 +302,14 @@ async fn register_media(context: Arc<ScanContext>, path: PathBuf) -> Result<()> 
             path.clone(),
             media_thumbnail_path(context.config.clone(), media_uuid),
         )?,
+        MediaMetadata::Video => {
+            create_video_thumbnail(
+                path.clone(),
+                media_thumbnail_path(context.config.clone(), media_uuid),
+                &scratchdir,
+            )
+            .await?
+        }
         _ => return Err(anyhow::Error::msg("no thumbnail method found")),
     }
 

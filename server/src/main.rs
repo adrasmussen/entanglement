@@ -25,7 +25,7 @@ use service::{ESMRegistry, EntanglementService};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
-        .with_max_level_hint(Level::DEBUG);
+        .with_max_level_hint(Level::INFO);
 
     let fmt_layer = tracing_subscriber::fmt::layer();
 

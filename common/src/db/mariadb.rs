@@ -80,7 +80,7 @@ impl DbBackend for MariaDBBackend {
         debug!({ media_path = media.path }, "adding media");
 
         let mut result = r"
-            INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, date, note, media_type)
+            INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, date, note, tags, media_type)
             SELECT
                 UUID_SHORT(),
                 :library_uuid,
@@ -90,6 +90,7 @@ impl DbBackend for MariaDBBackend {
                 :hidden,
                 :date,
                 :note,
+                :tags,
                 :media_type
             FROM
                 DUAL
@@ -109,6 +110,7 @@ impl DbBackend for MariaDBBackend {
             "hidden" => media.hidden,
             "date" => media.date,
             "note" => media.note,
+            "tags" => fold_set(media.tags)?,
             "media_type" => match media.metadata {
                 MediaMetadata::Image => "Image",
                 MediaMetadata::Video => "Video",

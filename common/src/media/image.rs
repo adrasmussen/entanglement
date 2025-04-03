@@ -19,7 +19,7 @@ pub fn hash_image(path: &PathBuf) -> Result<String> {
     Ok(hash.to_string())
 }
 
-#[instrument]
+#[instrument(skip_all)]
 pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
     debug!("starting processing image");
 
