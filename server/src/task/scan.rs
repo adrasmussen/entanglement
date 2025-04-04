@@ -37,6 +37,8 @@ use common::{
     },
 };
 
+const SCRATCH_DIR: &str = "/tmp/entanglement";
+
 #[derive(Clone, Debug)]
 struct ScanContext {
     config: Arc<ESConfig>,
@@ -146,7 +148,7 @@ pub async fn scan_library(
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
 
-        let scratchdir = PathBuf::from(format!("/tmp/entanglement/{}", hasher.finish()));
+        let scratchdir = PathBuf::from(format!("{SCRATCH_DIR}/{}", hasher.finish()));
 
         // process the media and register it with the database
         //
@@ -170,14 +172,23 @@ pub async fn scan_library(
                             warnings.fetch_add(1, Ordering::Relaxed);
                         }
                     }
-                    remove_dir_all(&scratchdir).await;
+                    match remove_dir_all(&scratchdir).await {
+                        Ok(_) => {}
+                        Err(err) => {
+                            warn!({dir = ?scratchdir}, "failed to remove scratch directory: {err}");
+                            warnings.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                 }
                 .instrument(span)
             });
         };
     }
 
+    // cleanup
     tasks.join_all().await;
+
+    remove_dir_all(SCRATCH_DIR).await?;
 
     let file_count = match Arc::into_inner(file_count) {
         Some(v) => v.into_inner(),
@@ -297,21 +308,22 @@ async fn register_media(
         media_original_path(context.config.clone(), media_uuid),
     )?;
 
+    let media_thumbnail_path = media_thumbnail_path(context.config.clone(), media_uuid);
+
     match media_data.metadata {
-        MediaMetadata::Image => create_image_thumbnail(
-            path.clone(),
-            media_thumbnail_path(context.config.clone(), media_uuid),
-        )?,
+        MediaMetadata::Image => {
+            Box::pin(create_image_thumbnail(&path, &media_thumbnail_path)).await?
+        }
         MediaMetadata::Video => {
-            create_video_thumbnail(
-                path.clone(),
-                media_thumbnail_path(context.config.clone(), media_uuid),
+            Box::pin(create_video_thumbnail(
+                &path,
+                &media_thumbnail_path,
                 &scratchdir,
-            )
+            ))
             .await?
         }
         _ => return Err(anyhow::Error::msg("no thumbnail method found")),
-    }
+    };
 
     debug!("finished processing media");
     Ok(())

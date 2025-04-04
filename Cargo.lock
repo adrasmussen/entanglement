@@ -487,6 +487,7 @@ dependencies = [
  "kamadak-exif",
  "mysql_async",
  "paste",
+ "regex",
  "saphyr",
  "serde",
  "serde_json",

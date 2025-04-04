@@ -1,14 +1,17 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use regex::Regex;
 use tokio::process::Command;
-use tracing::{info, debug, instrument};
+use tracing::{debug, instrument};
 
 use crate::media::{
     image::{create_image_thumbnail, hash_image},
     MediaData,
 };
 use api::media::MediaMetadata;
+
+// video calculations
 
 #[instrument(skip_all)]
 pub async fn process_video(path: &PathBuf, scratchdir: &PathBuf) -> Result<MediaData> {
@@ -18,19 +21,21 @@ pub async fn process_video(path: &PathBuf, scratchdir: &PathBuf) -> Result<Media
 
     create_video_ffmpeg_image(&path, &img_path).await?;
 
-    let hash = hash_image(&img_path)?;
+    let date = parse_video_metadata_dump(&path).await?;
+
+    let hash = hash_image(&img_path).await?;
 
     Ok(MediaData {
         hash: hash,
-        date: "".to_owned(),
+        date: date,
         metadata: MediaMetadata::Video,
     })
 }
 
 #[instrument(skip_all)]
 pub async fn create_video_thumbnail(
-    original_path: PathBuf,
-    thumbnail_path: PathBuf,
+    original_path: &PathBuf,
+    thumbnail_path: &PathBuf,
     scratchdir: &PathBuf,
 ) -> Result<()> {
     debug!("started creating video thumbnail");
@@ -40,7 +45,7 @@ pub async fn create_video_thumbnail(
     img_path.push("thumb.png");
 
     create_video_ffmpeg_image(&original_path, &img_path).await?;
-    create_image_thumbnail(img_path, thumbnail_path)?;
+    create_image_thumbnail(&img_path, thumbnail_path).await?;
 
     Ok(())
 }
@@ -52,11 +57,43 @@ async fn create_video_ffmpeg_image(original_path: &PathBuf, img_path: &PathBuf) 
         .args(["-i", &original_path.to_string_lossy()])
         .args(["-o", &img_path.to_string_lossy()])
         .kill_on_drop(true)
-        .output().await?;
+        .output()
+        .await?;
 
     if !handle.status.success() {
-        return Err(anyhow::Error::msg("ffmegthumbnailer failed to process the image"))
+        return Err(anyhow::Error::msg(
+            "ffmegthumbnailer failed to process the image",
+        ));
     }
 
     Ok(())
+}
+
+#[instrument]
+async fn parse_video_metadata_dump(original_path: &PathBuf) -> Result<String> {
+    let handle = Command::new("ffprobe")
+        .args(["-v", "quiet"])
+        .args(["-select_streams", "v:0"])
+        .args(["-show_entries", "stream_tags=creation_time"])
+        .args(["-output_format", "default=noprint_wrappers=1:nokey=1"])
+        .arg(original_path)
+        .kill_on_drop(true)
+        .output()
+        .await?;
+
+    if !handle.status.success() {
+        return Err(anyhow::Error::msg("ffprobe failed to process the media"));
+    }
+
+    // this is likely to come out as an rfc3339-formatted string, so do some
+    // minimal parsing to make it easily searchable
+    let out = String::from_utf8(handle.stdout)?;
+
+    let out = out.replace("T", " ");
+
+    if let Some(v) = out.split_once(".") {
+        return Ok(v.0.to_string())
+    } else {
+        return Ok(out.to_string())
+    }
 }

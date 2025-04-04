@@ -39,8 +39,6 @@ use crate::{
 use api::HTTP_URL_ROOT;
 use common::config::ESConfig;
 
-pub const RANGE_REGEX: &str = r"(\d*)-(\d*)";
-
 // http service
 //
 // the http service handles both api calls and streaming media, along
@@ -162,7 +160,9 @@ impl ESInner for HttpEndpoint {
             auth_svc_sender: registry.get(&ServiceType::Auth).unwrap().clone(),
             db_svc_sender: registry.get(&ServiceType::Db).unwrap().clone(),
             task_svc_sender: registry.get(&ServiceType::Task).unwrap().clone(),
-            range_regex: Arc::new(Regex::new(RANGE_REGEX)?),
+            // changes in this regex have to be accompanied by changing the capture match
+            // settings in stream.rs, or it will panic on every invocation
+            range_regex: Arc::new(Regex::new(r"(\d*)-(\d*)")?),
         })
     }
 

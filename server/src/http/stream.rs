@@ -218,7 +218,7 @@ fn parse_ranges(state: Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(
             // start is used in seek(), where 0 indicates "before the first byte."
             // it is zero-indexed.
             //
-            // end used to determine length, where 4 means "read the first four bytes."
+            // end is used to determine length, where 4 means "read the first four bytes."
             // it is one-indexed.
             //
             // however, both s and e in the "s-e" pattern are zero-indexed, and thus the
@@ -242,6 +242,8 @@ fn parse_ranges(state: Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(
                 //
                 // the difference in indexes is accounted for because e is going backwards
                 (None, Some(e)) => (length - e, length),
+                // if the range header is set but does not specify a by range, return the
+                // whole file to the client
                 (None, None) => (0, length),
             }
         }

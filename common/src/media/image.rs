@@ -3,45 +3,64 @@ use std::path::PathBuf;
 use anyhow::Result;
 use blockhash::blockhash256;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
-use tracing::{info_span, debug, instrument};
+use tokio::task::spawn_blocking;
+use tracing::{debug, instrument};
 
 use crate::media::MediaData;
 use api::media::MediaMetadata;
 
-pub fn hash_image(path: &PathBuf) -> Result<String> {
-    let span = info_span!("hash_image", path=?path);
-    let _ = span.enter();
+// image calculations
+//
+// unfortunately, the image crate is largely built from synchronous std::io tech, which
+// means spawn_blocking() wrappers on all of it to avoid jamming the runtime
 
-    let image = image::open(path)?;
+#[instrument(skip_all)]
+pub async fn hash_image(path: &PathBuf) -> Result<String> {
+    debug!("calculating hash");
 
-    let hash = blockhash256(&image);
+    let path = path.clone();
 
-    Ok(hash.to_string())
+    let hash = spawn_blocking(move || {
+        let image = image::open(path)?;
+
+        Result::<String>::Ok(blockhash256(&image).to_string())
+    })
+    .await??;
+
+    Ok(hash)
 }
 
 #[instrument(skip_all)]
 pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
-    debug!("starting processing image");
+    debug!("processing image");
+
+    let path = path.clone();
 
     // exif processing
     //
     // we attempt to read the exif metadata for the image to extract the date
     // following the exif docs, open the file synchronously and read from the container
-    let file = std::fs::File::open(path)?;
+    let (path, datetime_original) = spawn_blocking(move || {
+        let file = std::fs::File::open(&path)?;
 
-    let mut bufreader = std::io::BufReader::new(file);
+        let mut bufreader = std::io::BufReader::new(file);
 
-    let exifreader = exif::Reader::new();
+        let exifreader = exif::Reader::new();
 
-    let exif = exifreader.read_from_container(&mut bufreader)?;
+        let exif = exifreader.read_from_container(&mut bufreader)?;
 
-    // process the exif fields
-    let datetime_original = match exif.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY) {
-        Some(dto) => format!("{}", dto.display_value()),
-        None => String::from(""),
-    };
+        // process the exif fields
+        let datetime_original = match exif.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
+        {
+            Some(dto) => format!("{}", dto.display_value()),
+            None => String::from(""),
+        };
 
-    let hash = hash_image(path)?;
+        Result::<(PathBuf, String)>::Ok((path, datetime_original))
+    })
+    .await??;
+
+    let hash = hash_image(&path).await?;
 
     debug!("finshed processing image");
 
@@ -52,32 +71,36 @@ pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
     })
 }
 
-pub fn create_image_thumbnail(
-    original_path: PathBuf,
-    thumbnail_path: PathBuf,
+#[instrument]
+pub async fn create_image_thumbnail(
+    original_path: &PathBuf,
+    thumbnail_path: &PathBuf,
 ) -> Result<()> {
-    let span = info_span!("create_image_thumbnail", original_path=?original_path);
-    let _ = span.enter();
+    debug!("creating thumbnail");
 
-    debug!("started creating thumbnail");
+    let original_path = original_path.clone();
+    let thumbnail_path = thumbnail_path.clone();
 
-    let mut decoder = ImageReader::open(original_path.clone())?.into_decoder()?;
+    spawn_blocking(move || {
+        let mut decoder = ImageReader::open(original_path.clone())?.into_decoder()?;
 
-    // this both solves the crate version collision and corrects the orientation, too
-    let orientation = decoder.orientation()?;
+        // this both solves the crate version collision and corrects the orientation, too
+        let orientation = decoder.orientation()?;
 
-    debug!({orientation = ?orientation}, "orientation for image");
+        debug!({orientation = ?orientation}, "orientation for image");
 
-    let image = DynamicImage::from_decoder(decoder)?;
+        let image = DynamicImage::from_decoder(decoder)?;
 
-    // create the thumbnail with bounds, not exact sizing
-    let mut thumbnail = image.thumbnail(400, 400);
+        // create the thumbnail with bounds, not exact sizing
+        let mut thumbnail = image.thumbnail(400, 400);
 
-    thumbnail.apply_orientation(orientation);
+        thumbnail.apply_orientation(orientation);
 
-    thumbnail.save_with_format(thumbnail_path, ImageFormat::Png)?;
+        thumbnail.save_with_format(thumbnail_path, ImageFormat::Png)?;
 
-    debug!("finished creating thumbnail");
+        debug!("finished creating thumbnail");
 
-    Ok(())
+        Ok(())
+    })
+    .await?
 }
