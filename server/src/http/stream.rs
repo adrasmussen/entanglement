@@ -76,10 +76,12 @@ pub(super) async fn stream_media(
 
     // range header check
     //
-    // the client may or may not send this header, but we need to report the
-    // starting and ending bytes correctly
+    // this is the header that allows for seeking through videos, pause/resuming downloads,
+    // and all of the other magic associated with streaming media.  it works by specifying
+    // a byte range (with rather complicated rules, see below) which are then sent with a
+    // verification header back to the client
     //
-    // see below for the semantics on the "end" variable
+    // without this logic, browsers will have to buffer the whole file before they can seek.
     let (partial, (start, end)) = match headers.get(RANGE) {
         None => (false, (0, length)),
         Some(val) => (
@@ -92,14 +94,6 @@ pub(super) async fn stream_media(
             },
         ),
     };
-
-    // for some reason, my testing environment doesn't want to send this header, so i
-    // can't yet test it.  we could assume media is immutable, but that isn't strictly
-    // enforceable from within entanglement
-    // if let Some(mtime) = headers.get(IF_MODIFIED_SINCE) {...}
-
-    // cache controls?
-    // headers.insert(CACHE_CONTROL, ...)
 
     // http response headers
     //
@@ -144,6 +138,14 @@ pub(super) async fn stream_media(
         }
     }
 
+    // for some reason, my testing environment doesn't want to send this header, so i
+    // can't yet test it.  we could assume media is immutable, but that isn't strictly
+    // enforceable from within entanglement
+    // if let Some(mtime) = headers.get(IF_MODIFIED_SINCE) {...}
+
+    // cache controls?
+    // headers.insert(CACHE_CONTROL, ...)
+
     // http response body
     //
     // starting with the file handle, we first use tokio's AsyncRead to create a FramedRead,
@@ -161,8 +163,7 @@ pub(super) async fn stream_media(
 
         // then, we create a new stream that only has (end - start) bytes and use that
         //
-        // note the argument to take() has to account for the fact that byte count starts
-        // at zero, so see below
+        // note the argument to take() is one-indexed; see below for semantics
         Body::from_stream(
             FramedRead::new(file_handle, BytesCodec::new()).take((end - start).try_into()?),
         )

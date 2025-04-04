@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use regex::Regex;
 use tokio::process::Command;
 use tracing::{debug, instrument};
 
