@@ -48,7 +48,11 @@ pub struct ESConfig {
     // maximum number of tokio tasks use for running scan jobs,
     // which should be less than the number of OS threads since
     // some of the crates have blocking io calls
-    pub fs_scanner_threads: usize,
+    pub scan_threads: usize,
+
+    // temporary folder used by scanner for things like creating
+    // video thumbnails
+    pub scan_scratch: PathBuf,
 }
 
 // in order to extract the config table from a larger document, we need to specify it

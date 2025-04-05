@@ -37,8 +37,6 @@ use common::{
     },
 };
 
-const SCRATCH_DIR: &str = "/tmp/entanglement";
-
 #[derive(Clone, Debug)]
 struct ScanContext {
     config: Arc<ESConfig>,
@@ -92,6 +90,8 @@ pub async fn scan_library(
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
+    let scan_scratch = config.scan_scratch.join(library_uuid.to_string());
+
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
     for entry in WalkDir::new(config.media_srcdir.clone().join(library.path))
@@ -106,7 +106,7 @@ pub async fn scan_library(
 
         // we allow this to be configurable so that we don't swamp the media server when registering
         // a large collection of media
-        while tasks.len() > 8 {
+        while tasks.len() > config.scan_threads {
             tasks.join_next().await;
         }
 
@@ -148,7 +148,7 @@ pub async fn scan_library(
         let mut hasher = DefaultHasher::new();
         path.hash(&mut hasher);
 
-        let scratchdir = PathBuf::from(format!("{SCRATCH_DIR}/{}", hasher.finish()));
+        let file_scratch = scan_scratch.join(hasher.finish().to_string());
 
         // process the media and register it with the database
         //
@@ -158,12 +158,12 @@ pub async fn scan_library(
         // importantly, those warnings should be attached to the span associated with path, so we
         // set up the span outside instead of using #[instrument]
         if meta.is_file() {
-            create_dir_all(&scratchdir).await?;
+            create_dir_all(&file_scratch).await?;
 
             tasks.spawn({
                 let span = span!(Level::INFO, "register_media", path = ?path);
                 async move {
-                    match register_media(context, path, &scratchdir).await {
+                    match register_media(context, path, &file_scratch).await {
                         Ok(()) => {
                             file_count.fetch_add(1, Ordering::Relaxed);
                         }
@@ -172,10 +172,10 @@ pub async fn scan_library(
                             warnings.fetch_add(1, Ordering::Relaxed);
                         }
                     }
-                    match remove_dir_all(&scratchdir).await {
+                    match remove_dir_all(&file_scratch).await {
                         Ok(_) => {}
                         Err(err) => {
-                            warn!({dir = ?scratchdir}, "failed to remove scratch directory: {err}");
+                            warn!({dir = ?file_scratch}, "failed to remove scratch directory: {err}");
                             warnings.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -188,7 +188,7 @@ pub async fn scan_library(
     // cleanup
     tasks.join_all().await;
 
-    remove_dir_all(SCRATCH_DIR).await?;
+    remove_dir_all(scan_scratch).await?;
 
     let file_count = match Arc::into_inner(file_count) {
         Some(v) => v.into_inner(),
