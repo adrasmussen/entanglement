@@ -98,7 +98,7 @@ impl EntanglementService for HttpService {
         // don't have any relevant state and the message handlers are all fully concurrent
         let socket = SocketAddr::from(
             self.config
-                .http_socket
+                .http.socket
                 .parse::<SocketAddrV6>()
                 .expect("Failed to parse http_socket ipv6 address/port"),
         );
@@ -279,7 +279,7 @@ impl HttpEndpoint {
             .fallback(move || async move { Redirect::permanent(&format!("/{app_url_root}/app")) })
             .layer(TraceLayer::new_for_http())
             .route_layer(middleware::from_fn_with_state(
-                config.authn_proxy_header.clone().unwrap(),
+                config.proxyheader.clone().unwrap().header,
                 proxy_auth,
             ));
 

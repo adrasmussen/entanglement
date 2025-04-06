@@ -27,8 +27,14 @@ impl DbBackend for MariaDBBackend {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("creating MariaDB connection pool");
 
+        let url = config
+            .mariadb
+            .clone()
+            .expect("mariadb.url config not present")
+            .url;
+
         Ok(Self {
-            pool: Pool::new(config.mariadb_url.clone().as_str()),
+            pool: Pool::new(url.as_str()),
         })
     }
 

@@ -37,9 +37,10 @@ impl AuthzBackend for TomlAuthzFile {
     {
         let filename = PathBuf::from(
             config
-                .authz_toml_file
+                .tomlfile
                 .clone()
-                .ok_or_else(|| anyhow::Error::msg("authz_toml_file not set"))?,
+                .expect("tomlfile.filename not present")
+                .filename,
         );
 
         let doc = tokio::fs::read_to_string(filename).await?;
@@ -88,9 +89,10 @@ impl AuthnBackend for TomlAuthnFile {
     {
         let filename = PathBuf::from(
             config
-                .authn_toml_file
+                .tomlfile
                 .clone()
-                .ok_or_else(|| anyhow::Error::msg("authn_toml_file not set"))?,
+                .expect("tomlfile.filename not present")
+                .filename,
         );
 
         let doc = tokio::fs::read_to_string(filename).await?;

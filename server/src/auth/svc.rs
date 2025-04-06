@@ -67,33 +67,32 @@ impl EntanglementService for AuthService {
 
         // determine authn/authz providers from the global config file
         //
-        // each provider is tied to a particular field that, if set, means that we should try
-        // to set up a backend connected to that provider
-        match config.authn_proxy_header {
-            None => {}
-            Some(_) => {
-                state
-                    .add_authn_provider(ProxyAuth::new(config.clone()).await?)
-                    .await?;
-            }
+        // note that these will panic if the config is incomplete
+        if config
+            .authn_backend
+            .contains(&common::config::AuthnBackend::ProxyHeader)
+        {
+            state
+                .add_authn_provider(ProxyAuth::new(config.clone()).await?)
+                .await?;
         }
 
-        match config.authn_toml_file {
-            None => {}
-            Some(_) => {
-                state
-                    .add_authn_provider(TomlAuthnFile::new(config.clone()).await?)
-                    .await?;
-            }
+        if config
+            .authn_backend
+            .contains(&common::config::AuthnBackend::TomlFile)
+        {
+            state
+                .add_authn_provider(TomlAuthnFile::new(config.clone()).await?)
+                .await?;
         }
 
-        match config.authz_toml_file {
-            None => {}
-            Some(_) => {
-                state
-                    .add_authz_provider(TomlAuthzFile::new(config.clone()).await?)
-                    .await?;
-            }
+        if config
+            .authz_backend
+            .contains(&common::config::AuthzBackend::TomlFile)
+        {
+            state
+                .add_authz_provider(TomlAuthzFile::new(config.clone()).await?)
+                .await?;
         }
 
         // for the first pass, we don't need any further machinery for this service

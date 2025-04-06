@@ -90,7 +90,8 @@ pub async fn scan_library(
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
-    let scan_scratch = config.scan_scratch.join(library_uuid.to_string());
+    let scan_threads = config.task.scan_threads.clone();
+    let scan_scratch = config.task.scan_scratch.clone().join(library_uuid.to_string());
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
@@ -106,7 +107,7 @@ pub async fn scan_library(
 
         // we allow this to be configurable so that we don't swamp the media server when registering
         // a large collection of media
-        while tasks.len() > config.scan_threads {
+        while tasks.len() > scan_threads {
             tasks.join_next().await;
         }
 

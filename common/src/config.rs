@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -9,39 +8,74 @@ use tracing::{debug, instrument, Level};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ESConfig {
-    // header set by reverse proxy
-    pub authn_proxy_header: Option<String>,
+    pub authn_backend: Vec<AuthnBackend>,
+    pub authz_backend: Vec<AuthzBackend>,
+    pub db_backend: DbBackend,
 
-    // a toml file with usernames and passwords
-    pub authn_toml_file: Option<String>,
-
-    // set of groups with admin powers
-    pub authz_admin_groups: Option<HashSet<String>>,
-
-    // a toml file with group memberships
-    pub authz_toml_file: Option<String>,
-
-    pub http: HttpConfig,
-
+    // core services
     pub fs: FsConfig,
+    pub http: HttpConfig,
+    pub task: TaskConfig,
 
-    // ip and port for http server
-    pub http_socket: String,
-
-    // user, password, host, port, and database
-    pub mariadb_url: String,
-
-    // maximum number of tokio tasks use for running scan jobs,
-    // which should be less than the number of OS threads since
-    // some of the crates have blocking io calls
-    pub scan_threads: usize,
-
-    // temporary folder used by scanner for things like creating
-    // video thumbnails
-    pub scan_scratch: PathBuf,
+    // backends
+    pub mariadb: Option<MariaDbConfig>,
+    pub tomlfile: Option<TomlFileConfig>,
+    pub proxyheader: Option<ProxyHeaderConfig>,
 }
 
-enum Authn {}
+// authentication config options
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum AuthnBackend {
+    // header set by reverse proxy
+    ProxyHeader,
+    // a toml file with usernames and passwords
+    TomlFile,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProxyHeaderConfig {
+    pub header: String,
+}
+
+// authorization config options
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum AuthzBackend {
+    // a toml file with group memberships
+    TomlFile,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TomlFileConfig {
+    pub filename: PathBuf,
+}
+
+// database config options
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DbBackend {
+    MariaDB,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MariaDbConfig {
+    pub url: String,
+}
+
+// core service config options
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FsConfig {
+    // read-only source path where media can be located
+    //
+    // libraries should be subfolders of this path
+    pub media_srcdir: PathBuf,
+
+    // read-write path where symlinks are created, as
+    // well as subfolders for thumbnails and slices
+    pub media_srvdir: PathBuf,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HttpConfig {
@@ -59,15 +93,15 @@ pub struct HttpConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FsConfig {
-    // read-only source path where media can be located
-    //
-    // libraries should be subfolders of this path
-    pub media_srcdir: PathBuf,
+pub struct TaskConfig {
+    // maximum number of tokio tasks use for running scan jobs,
+    // which should be less than the number of OS threads since
+    // some of the crates have blocking io calls
+    pub scan_threads: usize,
 
-    // read-write path where symlinks are created, as
-    // well as subfolders for thumbnails and slices
-    pub media_srvdir: PathBuf,
+    // temporary folder used by scanner for things like creating
+    // video thumbnails
+    pub scan_scratch: PathBuf,
 }
 
 // in order to extract the config table from a larger document, we need to specify it
