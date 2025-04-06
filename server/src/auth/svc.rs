@@ -294,7 +294,7 @@ impl ESAuthService for AuthCache {
     }
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
-        Ok(self.authz_provider.groups_for_user(gid).await)
+        Ok(self.authz_provider.users_in_group(gid).await)
     }
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
