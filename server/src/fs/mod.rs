@@ -15,6 +15,7 @@ use common::config::ESConfig;
 // specific tasks, we leave the module in its own folder
 pub fn media_original_path(config: Arc<ESConfig>, media_uuid: MediaUuid) -> PathBuf {
     config
+        .fs
         .media_srvdir
         .join(ORIGINAL_PATH)
         .join(media_uuid.to_string())
@@ -22,6 +23,7 @@ pub fn media_original_path(config: Arc<ESConfig>, media_uuid: MediaUuid) -> Path
 
 pub fn media_thumbnail_path(config: Arc<ESConfig>, media_uuid: MediaUuid) -> PathBuf {
     config
+        .fs
         .media_srvdir
         .join(THUMBNAIL_PATH)
         .join(media_uuid.to_string())

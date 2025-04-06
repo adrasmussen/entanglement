@@ -117,7 +117,6 @@ impl From<anyhow::Error> for WebError {
 // these functions control how the webapp communicates with the server, either by
 // create the future directly or by providing a String that is interpreted by the
 // browser (img or a tags)
-
 #[macro_export]
 macro_rules! endpoint {
     ($name:ident) => {

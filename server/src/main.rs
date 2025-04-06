@@ -19,9 +19,6 @@ use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::{config::read_config, db::MariaDBBackend};
 use service::{ESMRegistry, EntanglementService};
 
-// the outermost caller should definitely have a loop that periodically calls
-// Status for each service to ensure that the threads haven't stopped, and then
-// gracefully stop the server after logging whatever the error was
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
@@ -35,7 +32,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("entanglement server starting up, processing config file");
 
-    // temporary dummy configuration -- this will eventually come from a parser
     let config = read_config(PathBuf::from(
         "/srv/home/alex/workspace/entanglement/dev/config.toml",
     ))
@@ -44,8 +40,8 @@ async fn main() -> anyhow::Result<()> {
     info!("performing filesystem sanity checks");
 
     // sanity checks
-    checks::create_temp_file(&config.media_srcdir).expect_err("media_srcdir is writeable");
-    checks::create_temp_file(&config.media_srvdir).expect("media_srvdir is not writeable");
+    checks::create_temp_file(&config.fs.media_srcdir).expect_err("media_srcdir is writeable");
+    checks::create_temp_file(&config.fs.media_srvdir).expect("media_srvdir is not writeable");
 
     checks::subdir_exists(&config, ORIGINAL_PATH)
         .expect("could not create thumbnail path in media_srvdir");

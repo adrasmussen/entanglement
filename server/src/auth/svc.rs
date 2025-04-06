@@ -68,12 +68,12 @@ impl EntanglementService for AuthService {
         // determine authn/authz providers from the global config file
         //
         // each provider is tied to a particular field that, if set, means that we should try
-        // to connect to that provider.  connect() may use other parts of the config struct
+        // to set up a backend connected to that provider
         match config.authn_proxy_header {
             None => {}
             Some(_) => {
                 state
-                    .add_authn_provider(ProxyAuth::connect(config.clone()).await?)
+                    .add_authn_provider(ProxyAuth::new(config.clone()).await?)
                     .await?;
             }
         }
@@ -82,7 +82,7 @@ impl EntanglementService for AuthService {
             None => {}
             Some(_) => {
                 state
-                    .add_authn_provider(TomlAuthnFile::connect(config.clone()).await?)
+                    .add_authn_provider(TomlAuthnFile::new(config.clone()).await?)
                     .await?;
             }
         }
@@ -91,7 +91,7 @@ impl EntanglementService for AuthService {
             None => {}
             Some(_) => {
                 state
-                    .add_authz_provider(TomlAuthzFile::connect(config.clone()).await?)
+                    .add_authz_provider(TomlAuthzFile::new(config.clone()).await?)
                     .await?;
             }
         }

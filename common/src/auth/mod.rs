@@ -19,7 +19,7 @@ pub mod tomlfile;
 // external connection, etc).
 #[async_trait]
 pub trait AuthzBackend: Display + Send + Sync + 'static {
-    async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
+    async fn new(config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized;
 
@@ -30,7 +30,7 @@ pub trait AuthzBackend: Display + Send + Sync + 'static {
 
 #[async_trait]
 pub trait AuthnBackend: Display + Send + Sync + 'static {
-    async fn connect(config: Arc<ESConfig>) -> anyhow::Result<Self>
+    async fn new(config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized;
 

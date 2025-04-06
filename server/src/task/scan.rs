@@ -94,7 +94,7 @@ pub async fn scan_library(
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
-    for entry in WalkDir::new(config.media_srcdir.clone().join(library.path))
+    for entry in WalkDir::new(config.fs.media_srcdir.clone().join(library.path))
         .same_file_system(true)
         .contents_first(true)
         .into_iter()

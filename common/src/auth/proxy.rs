@@ -10,7 +10,7 @@ pub struct ProxyAuth {}
 
 #[async_trait]
 impl AuthnBackend for ProxyAuth {
-    async fn connect(_config: Arc<ESConfig>) -> anyhow::Result<Self>
+    async fn new(_config: Arc<ESConfig>) -> anyhow::Result<Self>
     where
         Self: Sized,
     {

@@ -62,7 +62,7 @@ pub fn subdir_exists(config: &Arc<ESConfig>, subdir: &str) -> anyhow::Result<()>
         )));
     }
 
-    let full_subdir = config.media_srvdir.join(subdir);
+    let full_subdir = config.fs.media_srvdir.join(subdir);
 
     if !exists(&full_subdir)? {
         create_dir(&full_subdir)?;

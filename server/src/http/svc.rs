@@ -215,7 +215,7 @@ impl HttpEndpoint {
         //
         // it should be baked into a containerized runtime for the server, but does not
         // necessarily have to be so (it can be hosted outside)
-        let app_web_dir = config.http_doc_root.clone();
+        let app_web_dir = config.http.doc_root.clone();
 
         // the dioxsus build process creates a /dist folder after compiling the actual
         // app in /target, and we just grab the whole thing and serve it using tower's

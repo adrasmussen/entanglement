@@ -21,29 +21,15 @@ pub struct ESConfig {
     // a toml file with group memberships
     pub authz_toml_file: Option<String>,
 
+    pub http: HttpConfig,
+
+    pub fs: FsConfig,
+
     // ip and port for http server
     pub http_socket: String,
 
-    // http url root, since we should be running behind a
-    // reverse proxy
-    //
-    // currently set at compile time, see api lib.rs
-    //pub http_url_root: String,
-
-    // location of wasm app
-    pub http_doc_root: String,
-
     // user, password, host, port, and database
     pub mariadb_url: String,
-
-    // read-only source path where media can be located
-    //
-    // libraries should be subfolders of this path
-    pub media_srcdir: PathBuf,
-
-    // read-write path where symlinks are created, as
-    // well as subfolders for thumbnails and slices
-    pub media_srvdir: PathBuf,
 
     // maximum number of tokio tasks use for running scan jobs,
     // which should be less than the number of OS threads since
@@ -53,6 +39,35 @@ pub struct ESConfig {
     // temporary folder used by scanner for things like creating
     // video thumbnails
     pub scan_scratch: PathBuf,
+}
+
+enum Authn {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpConfig {
+    // ip and port for http server
+    pub socket: String,
+
+    // http url root, since we should be running behind a
+    // reverse proxy
+    //
+    // currently set at compile time, see api lib.rs
+    //pub url_root: String,
+
+    // location of wasm app
+    pub doc_root: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FsConfig {
+    // read-only source path where media can be located
+    //
+    // libraries should be subfolders of this path
+    pub media_srcdir: PathBuf,
+
+    // read-write path where symlinks are created, as
+    // well as subfolders for thumbnails and slices
+    pub media_srvdir: PathBuf,
 }
 
 // in order to extract the config table from a larger document, we need to specify it

@@ -61,7 +61,7 @@ pub(super) async fn stream_media(
     //
     // dir is usually one of several constants, and could hypothetically be
     // an enum or similar if there end up being too many variants
-    let filename = state.config.media_srvdir.join(dir).join(&media_uuid);
+    let filename = state.config.fs.media_srvdir.join(dir).join(&media_uuid);
 
     // here and below we use tokio logic to handle the filesystem operations
     // so that we don't block the server threads
@@ -122,6 +122,7 @@ pub(super) async fn stream_media(
         read_link(
             state
                 .config
+                .fs
                 .media_srvdir
                 .join(ORIGINAL_PATH)
                 .join(media_uuid),

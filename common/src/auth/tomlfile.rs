@@ -31,7 +31,7 @@ pub struct TomlAuthzFile {
 
 #[async_trait]
 impl AuthzBackend for TomlAuthzFile {
-    async fn connect(config: Arc<ESConfig>) -> Result<Self>
+    async fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
@@ -82,7 +82,7 @@ pub struct TomlAuthnFile {
 
 #[async_trait]
 impl AuthnBackend for TomlAuthnFile {
-    async fn connect(config: Arc<ESConfig>) -> Result<Self>
+    async fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
