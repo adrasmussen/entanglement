@@ -31,7 +31,7 @@ pub struct TomlAuthzFile {
 
 #[async_trait]
 impl AuthzBackend for TomlAuthzFile {
-    async fn new(config: Arc<ESConfig>) -> Result<Self>
+    fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
@@ -43,7 +43,7 @@ impl AuthzBackend for TomlAuthzFile {
                 .filename,
         );
 
-        let doc = tokio::fs::read_to_string(filename).await?;
+        let doc = std::fs::read_to_string(filename)?;
 
         let data: Self = toml::from_str(&doc)?;
 
@@ -83,7 +83,7 @@ pub struct TomlAuthnFile {
 
 #[async_trait]
 impl AuthnBackend for TomlAuthnFile {
-    async fn new(config: Arc<ESConfig>) -> Result<Self>
+    fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
@@ -95,7 +95,7 @@ impl AuthnBackend for TomlAuthnFile {
                 .filename,
         );
 
-        let doc = tokio::fs::read_to_string(filename).await?;
+        let doc = std::fs::read_to_string(filename)?;
 
         let data: Self = toml::from_str(&doc)?;
 

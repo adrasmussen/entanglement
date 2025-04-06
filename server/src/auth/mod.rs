@@ -19,8 +19,6 @@ trait ESAuthService: ESInner {
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()>;
 
     // authz
-    async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()>;
-
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>>;
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>>;
@@ -32,8 +30,6 @@ trait ESAuthService: ESInner {
     async fn owns_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool>;
 
     // authn
-    async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()>;
-
     async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool>;
 
     async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool>;

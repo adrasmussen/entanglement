@@ -1,6 +1,6 @@
-use std::fmt::Display;
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::auth::AuthnBackend;
@@ -10,7 +10,7 @@ pub struct ProxyAuth {}
 
 #[async_trait]
 impl AuthnBackend for ProxyAuth {
-    async fn new(_config: Arc<ESConfig>) -> anyhow::Result<Self>
+    fn new(_config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {

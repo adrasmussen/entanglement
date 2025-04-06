@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
@@ -65,36 +64,6 @@ impl EntanglementService for AuthService {
         let receiver = self.receiver.clone();
         let state = Arc::new(AuthCache::new(config.clone(), registry.clone())?);
 
-        // determine authn/authz providers from the global config file
-        //
-        // note that these will panic if the config is incomplete
-        if config
-            .authn_backend
-            .contains(&common::config::AuthnBackend::ProxyHeader)
-        {
-            state
-                .add_authn_provider(ProxyAuth::new(config.clone()).await?)
-                .await?;
-        }
-
-        if config
-            .authn_backend
-            .contains(&common::config::AuthnBackend::TomlFile)
-        {
-            state
-                .add_authn_provider(TomlAuthnFile::new(config.clone()).await?)
-                .await?;
-        }
-
-        if config
-            .authz_backend
-            .contains(&common::config::AuthzBackend::TomlFile)
-        {
-            state
-                .add_authz_provider(TomlAuthzFile::new(config.clone()).await?)
-                .await?;
-        }
-
         // for the first pass, we don't need any further machinery for this service
         //
         // however, if we want things like timers, batching updates, or other optimizations,
@@ -135,8 +104,8 @@ impl EntanglementService for AuthService {
 
 pub struct AuthCache {
     registry: ESMRegistry,
-    authn_providers: Arc<Mutex<Vec<Box<dyn AuthnBackend>>>>,
-    authz_providers: Arc<Mutex<Vec<Box<dyn AuthzBackend>>>>,
+    authn_provider: Box<dyn AuthnBackend>,
+    authz_provider: Box<dyn AuthzBackend>,
     // uid: set(gid)
     user_cache: Arc<AwaitCache<String, HashSet<String>>>,
     // media_uuid: set(gid)
@@ -144,14 +113,33 @@ pub struct AuthCache {
     user_regex: Regex,
     group_regex: Regex,
 }
+/*
+type ProvFut<P> = Pin<Box<dyn Future<Output = Result<Box<dyn P>>>>>;
+
+async fn box_provider<T: P>(
+    fut: Pin<Box<dyn Future<Output = Result<T>>>>,
+) -> Pin<Box<dyn Future<Output = Result<Box<dyn P>>>>> {
+    let prov = fut.await?;
+    Ok(Box::new(prov) as Box<dyn P>)
+}
+*/
 
 #[async_trait]
 impl ESInner for AuthCache {
-    fn new(_config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+        let authn_provider: Box<dyn AuthnBackend> = match config.authn_backend {
+            common::config::AuthnBackend::ProxyHeader => Box::new(ProxyAuth::new(config.clone())?),
+            common::config::AuthnBackend::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),
+        };
+
+        let authz_provider: Box<dyn AuthzBackend> = match config.authz_backend {
+            common::config::AuthzBackend::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
+        };
+
         Ok(AuthCache {
             registry: registry.clone(),
-            authn_providers: Arc::new(Mutex::new(Vec::new())),
-            authz_providers: Arc::new(Mutex::new(Vec::new())),
+            authn_provider: authn_provider,
+            authz_provider: authz_provider,
             user_cache: Arc::new(AwaitCache::new()),
             access_cache: Arc::new(AwaitCache::new()),
             user_regex: Regex::new(USER_REGEX)?,
@@ -217,33 +205,25 @@ impl ESInner for AuthCache {
 // these two functions are the interface with the particular details of the providers and
 // the way the media authorization scheme works
 impl AuthCache {
-    // this is called to populate the user cache for a particular user, and calls all of the
-    // configured providers to get group information
+    // this is called to populate the user cache for a particular user
     //
     // thus, it is the best singular place to check group validity, as it ensure that only
     // valid groups make it into the cache
     async fn groups_from_providers(&self, uid: String) -> anyhow::Result<HashSet<String>> {
-        let mut groups = HashSet::new();
-
         if !self.is_valid_user(uid.clone()).await? {
             return Err(anyhow::Error::msg("invalid uid"));
         }
 
-        let authz_providers = self.authz_providers.clone();
+        let mut groups = self.authz_provider.groups_for_user(uid.clone()).await;
 
-        let authz_providers = authz_providers.lock().await;
-
-        for provider in authz_providers.iter() {
-            let mut newgroups = provider.groups_for_user(uid.clone()).await;
-
-            // only keep valid groups from the returned set
-            newgroups.retain(|s| self.group_regex.is_match(s));
-            groups.extend(newgroups);
-        }
+        groups.retain(|s| self.group_regex.is_match(s));
 
         Ok(groups)
     }
 
+    // for a given media_uuid, this is the db lookup that establishes which groups are allowed
+    // to access that media.  it does not implement any caching itself, and should always be
+    // up-to-date when called
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
         let db_svc_sender = self.registry.get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -300,18 +280,6 @@ impl ESAuthService for AuthCache {
 
     // authz
     #[instrument(skip_all)]
-    async fn add_authz_provider(&self, provider: impl AuthzBackend) -> anyhow::Result<()> {
-        info!({provider = %provider});
-
-        let authz_providers = self.authz_providers.clone();
-
-        let mut authz_providers = authz_providers.lock().await;
-
-        authz_providers.push(Box::new(provider));
-
-        Ok(())
-    }
-
     // CACHE LOOKUP FUNCTION
     //
     // this is the primary access method for the user AwaitCache
@@ -326,18 +294,16 @@ impl ESAuthService for AuthCache {
     }
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
-        // note that this should return a sensible error if the group does not exist
-        Ok(HashSet::from([
-            "alex".to_string(),
-            "cat".to_string(),
-            "astrid".to_string(),
-        ]))
+        Ok(self.authz_provider.groups_for_user(gid).await)
     }
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
         Ok(gid.intersection(&self.groups_for_user(uid).await?).count() > 0)
     }
 
+    // CACHE LOOKUP FUNCTION
+    //
+    // this is the primary access method for the media AwaitCache
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
@@ -395,50 +361,18 @@ impl ESAuthService for AuthCache {
 
     // authn
     #[instrument(skip_all)]
-    async fn add_authn_provider(&self, provider: impl AuthnBackend) -> anyhow::Result<()> {
-        info!({provider = %provider});
-
-        let authn_providers = self.authn_providers.clone();
-
-        let mut authn_providers = authn_providers.lock().await;
-
-        authn_providers.push(Box::new(provider));
-
-        Ok(())
-    }
-
     async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool> {
-        let authn_providers = self.authn_providers.clone();
-
-        let authn_providers = authn_providers.lock().await;
-
-        for provider in authn_providers.iter() {
-            if provider
-                .authenticate_user(uid.clone(), password.clone())
-                .await
-            {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
+        Ok(self
+            .authn_provider
+            .authenticate_user(uid.clone(), password.clone())
+            .await)
     }
 
     async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool> {
-        let authn_providers = self.authn_providers.clone();
-
         if !self.user_regex.is_match(&uid) {
             return Err(anyhow::Error::msg("invalid uid"));
         }
 
-        let authn_providers = authn_providers.lock().await;
-
-        for provider in authn_providers.iter() {
-            if provider.is_valid_user(uid.clone()).await {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
+        Ok(self.authn_provider.is_valid_user(uid.clone()).await)
     }
 }

@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio;
@@ -8,8 +7,8 @@ use tracing::{debug, instrument, Level};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ESConfig {
-    pub authn_backend: Vec<AuthnBackend>,
-    pub authz_backend: Vec<AuthzBackend>,
+    pub authn_backend: AuthnBackend,
+    pub authz_backend: AuthzBackend,
     pub db_backend: DbBackend,
 
     // core services

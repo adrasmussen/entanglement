@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-use std::fmt::Display;
-use std::sync::Arc;
+use std::{collections::HashSet, fmt::Display, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::config::ESConfig;
@@ -14,12 +13,11 @@ pub mod tomlfile;
 //
 // see notes in server/src/auth/svc.rs about why the is_group_member() can spam messages
 //
-// failures in the connect methods will prevent the server from starting correctly, and
-// each provider should handle their own failures appropriately (unknown user, dropped
-// external connection, etc).
+// TODO -- make all of these functions correctly falliable, and ensure that they have
+// some sort of retry logic built in
 #[async_trait]
 pub trait AuthzBackend: Display + Send + Sync + 'static {
-    async fn new(config: Arc<ESConfig>) -> anyhow::Result<Self>
+    fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;
 
@@ -30,7 +28,7 @@ pub trait AuthzBackend: Display + Send + Sync + 'static {
 
 #[async_trait]
 pub trait AuthnBackend: Display + Send + Sync + 'static {
-    async fn new(config: Arc<ESConfig>) -> anyhow::Result<Self>
+    fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;
 

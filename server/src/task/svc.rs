@@ -5,6 +5,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use chrono::Local;
 use dashmap::{DashMap, Entry};
+use futures::Future;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use tokio::{
     sync::{Mutex, RwLock},
@@ -257,7 +258,7 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        let task_future: Pin<Box<dyn futures::Future<Output = Result<i64>> + Send>> =
+        let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> =
             match task_type {
                 TaskType::ScanLibrary => Box::pin(scan_library(
                     self.config.clone(),
