@@ -21,9 +21,9 @@ pub trait AuthzBackend: Display + Send + Sync + 'static {
     where
         Self: Sized;
 
-    async fn groups_for_user(&self, uid: String) -> HashSet<String>;
+    async fn groups_for_user(&self, uid: String) -> Result<HashSet<String>>;
 
-    async fn users_in_group(&self, gid: String) -> HashSet<String>;
+    async fn users_in_group(&self, gid: String) -> Result<HashSet<String>>;
 }
 
 #[async_trait]
@@ -32,7 +32,7 @@ pub trait AuthnBackend: Display + Send + Sync + 'static {
     where
         Self: Sized;
 
-    async fn authenticate_user(&self, uid: String, password: String) -> bool;
+    async fn authenticate_user(&self, uid: String, password: String) -> Result<bool>;
 
-    async fn is_valid_user(&self, uid: String) -> bool;
+    async fn is_valid_user(&self, uid: String) -> Result<bool>;
 }

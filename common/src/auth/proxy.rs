@@ -6,6 +6,9 @@ use async_trait::async_trait;
 use crate::auth::AuthnBackend;
 use crate::config::ESConfig;
 
+// reverse proxy authentication
+//
+// stub module for when all http calls are handled via the reverse proxy
 pub struct ProxyAuth {}
 
 #[async_trait]
@@ -17,13 +20,13 @@ impl AuthnBackend for ProxyAuth {
         Ok(ProxyAuth {})
     }
 
-    async fn authenticate_user(&self, _uid: String, _password: String) -> bool {
-        true
+    async fn authenticate_user(&self, _uid: String, _password: String) -> Result<bool> {
+        Ok(true)
     }
 
     // TODO -- coordinate with the middleware to actually verify things
-    async fn is_valid_user(&self, _uid: String) -> bool {
-        true
+    async fn is_valid_user(&self, _uid: String) -> Result<bool> {
+        Ok(true)
     }
 }
 

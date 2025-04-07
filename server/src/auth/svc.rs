@@ -113,16 +113,6 @@ pub struct AuthCache {
     user_regex: Regex,
     group_regex: Regex,
 }
-/*
-type ProvFut<P> = Pin<Box<dyn Future<Output = Result<Box<dyn P>>>>>;
-
-async fn box_provider<T: P>(
-    fut: Pin<Box<dyn Future<Output = Result<T>>>>,
-) -> Pin<Box<dyn Future<Output = Result<Box<dyn P>>>>> {
-    let prov = fut.await?;
-    Ok(Box::new(prov) as Box<dyn P>)
-}
-*/
 
 #[async_trait]
 impl ESInner for AuthCache {
@@ -214,7 +204,7 @@ impl AuthCache {
             return Err(anyhow::Error::msg("invalid uid"));
         }
 
-        let mut groups = self.authz_provider.groups_for_user(uid.clone()).await;
+        let mut groups = self.authz_provider.groups_for_user(uid.clone()).await?;
 
         groups.retain(|s| self.group_regex.is_match(s));
 
@@ -294,7 +284,7 @@ impl ESAuthService for AuthCache {
     }
 
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
-        Ok(self.authz_provider.users_in_group(gid).await)
+        self.authz_provider.users_in_group(gid).await
     }
 
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
@@ -362,10 +352,9 @@ impl ESAuthService for AuthCache {
     // authn
     #[instrument(skip_all)]
     async fn authenticate_user(&self, uid: String, password: String) -> anyhow::Result<bool> {
-        Ok(self
-            .authn_provider
+        self.authn_provider
             .authenticate_user(uid.clone(), password.clone())
-            .await)
+            .await
     }
 
     async fn is_valid_user(&self, uid: String) -> anyhow::Result<bool> {
@@ -373,6 +362,6 @@ impl ESAuthService for AuthCache {
             return Err(anyhow::Error::msg("invalid uid"));
         }
 
-        Ok(self.authn_provider.is_valid_user(uid.clone()).await)
+        self.authn_provider.is_valid_user(uid.clone()).await
     }
 }
