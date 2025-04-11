@@ -86,12 +86,14 @@ impl DbBackend for MariaDBBackend {
         debug!({ media_path = media.path }, "adding media");
 
         let mut result = r"
-            INSERT INTO media (media_uuid, library_uuid, path, hash, mtime, hidden, date, note, tags, media_type)
+            INSERT INTO media (media_uuid, library_uuid, path, size, fhash, phash, mtime, hidden, date, note, tags, media_type)
             SELECT
                 UUID_SHORT(),
                 :library_uuid,
                 :path,
-                :hash,
+                :size,
+                :fhash,
+                :phash,
                 :mtime,
                 :hidden,
                 :date,
@@ -111,7 +113,9 @@ impl DbBackend for MariaDBBackend {
         .with(params! {
             "library_uuid" => media.library_uuid,
             "path" => media.path.clone(),
-            "hash" => media.hash,
+            "size" => media.size,
+            "fhash" => media.chash,
+            "phash" => media.phash,
             "mtime" => Local::now().timestamp(),
             "hidden" => media.hidden,
             "date" => media.date,
@@ -148,7 +152,7 @@ impl DbBackend for MariaDBBackend {
         debug!({ media_uuid = media_uuid }, "getting media details");
 
         let mut media_result = r"
-            SELECT library_uuid, path, hash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
+            SELECT library_uuid, path, size, fhash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
             "media_uuid" => media_uuid,
         })
@@ -160,6 +164,8 @@ impl DbBackend for MariaDBBackend {
         let media_data = match media_result.pop() {
             Some(row) => from_row_opt::<(
                 LibraryUuid,
+                String,
+                u64,
                 String,
                 String,
                 i64,
@@ -208,13 +214,15 @@ impl DbBackend for MariaDBBackend {
             Media {
                 library_uuid: media_data.0,
                 path: media_data.1,
-                hash: media_data.2,
-                mtime: media_data.3,
-                hidden: media_data.4,
-                date: media_data.5,
-                note: media_data.6,
-                tags: unfold_set(&media_data.7),
-                metadata: match media_data.8.as_str() {
+                size: media_data.2,
+                chash: media_data.3,
+                phash: media_data.4,
+                mtime: media_data.5,
+                hidden: media_data.6,
+                date: media_data.7,
+                note: media_data.8,
+                tags: unfold_set(&media_data.9),
+                metadata: match media_data.10.as_str() {
                     "Image" => MediaMetadata::Image,
                     "Video" => MediaMetadata::Video,
                     "VideoSlice" => MediaMetadata::VideoSlice,

@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    fs::{canonicalize, metadata},
+    fs::canonicalize,
     hash::{DefaultHasher, Hash, Hasher},
     os::unix::fs::symlink,
     path::PathBuf,
@@ -12,8 +12,11 @@ use std::{
 
 use anyhow::Result;
 use chrono::Local;
+use hex::encode;
+use sha2::{Digest, Sha512};
 use tokio::{
-    fs::{create_dir_all, remove_dir_all},
+    fs::{create_dir_all, metadata, remove_dir_all, File},
+    io::{AsyncReadExt, BufReader},
     task::JoinSet,
 };
 use tracing::{debug, error, instrument, span, warn, Instrument, Level};
@@ -91,7 +94,11 @@ pub async fn scan_library(
     let mut tasks: JoinSet<()> = JoinSet::new();
 
     let scan_threads = config.task.scan_threads.clone();
-    let scan_scratch = config.task.scan_scratch.clone().join(library_uuid.to_string());
+    let scan_scratch = config
+        .task
+        .scan_scratch
+        .clone()
+        .join(library_uuid.to_string());
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
@@ -131,7 +138,7 @@ pub async fn scan_library(
             }
         };
 
-        let meta = match metadata(&path) {
+        let meta = match metadata(&path).await {
             Ok(meta) => meta,
             Err(err) => {
                 warn!({path = ?path}, "failed to parse metadata: {err}");
@@ -257,8 +264,31 @@ async fn register_media(
         .await?;
 
     if rx.await??.is_some() {
+        debug!("media already exists in database");
         return Ok(());
     }
+
+    // then calculate the hash and size
+    //
+    // this is in a block to ensure that the File gets dropped appropriately
+    let (size, chash) = {
+        let file = File::open(&path).await?;
+
+        let size = file.metadata().await?.len();
+
+        let mut hasher = Sha512::new();
+
+        let mut buffer = [0; 8192];
+
+        // TODO -- perf tuning
+        let mut reader = BufReader::with_capacity(8182, file);
+
+        while reader.read(&mut buffer).await? > 0 {
+            hasher.update(buffer);
+        }
+
+        (size, encode(hasher.finalize()))
+    };
 
     // match the metadata collector via file extension
     let ext = path
@@ -266,6 +296,10 @@ async fn register_media(
         .map(|f| f.to_str())
         .flatten()
         .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
+
+
+    // check for duplicate files
+
 
     let media_data: MediaData = match ext {
         "jpg" | "png" | "tiff" => process_image(&path).await?,
@@ -277,7 +311,9 @@ async fn register_media(
     let media = Media {
         library_uuid: context.library_uuid,
         path: pathstr.clone(),
-        hash: media_data.hash,
+        size: size,
+        chash,
+        phash: media_data.hash,
         mtime: Local::now().timestamp(),
         hidden: false,
         date: media_data.date,

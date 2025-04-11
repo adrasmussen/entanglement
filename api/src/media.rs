@@ -23,7 +23,9 @@ pub enum MediaMetadata {
 pub struct Media {
     pub library_uuid: LibraryUuid,
     pub path: String,
-    pub hash: String,
+    pub size: u64,
+    pub chash: String,
+    pub phash: String,
     pub mtime: i64,
     pub hidden: bool,
     pub date: String,
