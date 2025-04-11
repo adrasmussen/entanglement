@@ -25,6 +25,11 @@ pub enum DbMsg {
         resp: ESMResp<Option<MediaUuid>>,
         path: String,
     },
+    GetMediaUuidByCHash {
+        resp: ESMResp<Option<MediaUuid>>,
+        library_uuid: LibraryUuid,
+        chash: String,
+    },
     UpdateMedia {
         resp: ESMResp<()>,
         media_uuid: MediaUuid,

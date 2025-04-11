@@ -10,6 +10,7 @@ use api::{
 pub mod msg;
 pub mod scan;
 pub mod svc;
+pub mod scan_utils;
 
 #[async_trait]
 pub trait ESTaskService: ESInner {
