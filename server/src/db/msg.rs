@@ -35,6 +35,11 @@ pub enum DbMsg {
         media_uuid: MediaUuid,
         update: MediaUpdate,
     },
+    ReplaceMediaPath {
+        resp: ESMResp<()>,
+        media_uuid: MediaUuid,
+        path: String,
+    },
     SearchMedia {
         resp: ESMResp<Vec<MediaUuid>>,
         gid: HashSet<String>,

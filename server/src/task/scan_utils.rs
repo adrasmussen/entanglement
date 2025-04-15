@@ -3,6 +3,7 @@ use std::{
     fs::Metadata,
     path::PathBuf,
     sync::{atomic::AtomicI64, Arc},
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -11,10 +12,11 @@ use dashmap::DashSet;
 use hex::encode;
 use sha2::{Digest, Sha512};
 use tokio::{
-    fs::{canonicalize, metadata, symlink, File},
+    fs::{canonicalize, create_dir_all, metadata, symlink, try_exists, File},
     io::{AsyncReadExt, BufReader},
+    time::timeout,
 };
-use tracing::{debug, error, info, span, warn, Instrument, Level};
+use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
 use walkdir::DirEntry;
 
 use crate::{
@@ -59,27 +61,6 @@ async fn content_hash(path: &PathBuf) -> Result<String> {
     Ok(encode(hasher.finalize()))
 }
 
-// this can run on the outside, before anyone has
-async fn path_exists_in_database(context: Arc<ScanContext>, pathstr: &String) -> Result<bool> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    context
-        .db_svc_sender
-        .send(
-            DbMsg::GetMediaUuidByPath {
-                resp: tx,
-                path: pathstr.clone(),
-            }
-            .into(),
-        )
-        .await?;
-
-    Ok(rx
-        .await??
-        .inspect(|_| debug!("media already exists in database"))
-        .is_some())
-}
-
 struct ScanContext {
     config: Arc<ESConfig>,
     library_uuid: LibraryUuid,
@@ -90,7 +71,7 @@ struct ScanContext {
     scratch_base: PathBuf,
 }
 
-struct FileScan {
+pub struct FileScan {
     context: Arc<ScanContext>,
     path: PathBuf,
     pathstr: String,
@@ -109,7 +90,10 @@ impl Drop for FileScan {
 }
 
 impl FileScan {
-    async fn new(context: Arc<ScanContext>, entry: walkdir::Result<DirEntry>) -> Result<Option<Self>> {
+    async fn new(
+        context: Arc<ScanContext>,
+        entry: walkdir::Result<DirEntry>,
+    ) -> Result<Option<Self>> {
         let context = context.clone();
 
         let (path, metadata) = get_path_and_metadata(entry).await?;
@@ -121,13 +105,15 @@ impl FileScan {
 
         // since this struct represents a media file that we want to reason about, we immediately skip
         // any file whose path already exists in the database... before we do any expensive computation
-        if path_exists_in_database(context.clone(), &pathstr).await? {
-            return Ok(None)
+        if FileScan::path_exists_in_database(context.clone(), &pathstr).await? {
+            return Ok(None);
         }
 
         let hash = content_hash(&path).await?;
 
         let scratch_dir = context.scratch_base.join(&hash);
+
+        create_dir_all(&scratch_dir).await?;
 
         Ok(Some(FileScan {
             context,
@@ -137,6 +123,26 @@ impl FileScan {
             hash,
             scratch_dir,
         }))
+    }
+
+    async fn path_exists_in_database(context: Arc<ScanContext>, pathstr: &String) -> Result<bool> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        context
+            .db_svc_sender
+            .send(
+                DbMsg::GetMediaUuidByPath {
+                    resp: tx,
+                    path: pathstr.clone(),
+                }
+                .into(),
+            )
+            .await?;
+
+        Ok(rx
+            .await??
+            .inspect(|_| debug!("media already exists in database"))
+            .is_some())
     }
 
     async fn hash_exists_in_database(&self) -> Result<Option<MediaUuid>> {
@@ -159,25 +165,30 @@ impl FileScan {
         Ok(result)
     }
 
+    async fn timed_register(&self) -> Result<()> {
+        //let timeout = self.context.config.scan_timeout;
+        let register_timeout = Duration::from_secs(300);
 
-    // deduplication thoughts
-    //
-    // if each media_uuid has a list of paths, then the scanner can memoize any duplicates
-    // during the scan and update the paths all at the end (which avoids row locks in the
-    // the database).  DashMap<String, Option<Vec<String>> could work, where None indicates
-    // that a thread is doing the hard work and Some(Vec) are any duplicates encountered.
-    //
-    // in this model, only the concurrent registration check needs to put paths into the
-    // bucket -- media
+        timeout(
+            register_timeout,
+            self.register()
+                .instrument(span!(Level::INFO, "register_media", path = self.pathstr)),
+        )
+        .await?
+    }
 
+    // media registration
     async fn register(&self) -> Result<()> {
+        debug!("processing media");
+
         // concurrent registration check
         //
         // for the deduplicator to run in a sane way, we need to first ensure that only
         // one instance of a particular content hash is (possibly) being added to the
         // database at a time.
         if self.context.chashes.insert(self.hash.clone()) {
-            return Err(anyhow::Error::msg("duplicate media found"));
+            debug!("duplicate media found");
+            return Ok(());
         }
 
         // moved media check
@@ -190,13 +201,49 @@ impl FileScan {
         // check will ensure that we only do this once.  however, there are no guarantees
         // about which file will be reached first.
         if let Some(media_uuid) = self.hash_exists_in_database().await? {
-            // get_media(media_uuid)
-            // if exists(PathBuf::from(media.path)) {
-            // db.send(ReplaceMediaPath(media_uuid, self.pathstr))
-            //
-            // suggests creation of MediaThumbnail and MediaLink objects
-            // }
-            todo!()
+            let media = {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.context
+                    .db_svc_sender
+                    .send(
+                        DbMsg::GetMedia {
+                            resp: tx,
+                            media_uuid: media_uuid,
+                        }
+                        .into(),
+                    )
+                    .await?;
+                rx.await??
+                    .ok_or_else(|| {
+                        anyhow::Error::msg(
+                            "internal error: failed to find media after locating hash",
+                        )
+                    })?
+                    .0
+            };
+
+            if !try_exists(&media.path).await? {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.context
+                    .db_svc_sender
+                    .send(
+                        DbMsg::ReplaceMediaPath {
+                            resp: tx,
+                            media_uuid: media_uuid,
+                            path: self.pathstr.to_owned(),
+                        }
+                        .into(),
+                    )
+                    .await?;
+
+                rx.await??;
+
+                self.create_links(media_uuid, media.metadata).await?;
+                return Ok(());
+            }
+        } else {
+            debug!("duplicate media found");
+            return Ok(());
         }
 
         // match the metadata collector via file extension
@@ -243,9 +290,23 @@ impl FileScan {
 
         let media_uuid = rx.await??;
 
+        self.create_links(media_uuid, media_data.metadata).await?;
+
+        debug!("finished processing media");
+        Ok(())
+    }
+
+    #[instrument(skip(self, media_metadata))]
+    async fn create_links(
+        &self,
+        media_uuid: MediaUuid,
+        media_metadata: MediaMetadata,
+    ) -> Result<()> {
         // once the media is successfully registered, we create the symlink and thumbnails
         //
         // cleaner tasks will also re-create these if something goes wrong
+        debug!("creating symlinks and thumbnails");
+
         symlink(
             self.path.clone(),
             media_original_path(self.context.config.clone(), media_uuid),
@@ -254,7 +315,7 @@ impl FileScan {
 
         let media_thumbnail_path = media_thumbnail_path(self.context.config.clone(), media_uuid);
 
-        match media_data.metadata {
+        match media_metadata {
             MediaMetadata::Image => {
                 Box::pin(create_image_thumbnail(&self.path, &media_thumbnail_path)).await?
             }
@@ -269,7 +330,6 @@ impl FileScan {
             _ => return Err(anyhow::Error::msg("no thumbnail method found")),
         };
 
-        debug!("finished processing media");
         Ok(())
     }
 }
