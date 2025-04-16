@@ -270,7 +270,9 @@ impl HttpEndpoint {
         // api crate endpoint macro, link functions, and Dioxus.toml
         //
         // the fallback here is a bit weird, we need to be careful that it redirects properly with
-        // the app router's own fallback
+        // the app router's own fallback.
+        //
+        // see also api/lib.rs for endpoint functions that depend on the nesting paths
         //
         // TODO -- generalize the auth middleware correctly
         let router = Router::new()

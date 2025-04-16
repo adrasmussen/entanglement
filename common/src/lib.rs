@@ -28,10 +28,9 @@ pub const GROUP_REGEX: &str = r"^[a-zA-Z0-9_.-]{1,64}$";
 // since by construction we write infrequently, it suffices to check that the things we are
 // cloning (small HashSets) are not too big/costly
 //
-// it still uses a DashMap... which is problematic because there are weird issues holding the
-// lock across an await, which is exactly what we do here with init.await
-//
-// before this is goes into production, we should check this carefully
+// note that there have historically been some issues with DashMap and holding references across
+// await boundaries, but they have largely been cleared up
+#[derive(Debug)]
 pub struct AwaitCache<K: Eq + Hash + Clone, V: Clone> {
     items: DashMap<K, Arc<AsyncCell<V>>>,
 }

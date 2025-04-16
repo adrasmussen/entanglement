@@ -46,7 +46,7 @@ pub fn fold_set(set: HashSet<String>) -> anyhow::Result<String> {
         .contains(&true)
     {
         return Err(anyhow::Error::msg(format!(
-            "invalid character in folded set: '{}'",
+            "internal error: invalid character in folded set '{}'",
             FOLDING_SEPARATOR
         )));
     }
@@ -58,7 +58,7 @@ pub fn fold_set(set: HashSet<String>) -> anyhow::Result<String> {
             FOLDING_SEPARATOR
                 .chars()
                 .next()
-                .ok_or_else(|| anyhow::Error::msg("folding separator const is zero length"))?,
+                .ok_or_else(|| anyhow::Error::msg("internal error: folding separator const is zero length"))?,
         )
         .to_string())
 }
