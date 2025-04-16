@@ -243,7 +243,7 @@ impl ESTaskService for TaskRunner {
         //
         // this an mpsc channel instead of oneshot so that we can clone the sender out of the struct
         // easily (no extra Option<> layer or similar)
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(64);
+        let (abort_tx, mut abort_rx) = tokio::sync::mpsc::channel::<()>(64);
 
         let sender = self.registry().get(&ServiceType::Task)?;
 
@@ -274,7 +274,7 @@ impl ESTaskService for TaskRunner {
         //
         // this is a wrapper future around the actual task, which lets us use tokio::select!
         // to either await its completion or cancel, and send a message either way
-        let watcher = async move {
+        let watcher_future = async move {
             debug!("task watcher starting");
 
             let task_handle = spawn(task_future);
@@ -284,8 +284,9 @@ impl ESTaskService for TaskRunner {
             let abort_handle = task_handle.abort_handle();
 
             debug!("task watcher waiting");
+
             let (status, warnings) = tokio::select! {
-                _ = rx.recv() => {
+                _ = abort_rx.recv() => {
                     info!("aborting task");
                     abort_handle.abort();
                     (TaskStatus::Aborted, None)
@@ -307,10 +308,16 @@ impl ESTaskService for TaskRunner {
 
             };
 
+            // ensure that the write lock is expeditiously freed in stop_task(), as the CompleteTask
+            // will be need the lock to take() the current task
+            abort_rx.close();
+
             // since the watcher future should not be able to fail, we collect all of the various
-            // failure modes and print their errors
+            // failure modes associated with sending the completin message and print their errors
             let (tx, rx) = tokio::sync::oneshot::channel();
 
+            // this blocks on the write lock for the running task, since we need it to take() the
+            // running task from the Option and put it into the ringbuffer
             match async {
                 sender
                     .send(
@@ -324,6 +331,7 @@ impl ESTaskService for TaskRunner {
                         .into(),
                     )
                     .await?;
+
                 rx.await??;
 
                 Result::<()>::Ok(())
@@ -338,11 +346,14 @@ impl ESTaskService for TaskRunner {
 
         // strictly speaking, we're not using this handle for anything and dropping it does not
         // abort the future.  however, it's possible we will need it later for shutdown logic
-        let handle = spawn(watcher);
+        let handle = spawn(watcher_future);
 
+        // we still have the write lock on the currently running task, but in principle the task
+        // may have already completed and sent the message to complete_task().  thus, even if we
+        // immediately take() the running task, it was still TaskStatus::Running for a short time.
         *running_task = Some(RunningTask {
             task: task,
-            cancel: tx,
+            cancel: abort_tx,
             _handle: handle,
         });
 
@@ -356,6 +367,11 @@ impl ESTaskService for TaskRunner {
         })?;
 
         // the cancel channel requires a mutable borrow, so we need the write() lock
+        //
+        // if the task completes after we grab this lock, then it will close the abort_rx receiver with
+        // the watcher_future and the message will fail to send.  however, we are just trying to send
+        // a message, not modify the task status/ring buffer, and so the completion message should go
+        // as normal and the resulting Error is spurious.
         let mut running_task = rt_entry.write().await;
 
         let running_task = running_task.as_mut().ok_or_else(|| {
@@ -391,7 +407,6 @@ impl ESTaskService for TaskRunner {
                 let mut vec = ring.to_vec();
                 vec.reverse();
                 out.append(&mut vec);
-                //out.append(&mut ring.iter().map(|e| e.clone()).collect::<Vec<Task>>())
             }
         };
 
@@ -411,7 +426,7 @@ impl ESTaskService for TaskRunner {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
         })?;
 
-        // hold the option lock just long enough to take() the running task from the mutex
+        // hold the option lock just long enough to take() the running task
         let completed_task = {
             let mut running_task = rt_entry.write().await;
 

@@ -342,11 +342,7 @@ impl ScanFile {
     // media should go here as well.  it may be that we split out this function if its internals are
     // useful for the dedup or cleaning tasks.
     #[instrument(skip(self, media_metadata))]
-    async fn install(
-        &self,
-        media_uuid: MediaUuid,
-        media_metadata: MediaMetadata,
-    ) -> Result<()> {
+    async fn install(&self, media_uuid: MediaUuid, media_metadata: MediaMetadata) -> Result<()> {
         debug!("creating symlinks and thumbnails");
 
         // symlink

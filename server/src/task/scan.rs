@@ -10,13 +10,13 @@ use tokio::{
     fs::{create_dir_all, remove_dir_all},
     task::JoinSet,
 };
-use tracing::{debug, instrument, span, warn, Instrument, Level};
+use tracing::{debug, error, instrument, span, warn, Instrument, Level};
 use walkdir::WalkDir;
 
 use crate::{
     db::msg::DbMsg,
     service::{ESMRegistry, ServiceType},
-    task::scan_utils::{get_path_and_metadata, ScanFile, ScanContext},
+    task::scan_utils::{get_path_and_metadata, ScanContext, ScanFile},
 };
 use api::library::{LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
@@ -77,6 +77,8 @@ pub async fn scan_library(
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
+    debug!("library scan beginning filesystem walk");
+
     for entry in WalkDir::new(config.fs.media_srcdir.clone().join(library.path))
         .same_file_system(true)
         .contents_first(true)
@@ -84,6 +86,7 @@ pub async fn scan_library(
     {
         // check this first so that a database channel closure doesn't generate a ton of logs
         if context.db_svc_sender.is_closed() {
+            error!("library scan task stopped -- database service cannot be reached");
             return Err(anyhow::Error::msg("database esm channel dropped"));
         };
 
@@ -103,31 +106,32 @@ pub async fn scan_library(
         let (path, metadata) = get_path_and_metadata(entry).await?;
 
         if metadata.is_file() {
-        let file = match ScanFile::new(context.clone(), path.clone(), metadata).await? {
-            Some(v) => v,
-            None => {
-                context.file_count.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
-        };
+            let file = match ScanFile::new(context.clone(), path.clone(), metadata).await? {
+                Some(v) => v,
+                None => {
+                    context.file_count.fetch_add(1, Ordering::Relaxed);
+                    continue;
+                }
+            };
 
-        tasks.spawn({
-            let context = context.clone();
+            tasks.spawn({
+                let context = context.clone();
 
-            async move {
-                match file.timed_register().await {
-                    Ok(()) => {
-                        context.file_count.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(err) => {
-                        warn!("scan error: {err:?}");
-                        context.warnings.fetch_add(1, Ordering::Relaxed);
+                async move {
+                    match file.timed_register().await {
+                        Ok(()) => {
+                            context.file_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(err) => {
+                            warn!("scan error: {err:?}");
+                            context.warnings.fetch_add(1, Ordering::Relaxed);
+                        }
                     }
                 }
-            }
-            .instrument(span!(Level::INFO, "register_media", path = ?path))
-        });
-    }}
+                .instrument(span!(Level::INFO, "register_media", path = ?path))
+            });
+        }
+    }
 
     // cleanup
     tasks.join_all().await;

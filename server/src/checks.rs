@@ -1,6 +1,8 @@
-use std::fs::{canonicalize, create_dir, exists, read, remove_file, write};
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{
+    fs::{canonicalize, create_dir, exists, read, remove_file, write},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use anyhow;
 use rand::random;
