@@ -114,7 +114,7 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                                 "This task will check for database entries that no longer exist in the filesystem and mark them accordingly."
                             }
                             ul { style: "margin-top: var(--space-2); margin-left: var(--space-4); list-style-type: disc;",
-                                li { "Missing symlinks to registered media will be recreated."}
+                                li { "Missing symlinks to registered media will be recreated." }
                                 li { "Removed originals will have their database entries and thumbnails removed." }
                                 li { "References to missing files will be removed from collections." }
                                 li { "No originals will be deleted from the filesystem." }

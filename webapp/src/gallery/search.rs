@@ -69,39 +69,39 @@ pub fn GallerySearch() -> Element {
                         div {
                             class: "advanced-search-options",
                             style: "
-                                margin-top: -16px;
-                                margin-bottom: var(--space-6);
-                                padding: var(--space-4);
-                                background-color: var(--neutral-50);
-                                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-                                box-shadow: var(--shadow-sm);
-                                border-top: 1px solid var(--neutral-200);
-                                animation: slide-down 0.2s ease-out;
-                            ",
+                                                        margin-top: -16px;
+                                                        margin-bottom: var(--space-6);
+                                                        padding: var(--space-4);
+                                                        background-color: var(--neutral-50);
+                                                        border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+                                                        box-shadow: var(--shadow-sm);
+                                                        border-top: 1px solid var(--neutral-200);
+                                                        animation: slide-down 0.2s ease-out;
+                                                    ",
                             h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Search Options" }
-
+                        
                             // Tabs navigation
                             div {
                                 class: "tabs-navigation",
                                 style: "
-                                    display: flex;
-                                    border-bottom: 1px solid var(--neutral-200);
-                                    margin-bottom: var(--space-4);
-                                ",
-
+                                                            display: flex;
+                                                            border-bottom: 1px solid var(--neutral-200);
+                                                            margin-bottom: var(--space-4);
+                                                        ",
+                        
                                 button {
                                     class: if active_tab() == "text" { "tab-button active" } else { "tab-button" },
                                     style: "
-                                        padding: var(--space-2) var(--space-4);
-                                        background: none;
-                                        border: none;
-                                        border-bottom: 3px solid transparent;
-                                        cursor: pointer;
-                                        font-weight: 500;
-                                        color: var(--text-secondary);
-                                        transition: all var(--transition-fast) var(--easing-standard);
-                                        margin-right: var(--space-2);
-                                        "
+                                                                        padding: var(--space-2) var(--space-4);
+                                                                        background: none;
+                                                                        border: none;
+                                                                        border-bottom: 3px solid transparent;
+                                                                        cursor: pointer;
+                                                                        font-weight: 500;
+                                                                        color: var(--text-secondary);
+                                                                        transition: all var(--transition-fast) var(--easing-standard);
+                                                                        margin-right: var(--space-2);
+                                                                        "
                                         .to_string()
                                         + if active_tab() == "text" {
                                             "color: var(--primary); border-bottom-color: var(--primary);"
@@ -109,23 +109,23 @@ pub fn GallerySearch() -> Element {
                                             ""
                                         },
                                     onclick: move |_| active_tab.set("text"),
-
+                        
                                     "Text Search"
                                 }
-
+                        
                                 button {
                                     class: if active_tab() == "date" { "tab-button active" } else { "tab-button" },
                                     style: "
-                                        padding: var(--space-2) var(--space-4);
-                                        background: none;
-                                        border: none;
-                                        border-bottom: 3px solid transparent;
-                                        cursor: pointer;
-                                        font-weight: 500;
-                                        color: var(--text-secondary);
-                                        transition: all var(--transition-fast) var(--easing-standard);
-                                        margin-right: var(--space-2);
-                                        "
+                                                                        padding: var(--space-2) var(--space-4);
+                                                                        background: none;
+                                                                        border: none;
+                                                                        border-bottom: 3px solid transparent;
+                                                                        cursor: pointer;
+                                                                        font-weight: 500;
+                                                                        color: var(--text-secondary);
+                                                                        transition: all var(--transition-fast) var(--easing-standard);
+                                                                        margin-right: var(--space-2);
+                                                                        "
                                         .to_string()
                                         + if active_tab() == "date" {
                                             "color: var(--primary); border-bottom-color: var(--primary);"
@@ -133,23 +133,23 @@ pub fn GallerySearch() -> Element {
                                             ""
                                         },
                                     onclick: move |_| active_tab.set("date"),
-
+                        
                                     "Date Filters"
                                 }
-
+                        
                                 button {
                                     class: if active_tab() == "metadata" { "tab-button active" } else { "tab-button" },
                                     style: "
-                                        padding: var(--space-2) var(--space-4);
-                                        background: none;
-                                        border: none;
-                                        border-bottom: 3px solid transparent;
-                                        cursor: pointer;
-                                        font-weight: 500;
-                                        color: var(--text-secondary);
-                                        transition: all var(--transition-fast) var(--easing-standard);
-                                        margin-right: var(--space-2);
-                                        "
+                                                                        padding: var(--space-2) var(--space-4);
+                                                                        background: none;
+                                                                        border: none;
+                                                                        border-bottom: 3px solid transparent;
+                                                                        cursor: pointer;
+                                                                        font-weight: 500;
+                                                                        color: var(--text-secondary);
+                                                                        transition: all var(--transition-fast) var(--easing-standard);
+                                                                        margin-right: var(--space-2);
+                                                                        "
                                         .to_string()
                                         + if active_tab() == "metadata" {
                                             "color: var(--primary); border-bottom-color: var(--primary);"
@@ -157,22 +157,22 @@ pub fn GallerySearch() -> Element {
                                             ""
                                         },
                                     onclick: move |_| active_tab.set("metadata"),
-
+                        
                                     "Metadata"
                                 }
-
+                        
                                 button {
                                     class: if active_tab() == "similar" { "tab-button active" } else { "tab-button" },
                                     style: "
-                                        padding: var(--space-2) var(--space-4);
-                                        background: none;
-                                        border: none;
-                                        border-bottom: 3px solid transparent;
-                                        cursor: pointer;
-                                        font-weight: 500;
-                                        color: var(--text-secondary);
-                                        transition: all var(--transition-fast) var(--easing-standard);
-                                        "
+                                                                        padding: var(--space-2) var(--space-4);
+                                                                        background: none;
+                                                                        border: none;
+                                                                        border-bottom: 3px solid transparent;
+                                                                        cursor: pointer;
+                                                                        font-weight: 500;
+                                                                        color: var(--text-secondary);
+                                                                        transition: all var(--transition-fast) var(--easing-standard);
+                                                                        "
                                         .to_string()
                                         + if active_tab() == "similar" {
                                             "color: var(--primary); border-bottom-color: var(--primary);"
@@ -180,14 +180,14 @@ pub fn GallerySearch() -> Element {
                                             ""
                                         },
                                     onclick: move |_| active_tab.set("similar"),
-
+                        
                                     "Similar Media"
                                 }
                             }
-
+                        
                             // Tab content
                             div { class: "tab-content", style: "min-height: 200px;",
-
+                        
                                 match active_tab() {
                                     "text" => rsx! {
                                         div { class: "text-search-options",
@@ -205,7 +205,7 @@ pub fn GallerySearch() -> Element {
                                                     "Search in file names, descriptions, and tags"
                                                 }
                                             }
-
+                                        
                                             div { style: "display: flex; gap: var(--space-4); margin-top: var(--space-4);",
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "Search Mode" }
@@ -215,7 +215,7 @@ pub fn GallerySearch() -> Element {
                                                         option { value: "exact", "Exact Phrase" }
                                                     }
                                                 }
-
+                                        
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "Case Sensitive" }
                                                     div { style: "display: flex; align-items: center; height: 38px;", // Match height of select
@@ -237,13 +237,13 @@ pub fn GallerySearch() -> Element {
                                                     label { class: "form-label", "From Date" }
                                                     input { class: "form-input", r#type: "date" }
                                                 }
-
+                                        
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "To Date" }
                                                     input { class: "form-input", r#type: "date" }
                                                 }
                                             }
-
+                                        
                                             div { class: "form-group", style: "margin-top: var(--space-4);",
                                                 label { class: "form-label", "Quick Date Ranges" }
                                                 div { style: "display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2);",
@@ -269,13 +269,13 @@ pub fn GallerySearch() -> Element {
                                                         option { value: "audio", "Audio Only" }
                                                     }
                                                 }
-
+                                        
                                                 div { class: "form-group", style: "flex: 1;",
                                                     label { class: "form-label", "Tags" }
                                                     input { class: "form-input", placeholder: "Enter tags separated by |" }
                                                 }
                                             }
-
+                                        
                                             div { class: "form-group", style: "margin-top: var(--space-4);",
                                                 label { class: "form-label", "Show Hidden Files" }
                                                 div { style: "display: flex; align-items: center;",
@@ -294,7 +294,7 @@ pub fn GallerySearch() -> Element {
                                             p { style: "margin-bottom: var(--space-4); color: var(--text-secondary);",
                                                 "Find media that are similar to a specific item."
                                             }
-
+                                        
                                             div { class: "form-group",
                                                 label { class: "form-label", "Media UUID" }
                                                 div { style: "display: flex; gap: var(--space-2);",
@@ -306,7 +306,7 @@ pub fn GallerySearch() -> Element {
                                                     button { class: "btn btn-secondary", "Browse..." }
                                                 }
                                             }
-
+                                        
                                             div { class: "form-group", style: "margin-top: var(--space-4);",
                                                 label { class: "form-label", "Similarity Threshold" }
                                                 select { class: "form-select",
@@ -323,24 +323,24 @@ pub fn GallerySearch() -> Element {
                                     },
                                 }
                             }
-
+                        
                             // Action buttons
                             div {
                                 class: "advanced-search-actions",
                                 style: "
-                                    display: flex;
-                                    justify-content: flex-end;
-                                    margin-top: var(--space-4);
-                                    padding-top: var(--space-4);
-                                    border-top: 1px solid var(--neutral-200);
-                                ",
-
+                                                            display: flex;
+                                                            justify-content: flex-end;
+                                                            margin-top: var(--space-4);
+                                                            padding-top: var(--space-4);
+                                                            border-top: 1px solid var(--neutral-200);
+                                                        ",
+                        
                                 button {
                                     class: "btn btn-secondary",
                                     style: "margin-right: var(--space-2);",
                                     "Reset Filters"
                                 }
-
+                        
                                 button { class: "btn btn-primary", "Apply Filters" }
                             }
                         }

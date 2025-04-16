@@ -266,7 +266,11 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn get_media_uuid_by_chash(&self, library_uuid: LibraryUuid, chash: String) -> Result<Option<MediaUuid>> {
+    async fn get_media_uuid_by_chash(
+        &self,
+        library_uuid: LibraryUuid,
+        chash: String,
+    ) -> Result<Option<MediaUuid>> {
         debug!(
             { media_chash = chash },
             "searching for media by content hash"

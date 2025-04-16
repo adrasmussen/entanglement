@@ -91,8 +91,8 @@ async fn parse_video_metadata_dump(original_path: &PathBuf) -> Result<String> {
     let out = out.replace("T", " ");
 
     if let Some(v) = out.split_once(".") {
-        return Ok(v.0.to_string())
+        return Ok(v.0.to_string());
     } else {
-        return Ok(out.to_string())
+        return Ok(out.to_string());
     }
 }

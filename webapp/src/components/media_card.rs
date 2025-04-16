@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::Route;
-use api::{thumbnail_link, media::*};
+use api::{media::*, thumbnail_link};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaCardProps {

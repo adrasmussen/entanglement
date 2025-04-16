@@ -39,7 +39,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("performing filesystem sanity checks");
 
-    // sanity checks
     checks::create_temp_file(&config.fs.media_srcdir).expect_err("media_srcdir is writeable");
     checks::create_temp_file(&config.fs.media_srvdir).expect("media_srvdir is not writeable");
 
@@ -52,7 +51,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("starting core services");
 
-    // start the core services
     let registry = ESMRegistry::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);

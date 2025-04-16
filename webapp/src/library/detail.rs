@@ -3,7 +3,10 @@ use dioxus_router::prelude::*;
 
 use crate::{
     common::{local_time, storage::*},
-    components::{modal::{MODAL_STACK, ModalBox, Modal}, search_bar::SearchBar},
+    components::{
+        modal::{Modal, ModalBox, MODAL_STACK},
+        search_bar::SearchBar,
+    },
     library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
 };
@@ -86,7 +89,6 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             .split_whitespace()
             .map(|s| s.to_owned())
             .collect();
-
 
         search_media_in_library(&SearchMediaInLibraryReq {
             library_uuid,

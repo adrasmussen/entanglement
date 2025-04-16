@@ -36,7 +36,11 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>>;
 
-    async fn get_media_uuid_by_chash(&self, library_uuid: LibraryUuid, chash: String) -> Result<Option<MediaUuid>>;
+    async fn get_media_uuid_by_chash(
+        &self,
+        library_uuid: LibraryUuid,
+        chash: String,
+    ) -> Result<Option<MediaUuid>>;
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()>;
 

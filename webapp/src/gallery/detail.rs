@@ -171,8 +171,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                 }
 
                 // Right column - All metadata, collections, and comments (scrollable)
-                div {
-                    class: "media-detail-sidebar",
+                div { class: "media-detail-sidebar",
 
                     // Media metadata form
                     div { class: "detail-section",

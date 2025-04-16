@@ -132,8 +132,8 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let media = media_data.media;
 
     let formatted_time = local_time(collection.mtime);
-    let formatted_tags =
-        fold_set(collection.tags.clone()).unwrap_or_else(|_| "invalid tags, contact admins".to_string());
+    let formatted_tags = fold_set(collection.tags.clone())
+        .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
     rsx! {
         div { class: "container",

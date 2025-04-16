@@ -120,7 +120,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                             }
                         }
                         tbody {
-                            for (library_uuid, library) in library_details {
+                            for (library_uuid , library) in library_details {
                                 tr {
                                     key: "{library_uuid}",
                                     style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",

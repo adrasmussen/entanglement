@@ -53,13 +53,13 @@ pub fn LibrarySearch() -> Element {
                     div {
                         class: "error-state",
                         style: "
-                            padding: var(--space-4);
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            margin-top: var(--space-4);
-                            color: var(--error);
-                            text-align: center;
-                        ",
+                                                padding: var(--space-4);
+                                                background-color: var(--surface);
+                                                border-radius: var(--radius-lg);
+                                                margin-top: var(--space-4);
+                                                color: var(--error);
+                                                text-align: center;
+                                            ",
                         "Error: {err}"
                     }
                 },
@@ -67,12 +67,12 @@ pub fn LibrarySearch() -> Element {
                     div {
                         class: "loading-state libraries-table",
                         style: "
-                            margin-top: var(--space-4);
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            overflow: hidden;
-                            box-shadow: var(--shadow-sm);
-                        ",
+                                                margin-top: var(--space-4);
+                                                background-color: var(--surface);
+                                                border-radius: var(--radius-lg);
+                                                overflow: hidden;
+                                                box-shadow: var(--shadow-sm);
+                                            ",
                         // Library table skeleton loading UI
                         table { style: "width: 100%; border-collapse: collapse;",
                             thead {
