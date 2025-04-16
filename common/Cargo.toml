@@ -24,3 +24,5 @@ blockhash = "1.0.0"
 kamadak-exif = "0.6.1"
 regex = "1.11.1"
 ldap3 = { version = "0.11.5", features = ["tokio-rustls", "x509-parser"] }
+sha2 = "0.10.8"
+hex = "0.4.3"

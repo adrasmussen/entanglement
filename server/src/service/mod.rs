@@ -58,14 +58,14 @@ impl ESMRegistry {
             Some(w) => {
                 self.0.clone().insert(k, w);
                 return Err(anyhow::Error::msg(
-                    "internal compile time error -- a sender was added twice to the registry",
+                    "internal error: a sender was added twice to the registry",
                 ));
             }
         }
     }
 
     pub fn get(&self, k: &ServiceType) -> Result<ESMSender> {
-        Ok(self.0.get(k).ok_or_else(|| anyhow::Error::msg(format!("internal compile time error -- a service was started without a necessary dependency ({:?})", k)))?.clone())
+        Ok(self.0.get(k).ok_or_else(|| anyhow::Error::msg(format!("internal error: a service was started without a necessary dependency ({:?})", k)))?.clone())
     }
 }
 

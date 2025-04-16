@@ -57,10 +57,13 @@ pub(super) async fn stream_media(
     }
 
     // the layout of the srv directory is completely controlled by the server,
-    // so we could hypothetically move this around as much as we wanted
+    // so we could move this around as much as we wanted for better control
     //
     // dir is usually one of several constants, and could hypothetically be
     // an enum or similar if there end up being too many variants
+    //
+    // see also task/scan_utils.rs for the functions that control how new media
+    // is added to the streaming directories.
     let filename = state.config.fs.media_srvdir.join(dir).join(&media_uuid);
 
     // here and below we use tokio logic to handle the filesystem operations

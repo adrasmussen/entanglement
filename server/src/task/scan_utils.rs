@@ -12,11 +12,8 @@ use std::{
 use anyhow::Result;
 use chrono::Local;
 use dashmap::DashSet;
-use hex::encode;
-use sha2::{Digest, Sha512};
 use tokio::{
-    fs::{canonicalize, create_dir_all, metadata, remove_file, symlink, try_exists, File},
-    io::{AsyncReadExt, BufReader},
+    fs::{canonicalize, create_dir_all, metadata, remove_file, symlink, try_exists},
     time::timeout,
 };
 use tracing::{debug, instrument, span, warn, Level};
@@ -34,36 +31,76 @@ use api::{
 use common::{
     config::ESConfig,
     media::{
+        content_hash,
         image::{create_image_thumbnail, process_image},
         video::{create_video_thumbnail, process_video},
         MediaData,
     },
 };
 
-// probably move this defintion to common::media
-async fn get_path_and_metadata(entry: walkdir::Result<DirEntry>) -> Result<(PathBuf, Metadata)> {
+// scan_utils
+//
+// this module is mostly tooling for running library scans, including convenience functions,
+// a global scan context, and a per-file context that automatically drops any filesystem
+// resources needed to process the incoming media.
+pub async fn get_path_and_metadata(
+    entry: walkdir::Result<DirEntry>,
+) -> Result<(PathBuf, Metadata)> {
     let entry = entry?;
     let path = canonicalize(entry.path()).await?;
     let metadata = metadata(&path).await?;
     Ok((path, metadata))
 }
 
-async fn content_hash(path: &PathBuf) -> Result<String> {
-    let file = File::open(&path).await?;
+async fn path_exists_in_database(
+    context: Arc<ScanContext>,
+    pathstr: &String,
+) -> Result<Option<MediaUuid>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    let mut hasher = Sha512::new();
-    let mut buffer = [0; 8192];
+    context
+        .db_svc_sender
+        .send(
+            DbMsg::GetMediaUuidByPath {
+                resp: tx,
+                path: pathstr.clone(),
+            }
+            .into(),
+        )
+        .await?;
 
-    // TODO -- perf tuning
-    let mut reader = BufReader::with_capacity(8182, file);
+    let result = rx.await??;
 
-    while reader.read(&mut buffer).await? > 0 {
-        hasher.update(buffer);
-    }
-
-    Ok(encode(hasher.finalize()))
+    Ok(result)
 }
 
+async fn hash_exists_in_database(
+    context: Arc<ScanContext>,
+    hash: &String,
+) -> Result<Option<MediaUuid>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    context
+        .db_svc_sender
+        .send(
+            DbMsg::GetMediaUuidByCHash {
+                resp: tx,
+                library_uuid: context.library_uuid,
+                chash: hash.clone(),
+            }
+            .into(),
+        )
+        .await?;
+
+    let result = rx.await??;
+
+    Ok(result)
+}
+
+// per-scan global context
+//
+// this is the configuration struct for the scan tasks, as well as carrying global state
+// used to report the results at the end
 #[derive(Debug)]
 pub struct ScanContext {
     pub config: Arc<ESConfig>,
@@ -75,17 +112,30 @@ pub struct ScanContext {
     pub scratch_base: PathBuf,
 }
 
+// per-file scan context
+//
+// this struct holds all of the relevant metadata for scanning an individual file, as well
+// as any filesystem resources needed to process that file.  currently, that consists of a
+// scratch dir used by the video processor to place temporary files, but could be extended.
+//
+// it seems vaguely wrong to effectively use a try/catch pattern on register(), given that
+// we have to use a helper future to match the Result and emit a warn event to the logger.
+// on the flip side, this lets the caller deal with any and all errors in whatever way
+// makes the most sense to them.
+//
+// to simplify the cleanup in those cases, we modify Drop to remove the scratch directory,
+// even though the caller ideally will wipe out the parent directory when the task ends.
 #[derive(Clone, Debug)]
-pub struct FileScan {
+pub struct ScanFile {
     context: Arc<ScanContext>,
     path: PathBuf,
-    pub pathstr: String,
+    pathstr: String,
     metadata: Metadata,
     hash: String,
     scratch_dir: PathBuf,
 }
 
-impl Drop for FileScan {
+impl Drop for ScanFile {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_dir).is_err() {
             let _ = span!(Level::INFO, "file_scan_drop", path = ?self.path).entered();
@@ -95,17 +145,18 @@ impl Drop for FileScan {
     }
 }
 
-impl FileScan {
+impl ScanFile {
+    // since this struct is designed for the scan task specifically, we can return Ok(None) if we
+    // conclude that there is no actual work to be done for that file
     pub async fn new(
         context: Arc<ScanContext>,
-        entry: walkdir::Result<DirEntry>,
+        path: PathBuf,
+        metadata: Metadata,
     ) -> Result<Option<Self>> {
         let context = context.clone();
 
-        let (path, metadata) = get_path_and_metadata(entry).await?;
-
         if !metadata.is_file() {
-            return Ok(None);
+            return Err(anyhow::Error::msg(format!("{path:?} is not a file")));
         }
 
         let pathstr = path
@@ -113,9 +164,13 @@ impl FileScan {
             .ok_or_else(|| anyhow::Error::msg("failed to convert path to str"))?
             .to_owned();
 
-        // since this struct represents a media file that we want to reason about, we immediately skip
-        // any file whose path already exists in the database... before we do any expensive computation
-        if FileScan::path_exists_in_database(context.clone(), &pathstr).await? {
+        // check if the file exists in the database first, and if so, early return before we do
+        // any of the actual computation (hashes, thumbnails, etc)
+        if let Some(media_uuid) = path_exists_in_database(context.clone(), &pathstr).await? {
+            debug!(
+                { media_uuid = media_uuid },
+                "media already exists in database"
+            );
             return Ok(None);
         }
 
@@ -125,7 +180,7 @@ impl FileScan {
 
         create_dir_all(&scratch_dir).await?;
 
-        Ok(Some(FileScan {
+        Ok(Some(ScanFile {
             context,
             path,
             pathstr,
@@ -135,47 +190,12 @@ impl FileScan {
         }))
     }
 
-    async fn path_exists_in_database(context: Arc<ScanContext>, pathstr: &String) -> Result<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        context
-            .db_svc_sender
-            .send(
-                DbMsg::GetMediaUuidByPath {
-                    resp: tx,
-                    path: pathstr.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        Ok(rx
-            .await??
-            .inspect(|_| debug!("media already exists in database"))
-            .is_some())
-    }
-
-    async fn hash_exists_in_database(&self) -> Result<Option<MediaUuid>> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        self.context
-            .db_svc_sender
-            .send(
-                DbMsg::GetMediaUuidByCHash {
-                    resp: tx,
-                    library_uuid: self.context.library_uuid,
-                    chash: self.hash.clone(),
-                }
-                .into(),
-            )
-            .await?;
-
-        let result = rx.await??;
-
-        Ok(result)
-    }
-
-    // since the caller needs to attach errors to the correct span, it is instrumnted there
+    // media registration
+    //
+    // to prevent the server from just hanging, we use this timeout, although the caller
+    // may have additional rules that it follows for the returned Future.  also note that
+    // in the current implementation, the caller handles instrumentation; this keeps the
+    // scan and any of its Errors in the same tracing span.
     pub async fn timed_register(&self) -> Result<()> {
         //let timeout = self.context.config.scan_timeout;
         let register_timeout = Duration::from_secs(300);
@@ -183,7 +203,7 @@ impl FileScan {
         timeout(register_timeout, self.register()).await?
     }
 
-    // media registration
+    #[instrument(skip_all)]
     async fn register(&self) -> Result<()> {
         debug!("processing media");
 
@@ -206,9 +226,10 @@ impl FileScan {
         // in the event that there are several media files with the same hash, the prior
         // check will ensure that we only do this once.  however, there are no guarantees
         // about which file will be reached first.
-        if let Some(media_uuid) = self.hash_exists_in_database().await? {
+        if let Some(media_uuid) = hash_exists_in_database(self.context.clone(), &self.hash).await? {
             let media = {
                 let (tx, rx) = tokio::sync::oneshot::channel();
+
                 self.context
                     .db_svc_sender
                     .send(
@@ -219,16 +240,19 @@ impl FileScan {
                         .into(),
                     )
                     .await?;
+
                 rx.await??
                     .ok_or_else(|| {
                         anyhow::Error::msg(
-                            "internal error: failed to find media after locating hash",
+                            "internal error: failed to get_media after locating hash",
                         )
                     })?
                     .0
             };
 
-            if !try_exists(&media.path).await? {
+            if try_exists(&media.path).await? {
+                debug!("duplicate media found (move check)");
+            } else {
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 self.context
                     .db_svc_sender
@@ -244,15 +268,22 @@ impl FileScan {
 
                 rx.await??;
 
-                self.create_links(media_uuid, media.metadata).await?;
-                return Ok(());
-            } else {
-                debug!("duplicate media found (move check)");
-                return Ok(());
+                self.install(media_uuid, media.metadata).await?;
             }
+
+            return Ok(());
         }
 
-        // match the metadata collector via file extension
+        // media processing
+        //
+        // in lieu of some more complicated introspection, we rely on the file extention being
+        // a (mostly) correct representation of the file's contents.  both the image and video
+        // collectors are somewhat flexible on their inputs.
+        //
+        // this list is not even close to exhaustive, and future improvements are expected.
+        //
+        // note that the extensions are also used by the http service to guess the mime type of
+        // the media files; see http/stream.rs for details.
         let ext = self
             .path
             .extension()
@@ -296,21 +327,26 @@ impl FileScan {
 
         let media_uuid = rx.await??;
 
-        self.create_links(media_uuid, media_data.metadata).await?;
+        self.install(media_uuid, media_data.metadata).await?;
 
         debug!("finished processing media");
         Ok(())
     }
 
+    // media "installation"
+    //
+    // to actually access the media, we use symlinks.  this allows the http server to function like
+    // an object store without needing to reorganize the filesystem. see also http/stream.rs.
+    //
+    // currently this step consists of two steps, but in principle any postprocessing needed to use
+    // media should go here as well.  it may be that we split out this function if its internals are
+    // useful for the dedup or cleaning tasks.
     #[instrument(skip(self, media_metadata))]
-    async fn create_links(
+    async fn install(
         &self,
         media_uuid: MediaUuid,
         media_metadata: MediaMetadata,
     ) -> Result<()> {
-        // once the media is successfully registered, we create the symlink and thumbnails
-        //
-        // cleaner tasks will also re-create these if something goes wrong
         debug!("creating symlinks and thumbnails");
 
         // symlink

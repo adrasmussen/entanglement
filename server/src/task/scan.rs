@@ -16,7 +16,7 @@ use walkdir::WalkDir;
 use crate::{
     db::msg::DbMsg,
     service::{ESMRegistry, ServiceType},
-    task::scan_utils::{FileScan, ScanContext},
+    task::scan_utils::{get_path_and_metadata, ScanFile, ScanContext},
 };
 use api::library::{LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
@@ -100,7 +100,10 @@ pub async fn scan_library(
         //
         // importantly, those warnings should be attached to the span associated with path, so we
         // set up the span outside instead of using #[instrument]
-        let file = match FileScan::new(context.clone(), entry).await? {
+        let (path, metadata) = get_path_and_metadata(entry).await?;
+
+        if metadata.is_file() {
+        let file = match ScanFile::new(context.clone(), path.clone(), metadata).await? {
             Some(v) => v,
             None => {
                 context.file_count.fetch_add(1, Ordering::Relaxed);
@@ -110,8 +113,6 @@ pub async fn scan_library(
 
         tasks.spawn({
             let context = context.clone();
-
-            let path = file.pathstr.clone();
 
             async move {
                 match file.timed_register().await {
@@ -124,9 +125,9 @@ pub async fn scan_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "register_media", path = path))
+            .instrument(span!(Level::INFO, "register_media", path = ?path))
         });
-    }
+    }}
 
     // cleanup
     tasks.join_all().await;
