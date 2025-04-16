@@ -39,7 +39,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn media_access_groups(&self, media_uuid: MediaUuid) -> anyhow::Result<HashSet<String>> {
+    async fn media_access_groups(&self, media_uuid: MediaUuid) -> Result<HashSet<String>> {
         debug!({ media_uuid = media_uuid }, "finding media access groups");
 
         // for a given media_uuid, find all gids that match either:
@@ -82,7 +82,7 @@ impl DbBackend for MariaDBBackend {
 
     // media queries
     #[instrument(skip_all)]
-    async fn add_media(&self, media: Media) -> anyhow::Result<MediaUuid> {
+    async fn add_media(&self, media: Media) -> Result<MediaUuid> {
         debug!({ media_path = media.path }, "adding media");
 
         let mut result = r"
@@ -148,7 +148,7 @@ impl DbBackend for MariaDBBackend {
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
-    ) -> anyhow::Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
+    ) -> Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
         debug!({ media_uuid = media_uuid }, "getting media details");
 
         let mut media_result = r"
@@ -240,7 +240,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn get_media_uuid_by_path(&self, path: String) -> anyhow::Result<Option<MediaUuid>> {
+    async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>> {
         debug!({ media_path = path }, "searching for media by path");
 
         let mut result = r"
@@ -260,11 +260,43 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<MediaUuid>(row)?;
 
+        debug!({ media_uuid = data }, "found media");
+
         Ok(Some(data))
     }
 
     #[instrument(skip_all)]
-    async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> anyhow::Result<()> {
+    async fn get_media_uuid_by_chash(&self, library_uuid: LibraryUuid, chash: String) -> Result<Option<MediaUuid>> {
+        debug!(
+            { media_chash = chash },
+            "searching for media by content hash"
+        );
+
+        let mut result = r"
+            SELECT media_uuid FROM media WHERE library_uuid = :library_uuid AND chash = :chash"
+            .with(params! {
+                "library_uuid" => library_uuid,
+                "chash" => chash,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let row = match result.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
+
+        let data = from_row_opt::<MediaUuid>(row)?;
+
+        debug!({ media_uuid = data }, "found media");
+
+        Ok(Some(data))
+    }
+
+    #[instrument(skip_all)]
+    async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()> {
         debug!({ media_uuid = media_uuid }, "updating media details");
 
         if let Some(val) = update.hidden {
@@ -326,11 +358,32 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
+    async fn replace_media_path(&self, media_uuid: MediaUuid, path: String) -> Result<()> {
+        debug!({media_uuid = media_uuid, path = path}, "replacing media path");
+
+        r"
+        UPDATE media SET path = :path, mtime = :mtime WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "mtime" => Local::now().timestamp(),
+                "path" => path,
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        debug!("updated media path");
+
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
     async fn search_media(
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
-    ) -> anyhow::Result<Vec<MediaUuid>> {
+    ) -> Result<Vec<MediaUuid>> {
+        debug!({gid = ?gid, filter = ?filter}, "searching for media");
+
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid and filter, find all media that match either:
@@ -389,6 +442,8 @@ impl DbBackend for MariaDBBackend {
             .map(|row| from_row_opt::<MediaUuid>(row))
             .collect::<Result<Vec<_>, FromRowError>>()?;
 
+        debug!("found media");
+
         Ok(data)
     }
 
@@ -398,7 +453,7 @@ impl DbBackend for MariaDBBackend {
         gid: HashSet<String>,
         media_uuid: MediaUuid,
         distance: i64,
-    ) -> anyhow::Result<Vec<MediaUuid>> {
+    ) -> Result<Vec<MediaUuid>> {
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
         //  * if the media is not hidden, is in an collection owned
@@ -459,7 +514,7 @@ impl DbBackend for MariaDBBackend {
 
     // collection queries
     #[instrument(skip_all)]
-    async fn add_collection(&self, collection: Collection) -> anyhow::Result<CollectionUuid> {
+    async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid> {
         debug!({ collection_name = collection.name }, "adding collection");
 
         let mut result = r"
@@ -507,10 +562,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn get_collection(
-        &self,
-        collection_uuid: CollectionUuid,
-    ) -> anyhow::Result<Option<Collection>> {
+    async fn get_collection(&self, collection_uuid: CollectionUuid) -> Result<Option<Collection>> {
         debug!(
             { collection_uuid = collection_uuid },
             "getting collection details"
@@ -548,7 +600,7 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
-    async fn delete_collection(&self, collection_uuid: CollectionUuid) -> anyhow::Result<()> {
+    async fn delete_collection(&self, collection_uuid: CollectionUuid) -> Result<()> {
         debug!(
             { collection_uuid = collection_uuid },
             "deleting media from collection"
@@ -582,7 +634,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         collection_uuid: CollectionUuid,
         update: CollectionUpdate,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         debug!({ collection_uuid = collection_uuid }, "updating collection");
 
         if let Some(val) = update.name {
@@ -637,7 +689,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "adding media to collection");
 
         let mut result = r"
@@ -688,7 +740,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "removing media to collection");
 
         r"
@@ -720,7 +772,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
-    ) -> anyhow::Result<Vec<CollectionUuid>> {
+    ) -> Result<Vec<CollectionUuid>> {
         let (sql, filter) =
             filter.format_mariadb("collections.name, collections.note, collections.tags");
 
@@ -760,7 +812,7 @@ impl DbBackend for MariaDBBackend {
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: SearchFilter,
-    ) -> anyhow::Result<Vec<MediaUuid>> {
+    ) -> Result<Vec<MediaUuid>> {
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
@@ -810,7 +862,7 @@ impl DbBackend for MariaDBBackend {
 
     // library queries
     #[instrument(skip_all)]
-    async fn add_library(&self, library: Library) -> anyhow::Result<LibraryUuid> {
+    async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         // since we require that libraries have unique paths, it might seem like we want
         // to use that as the primary key.  but those strings might be arbitrarily complex,
         // so instead using an i64 as a handle is much simpler
@@ -856,7 +908,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn get_library(&self, library_uuid: LibraryUuid) -> anyhow::Result<Option<Library>> {
+    async fn get_library(&self, library_uuid: LibraryUuid) -> Result<Option<Library>> {
         debug!({ library_uuid = library_uuid }, "getting library details");
 
         let mut result = r"
@@ -888,11 +940,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn update_library(
-        &self,
-        library_uuid: LibraryUuid,
-        update: LibraryUpdate,
-    ) -> anyhow::Result<()> {
+    async fn update_library(&self, library_uuid: LibraryUuid, update: LibraryUpdate) -> Result<()> {
         debug!({ library_uuid = library_uuid }, "updating library");
 
         if let Some(val) = update.count {
@@ -917,7 +965,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> anyhow::Result<Vec<LibraryUuid>> {
+    ) -> Result<Vec<LibraryUuid>> {
         let result = r"
             SELECT
                 library_uuid
@@ -949,7 +997,7 @@ impl DbBackend for MariaDBBackend {
         library_uuid: LibraryUuid,
         hidden: bool,
         filter: SearchFilter,
-    ) -> anyhow::Result<Vec<MediaUuid>> {
+    ) -> Result<Vec<MediaUuid>> {
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid, filter, hidden state and library_uuid, find all media in that collection
@@ -997,7 +1045,7 @@ impl DbBackend for MariaDBBackend {
 
     // comment queries
     #[instrument(skip_all)]
-    async fn add_comment(&self, comment: Comment) -> anyhow::Result<CommentUuid> {
+    async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
         debug!({ media_uuid = comment.media_uuid }, "adding comment");
 
         let mut result = r"
@@ -1027,7 +1075,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn get_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<Option<Comment>> {
+    async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
         debug!({ comment_uuid = comment_uuid }, "getting comment details");
 
         let mut result = r"
@@ -1058,7 +1106,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn delete_comment(&self, comment_uuid: CommentUuid) -> anyhow::Result<()> {
+    async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
         debug!({ comment_uuid = comment_uuid }, "deleting comment");
 
         r"
@@ -1075,11 +1123,7 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip_all)]
-    async fn update_comment(
-        &self,
-        comment_uuid: CommentUuid,
-        text: Option<String>,
-    ) -> anyhow::Result<()> {
+    async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
         debug!({ comment_uuid = comment_uuid }, "updating comment");
 
         if let Some(val) = text {

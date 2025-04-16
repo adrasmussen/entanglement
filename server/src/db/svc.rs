@@ -117,7 +117,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     library_uuid,
                     chash,
                 } => {
-                    self.respond(resp, self.backend.get_media_uuid_by_chash(path))
+                    self.respond(resp, self.backend.get_media_uuid_by_chash(library_uuid, chash))
                         .await
                 }
                 DbMsg::UpdateMedia {
@@ -133,7 +133,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     media_uuid,
                     path,
                 } => {
-                    self.respond(resp, self.replace_media_path(media_uuid, path))
+                    self.respond(resp, self.backend.replace_media_path(media_uuid, path))
                         .await
                 }
                 DbMsg::SearchMedia { resp, gid, filter } => {
