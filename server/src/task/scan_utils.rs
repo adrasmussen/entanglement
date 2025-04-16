@@ -2,7 +2,10 @@ use std::{
     collections::HashSet,
     fs::Metadata,
     path::PathBuf,
-    sync::{atomic::AtomicI64, Arc},
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -12,11 +15,11 @@ use dashmap::DashSet;
 use hex::encode;
 use sha2::{Digest, Sha512};
 use tokio::{
-    fs::{canonicalize, create_dir_all, metadata, symlink, try_exists, File},
+    fs::{canonicalize, create_dir_all, metadata, remove_file, symlink, try_exists, File},
     io::{AsyncReadExt, BufReader},
     time::timeout,
 };
-use tracing::{debug, error, info, instrument, span, warn, Instrument, Level};
+use tracing::{debug, instrument, span, warn, Level};
 use walkdir::DirEntry;
 
 use crate::{
@@ -61,20 +64,22 @@ async fn content_hash(path: &PathBuf) -> Result<String> {
     Ok(encode(hasher.finalize()))
 }
 
-struct ScanContext {
-    config: Arc<ESConfig>,
-    library_uuid: LibraryUuid,
-    db_svc_sender: ESMSender,
-    file_count: Arc<AtomicI64>,
-    warnings: Arc<AtomicI64>,
-    chashes: DashSet<String>,
-    scratch_base: PathBuf,
+#[derive(Debug)]
+pub struct ScanContext {
+    pub config: Arc<ESConfig>,
+    pub library_uuid: LibraryUuid,
+    pub db_svc_sender: ESMSender,
+    pub file_count: AtomicI64,
+    pub warnings: AtomicI64,
+    pub chashes: DashSet<String>,
+    pub scratch_base: PathBuf,
 }
 
+#[derive(Clone, Debug)]
 pub struct FileScan {
     context: Arc<ScanContext>,
     path: PathBuf,
-    pathstr: String,
+    pub pathstr: String,
     metadata: Metadata,
     hash: String,
     scratch_dir: PathBuf,
@@ -84,19 +89,24 @@ impl Drop for FileScan {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_dir).is_err() {
             let _ = span!(Level::INFO, "file_scan_drop", path = ?self.path).entered();
-            warn!("failed to clean up scratch directory")
+            warn!("failed to clean up scratch directory");
+            self.context.warnings.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
 impl FileScan {
-    async fn new(
+    pub async fn new(
         context: Arc<ScanContext>,
         entry: walkdir::Result<DirEntry>,
     ) -> Result<Option<Self>> {
         let context = context.clone();
 
         let (path, metadata) = get_path_and_metadata(entry).await?;
+
+        if !metadata.is_file() {
+            return Ok(None);
+        }
 
         let pathstr = path
             .to_str()
@@ -165,16 +175,12 @@ impl FileScan {
         Ok(result)
     }
 
-    async fn timed_register(&self) -> Result<()> {
+    // since the caller needs to attach errors to the correct span, it is instrumnted there
+    pub async fn timed_register(&self) -> Result<()> {
         //let timeout = self.context.config.scan_timeout;
         let register_timeout = Duration::from_secs(300);
 
-        timeout(
-            register_timeout,
-            self.register()
-                .instrument(span!(Level::INFO, "register_media", path = self.pathstr)),
-        )
-        .await?
+        timeout(register_timeout, self.register()).await?
     }
 
     // media registration
@@ -186,8 +192,8 @@ impl FileScan {
         // for the deduplicator to run in a sane way, we need to first ensure that only
         // one instance of a particular content hash is (possibly) being added to the
         // database at a time.
-        if self.context.chashes.insert(self.hash.clone()) {
-            debug!("duplicate media found");
+        if !self.context.chashes.insert(self.hash.clone()) {
+            debug!("duplicate media found (concurrent check)");
             return Ok(());
         }
 
@@ -240,10 +246,10 @@ impl FileScan {
 
                 self.create_links(media_uuid, media.metadata).await?;
                 return Ok(());
+            } else {
+                debug!("duplicate media found (move check)");
+                return Ok(());
             }
-        } else {
-            debug!("duplicate media found");
-            return Ok(());
         }
 
         // match the metadata collector via file extension
@@ -307,22 +313,30 @@ impl FileScan {
         // cleaner tasks will also re-create these if something goes wrong
         debug!("creating symlinks and thumbnails");
 
-        symlink(
-            self.path.clone(),
-            media_original_path(self.context.config.clone(), media_uuid),
-        )
-        .await?;
+        // symlink
+        let symlink_path = media_original_path(self.context.config.clone(), media_uuid);
 
-        let media_thumbnail_path = media_thumbnail_path(self.context.config.clone(), media_uuid);
+        let _ = remove_file(&symlink_path).await;
+
+        symlink(&self.path, &symlink_path).await?;
+
+        // thumbnail
+        let thumbnail_path = media_thumbnail_path(self.context.config.clone(), media_uuid);
+
+        // if the thumbnail already exists (because we are re-running create_links() due to moved media), then
+        // don't recreate the thmbnail
+        if try_exists(&thumbnail_path).await? {
+            return Ok(());
+        }
 
         match media_metadata {
             MediaMetadata::Image => {
-                Box::pin(create_image_thumbnail(&self.path, &media_thumbnail_path)).await?
+                Box::pin(create_image_thumbnail(&self.path, &thumbnail_path)).await?
             }
             MediaMetadata::Video => {
                 Box::pin(create_video_thumbnail(
                     &self.path,
-                    &media_thumbnail_path,
+                    &thumbnail_path,
                     &self.scratch_dir,
                 ))
                 .await?

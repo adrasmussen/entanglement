@@ -258,16 +258,15 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> =
-            match task_type {
-                TaskType::ScanLibrary => Box::pin(scan_library(
-                    self.config.clone(),
-                    self.registry.clone(),
-                    library_uuid,
-                )),
-                TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
-                _ => return Err(anyhow::Error::msg("unsupported task")),
-            };
+        let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> = match task_type {
+            TaskType::ScanLibrary => Box::pin(scan_library(
+                self.config.clone(),
+                self.registry.clone(),
+                library_uuid,
+            )),
+            TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
+            _ => return Err(anyhow::Error::msg("unsupported task")),
+        };
 
         info!({ start = start }, "starting task");
 

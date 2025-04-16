@@ -9,8 +9,8 @@ use api::{
 
 pub mod msg;
 pub mod scan;
-pub mod svc;
 pub mod scan_utils;
+pub mod svc;
 
 #[async_trait]
 pub trait ESTaskService: ESInner {

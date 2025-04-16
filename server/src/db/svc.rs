@@ -117,8 +117,11 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     library_uuid,
                     chash,
                 } => {
-                    self.respond(resp, self.backend.get_media_uuid_by_chash(library_uuid, chash))
-                        .await
+                    self.respond(
+                        resp,
+                        self.backend.get_media_uuid_by_chash(library_uuid, chash),
+                    )
+                    .await
                 }
                 DbMsg::UpdateMedia {
                     resp,

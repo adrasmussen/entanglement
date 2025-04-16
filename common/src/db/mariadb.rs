@@ -86,13 +86,13 @@ impl DbBackend for MariaDBBackend {
         debug!({ media_path = media.path }, "adding media");
 
         let mut result = r"
-            INSERT INTO media (media_uuid, library_uuid, path, size, fhash, phash, mtime, hidden, date, note, tags, media_type)
+            INSERT INTO media (media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type)
             SELECT
                 UUID_SHORT(),
                 :library_uuid,
                 :path,
                 :size,
-                :fhash,
+                :chash,
                 :phash,
                 :mtime,
                 :hidden,
@@ -114,7 +114,7 @@ impl DbBackend for MariaDBBackend {
             "library_uuid" => media.library_uuid,
             "path" => media.path.clone(),
             "size" => media.size,
-            "fhash" => media.chash,
+            "chash" => media.chash,
             "phash" => media.phash,
             "mtime" => Local::now().timestamp(),
             "hidden" => media.hidden,
@@ -152,7 +152,7 @@ impl DbBackend for MariaDBBackend {
         debug!({ media_uuid = media_uuid }, "getting media details");
 
         let mut media_result = r"
-            SELECT library_uuid, path, size, fhash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
+            SELECT library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
             "media_uuid" => media_uuid,
         })
@@ -492,8 +492,8 @@ impl DbBackend for MariaDBBackend {
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
                 media.hidden = FALSE
-                AND media.hash != ''
-                AND BIG_HAM((SELECT hash FROM media WHERE media_uuid = :media_uuid), media.hash) < :distance"
+                AND media.phash != ''
+                AND BIG_HAM((SELECT phash FROM media WHERE media_uuid = :media_uuid), media.phash) < :distance"
         .with(params! {
             "gid" => fold_set(gid)?,
             "media_uuid" => media_uuid,

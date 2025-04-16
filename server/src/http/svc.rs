@@ -98,7 +98,8 @@ impl EntanglementService for HttpService {
         // don't have any relevant state and the message handlers are all fully concurrent
         let socket = SocketAddr::from(
             self.config
-                .http.socket
+                .http
+                .socket
                 .parse::<SocketAddrV6>()
                 .expect("Failed to parse http_socket ipv6 address/port"),
         );
