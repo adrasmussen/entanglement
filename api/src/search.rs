@@ -11,9 +11,10 @@ use serde::{Deserialize, Serialize};
 // need to have more fine-grained control over both the queries and the structure, so
 // all of this should be considered work-in-progress
 //
+// note that several places rely on an empty filter (of any sort) matching everything
+//
 // TODO -- to use the Substring filters more optimally, we need a better splitting
 // algorithm than whitespace so as to keep quoted phrases together
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SearchFilter {
     SubstringAny { filter: HashSet<String> },

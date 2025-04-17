@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{Modal, ModalSize, ModernModal, MODAL_STACK, search::ModalSearchBar};
+use crate::components::modal::{
+    search::ModalSearchBar, Modal, ModalSize, ModernModal, MODAL_STACK,
+};
 use api::{
     auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter, unfold_set,
     FOLDING_SEPARATOR,
@@ -17,40 +19,20 @@ pub struct CreateCollectionModalProps {
 #[component]
 pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
 
-    // Form state
+    let mut status_signal = use_signal(|| String::new());
+
+    // for the modal boxes, the submission action is tied to the footer buttons
+    // and not to the forms themselves.  thus, we use Signals to store the state
     let mut collection_name = use_signal(|| String::new());
     let mut collection_group = use_signal(|| String::new());
     let mut collection_note = use_signal(|| String::new());
     let mut collection_tags = use_signal(|| String::new());
 
-    // Form validation state
     let mut name_error = use_signal(|| String::new());
     let mut group_error = use_signal(|| String::new());
 
-    // Display the users of the given group
-    //
-    // TODO -- this needs debounced, or maybe a button to check explicity
-    let group_future = use_resource(move || async move {
-        let gid = collection_group();
-
-        if gid.trim().is_empty() {
-            return HashSet::new();
-        }
-
-        match get_users_in_group(&GetUsersInGroupReq { gid }).await {
-            Ok(resp) => return resp.uids,
-            Err(err) => {
-                group_error.set(err.to_string());
-                return HashSet::new();
-            }
-        }
-    });
-
-    // Handle submission
     let handle_submit = move |_| async move {
-        // Reset validation errors
         name_error.set(String::new());
         group_error.set(String::new());
 
@@ -71,8 +53,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
             return;
         }
 
-        // We're ready to submit
-        status_message.set("Creating collection...".into());
+        status_signal.set("Creating collection...".into());
 
         match add_collection(&AddCollectionReq {
             collection: Collection {
@@ -87,7 +68,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         .await
         {
             Ok(resp) => {
-                status_message.set(format!(
+                status_signal.set(format!(
                     "Collection created with ID: {}",
                     resp.collection_uuid
                 ));
@@ -100,13 +81,39 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 task.forget();
             }
             Err(err) => {
-                status_message.set(format!("Error: {}", err));
+                status_signal.set(format!("Error: {}", err));
             }
         }
     };
 
+    // Display the users of the given group
+    //
+    // TODO -- this needs debounced, or maybe a button to check explicity
+    let group_future = use_resource(move || async move {
+        let gid = collection_group();
+
+        if gid.trim().is_empty() {
+            return HashSet::new();
+        }
+
+        match get_users_in_group(&GetUsersInGroupReq { gid }).await {
+            Ok(resp) => return resp.uids,
+            Err(err) => {
+                group_error.set(err.to_string());
+                return HashSet::new();
+            }
+        }
+    });
+
+    // Check if we have group members to display
+    let group_members = &*group_future.read();
+    let has_members = match group_members {
+        Some(members) => !members.is_empty(),
+        None => false,
+    };
+
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -119,13 +126,6 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
             }
             button { class: "btn btn-primary", onclick: handle_submit, "Create Collection" }
         }
-    };
-
-    // Check if we have group members to display
-    let group_members = &*group_future.read();
-    let has_members = match group_members {
-        Some(members) => !members.is_empty(),
-        None => false,
     };
 
     rsx! {
@@ -221,32 +221,32 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                                                                                                                                                                                                                                                                                        display: flex;
-                                                                                                                                                                                                                                                                                                        flex-wrap: wrap;
-                                                                                                                                                                                                                                                                                                        gap: var(--space-2);
-                                                                                                                                                                                                                                                                                                    ",
+                                            display: flex;
+                                            flex-wrap: wrap;
+                                            gap: var(--space-2);
+                                        ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                                                                                                                                                                                                                                                display: inline-flex;
-                                                                                                                                                                                                                                                                                                                align-items: center;
-                                                                                                                                                                                                                                                                                                                padding: var(--space-1) var(--space-2);
-                                                                                                                                                                                                                                                                                                                background-color: var(--primary-light);
-                                                                                                                                                                                                                                                                                                                color: white;
-                                                                                                                                                                                                                                                                                                                border-radius: var(--radius-full);
-                                                                                                                                                                                                                                                                                                                font-size: 0.75rem;
-                                                                                                                                                                                                                                                                                                            ",
+                                                    display: inline-flex;
+                                                    align-items: center;
+                                                    padding: var(--space-1) var(--space-2);
+                                                    background-color: var(--primary-light);
+                                                    color: white;
+                                                    border-radius: var(--radius-full);
+                                                    font-size: 0.75rem;
+                                                ",
                                                 "{member}"
                                             }
                                         }
                                     }
                                     div {
                                         style: "
-                                                                                                                                                                                                                                                                                                    margin-top: var(--space-2);
-                                                                                                                                                                                                                                                                                                    font-size: 0.75rem;
-                                                                                                                                                                                                                                                                                                    color: var(--text-tertiary);
-                                                                                                                                                                                                                                                                                                ",
+                                            margin-top: var(--space-2);
+                                            font-size: 0.75rem;
+                                            color: var(--text-tertiary);
+                                        ",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -286,6 +286,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                         placeholder: "Add a description for this collection...",
                     }
                 }
+
                 div { class: "form-group",
                     label { class: "form-label", "Tags (optional)" }
                     textarea {
@@ -309,16 +310,11 @@ pub struct EditCollectionModalProps {
 
 #[component]
 pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
-    let collection_uuid = props.collection_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
-
-    // Form state
-    let mut collection_name = use_signal(|| String::new());
-    let mut collection_note = use_signal(|| String::new());
-    let mut collection_tags = use_signal(|| String::new());
 
     // Fetch collection details to pre-fill the form
+    let collection_uuid = props.collection_uuid;
+
     let collection_future = use_resource(move || async move {
         get_collection(&GetCollectionReq {
             collection_uuid: collection_uuid,
@@ -326,27 +322,18 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
         .await
     });
 
+    let mut status_signal = use_signal(|| String::new());
+
+    // Form validation state
+    let mut collection_name = use_signal(|| String::new());
+    let mut collection_note = use_signal(|| String::new());
+    let mut collection_tags = use_signal(|| String::new());
+
     // see similar logic in GalleryInner
     let mut valid_tags = true;
 
-    // Handle form initialization
-    use_effect(move || {
-        if let Some(Ok(result)) = &*collection_future.read() {
-            collection_name.set(result.collection.name.clone());
-            collection_note.set(result.collection.note.clone());
-            collection_tags.set(
-                fold_set(result.collection.tags.clone()).unwrap_or_else(|_| {
-                    valid_tags = false;
-                    "invalid tags, contact admins".to_string()
-                }),
-            );
-        }
-    });
-
-    // Form validation state
     let mut name_error = use_signal(|| String::new());
 
-    // Handle submission
     let handle_submit = move |_| async move {
         // Reset validation errors
         name_error.set(String::new());
@@ -364,7 +351,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
         }
 
         // We're ready to submit
-        status_message.set("Updating collection...".into());
+        status_signal.set("Updating collection...".into());
 
         match update_collection(&UpdateCollectionReq {
             collection_uuid,
@@ -381,7 +368,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
         .await
         {
             Ok(_) => {
-                status_message.set("Collection updated successfully".into());
+                status_signal.set("Collection updated successfully".into());
                 update_signal.set(());
 
                 // Close the modal after a short delay to show success message
@@ -391,13 +378,27 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
                 task.forget();
             }
             Err(err) => {
-                status_message.set(format!("Error: {}", err));
+                status_signal.set(format!("Error: {}", err));
             }
         }
     };
 
+    // Handle form initialization
+    use_effect(move || {
+        if let Some(Ok(result)) = &*collection_future.read() {
+            collection_name.set(result.collection.name.clone());
+            collection_note.set(result.collection.note.clone());
+            collection_tags.set(
+                fold_set(result.collection.tags.clone()).unwrap_or_else(|_| {
+                    valid_tags = false;
+                    "invalid tags, contact admins".to_string()
+                }),
+            );
+        }
+    });
+
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -485,11 +486,10 @@ pub struct DeleteCollectionModalProps {
 
 #[component]
 pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
-    let collection_uuid = props.collection_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
 
-    // Fetch collection details to show the collection name
+    let collection_uuid = props.collection_uuid;
+
     let collection_future = use_resource(move || async move {
         get_collection(&GetCollectionReq {
             collection_uuid: collection_uuid,
@@ -497,13 +497,36 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
         .await
     });
 
+    // TODO -- we may want a general ModalError here instead of just skipping the failure
     let collection_name = match &*collection_future.read() {
         Some(Ok(result)) => result.collection.name.clone(),
         _ => format!("Collection #{}", collection_uuid),
     };
 
+    let mut status_signal = use_signal(|| String::new());
+
+    let handle_submit = move |_| async move {
+        match delete_collection(&DeleteCollectionReq {
+            collection_uuid: collection_uuid,
+        })
+        .await
+        {
+            Ok(_) => {
+                status_signal.set("Collection deleted successfully".into());
+                update_signal.set(());
+                let task = Timeout::new(1500, move || {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                });
+                task.forget();
+            }
+            Err(err) => {
+                status_signal.set(format!("Error: {}", err));
+            }
+        }
+    };
+
     let footer = rsx! {
-        span { class: "status-message", "{status_message}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -516,30 +539,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
             }
             button {
                 class: "btn btn-danger",
-                onclick: move |_| async move {
-                    match delete_collection(
-                            &DeleteCollectionReq {
-                                collection_uuid: collection_uuid,
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            status_message.set("Collection deleted successfully".into());
-                            update_signal.set(());
-                            let task = Timeout::new(
-                                1500,
-                                move || {
-                                    MODAL_STACK.with_mut(|v| v.pop());
-                                },
-                            );
-                            task.forget();
-                        }
-                        Err(err) => {
-                            status_message.set(format!("Error: {}", err));
-                        }
-                    }
-                },
+                onclick: handle_submit,
                 "Delete Collection"
             }
         }
@@ -583,15 +583,11 @@ pub struct AddMediaToCollectionModalProps {
 
 #[component]
 pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Element {
-    let media_uuid = props.media_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
 
-    // Search state
     let collection_search_signal = use_signal(|| String::new());
     let selected_collection = use_signal(|| None::<CollectionUuid>);
 
-    // Fetch collections based on search term
     let collections_future = use_resource(move || async move {
         let filter = collection_search_signal()
             .split_whitespace()
@@ -604,10 +600,20 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
         .await
     });
 
-    // Handle submission
+    // TODO -- better error handling when collections cannot be searched
+    let collections = match &*collections_future.read() {
+        Some(Ok(response)) => Some(response.collections.clone()),
+        Some(Err(_)) => None,
+        None => None,
+    };
+
+    let mut status_signal = use_signal(|| String::new());
+
+    let media_uuid = props.media_uuid;
+
     let handle_submit = move |_| async move {
         if let Some(collection_uuid) = selected_collection() {
-            status_message.set("Adding media to collection...".into());
+            status_signal.set("Adding media to collection...".into());
 
             match add_media_to_collection(&AddMediaToCollectionReq {
                 collection_uuid,
@@ -616,7 +622,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
             .await
             {
                 Ok(_) => {
-                    status_message.set("Media added to collection successfully".into());
+                    status_signal.set("Media added to collection successfully".into());
                     update_signal.set(());
 
                     // Close the modal after a short delay
@@ -626,16 +632,16 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                     task.forget();
                 }
                 Err(err) => {
-                    status_message.set(format!("Error: {}", err));
+                    status_signal.set(format!("Error: {}", err));
                 }
             }
         } else {
-            status_message.set("Please select an collection first".into());
+            status_signal.set("Please select an collection first".into());
         }
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -653,13 +659,6 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                 "Add to Collection"
             }
         }
-    };
-
-    // Get collections data for display
-    let collections = match &*collections_future.read() {
-        Some(Ok(response)) => Some(response.collections.clone()),
-        Some(Err(_)) => None,
-        None => None,
     };
 
     rsx! {
@@ -698,12 +697,10 @@ pub struct RmFromCollectionModalProps {
 
 #[component]
 pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
-    let media_uuid = props.media_uuid;
-    let collection_uuid = props.collection_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
 
-    // Fetch collection details to show the collection name
+    let collection_uuid = props.collection_uuid;
+
     let collection_future = use_resource(move || async move {
         get_collection(&GetCollectionReq {
             collection_uuid: collection_uuid,
@@ -711,13 +708,39 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
         .await
     });
 
+    // TODO -- we may want a general ModalError here instead of just skipping the failure
     let collection_name = match &*collection_future.read() {
         Some(Ok(result)) => result.collection.name.clone(),
         _ => format!("Collection #{}", collection_uuid),
     };
 
+    let mut status_signal = use_signal(|| String::new());
+
+    let media_uuid = props.media_uuid;
+
+    let handle_submit = move |_| async move {
+        match rm_media_from_collection(&RmMediaFromCollectionReq {
+            collection_uuid: collection_uuid,
+            media_uuid: media_uuid,
+        })
+        .await
+        {
+            Ok(_) => {
+                status_signal.set("Media removed from collection".into());
+                update_signal.set(());
+                let task = Timeout::new(1500, move || {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                });
+                task.forget();
+            }
+            Err(err) => {
+                status_signal.set(format!("Error: {}", err));
+            }
+        }
+    };
+
     let footer = rsx! {
-        span { class: "status-message", "{status_message}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -730,31 +753,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
             }
             button {
                 class: "btn btn-danger",
-                onclick: move |_| async move {
-                    match rm_media_from_collection(
-                            &RmMediaFromCollectionReq {
-                                collection_uuid: collection_uuid,
-                                media_uuid: media_uuid,
-                            },
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            status_message.set("Media removed from collection".into());
-                            update_signal.set(());
-                            let task = Timeout::new(
-                                1500,
-                                move || {
-                                    MODAL_STACK.with_mut(|v| v.pop());
-                                },
-                            );
-                            task.forget();
-                        }
-                        Err(err) => {
-                            status_message.set(format!("Error: {}", err));
-                        }
-                    }
-                },
+                onclick: handle_submit,
                 "Remove from Collection"
             }
         }
@@ -788,20 +787,10 @@ pub struct BulkAddToCollectionModalProps {
 #[component]
 pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element {
     let mut update_signal = props.update_signal;
-    let media_uuids = props.media_uuids.clone();
 
-    let media_count = media_uuids.len();
-
-    let mut status_message = use_signal(|| String::new());
-
-    // Search state
     let collection_search_signal = use_signal(|| String::new());
     let selected_collection = use_signal(|| None::<CollectionUuid>);
-    let mut processing_count = use_signal(|| 0);
-    let mut success_count = use_signal(|| 0);
-    let mut error_count = use_signal(|| 0);
 
-    // Fetch collections based on search term
     let collections_future = use_resource(move || async move {
         let filter = collection_search_signal()
             .split_whitespace()
@@ -814,12 +803,42 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
         .await
     });
 
-    // Handle bulk submission
+    // TODO -- better error handling when collections cannot be searched
+    let collections = match &*collections_future.read() {
+        Some(Ok(response)) => Some(response.collections.clone()),
+        Some(Err(_)) => None,
+        None => None,
+    };
+
+    let mut status_signal = use_signal(|| String::new());
+
+    let media_uuids = props.media_uuids.clone();
+    let media_count = media_uuids.len();
+    let mut processing_count = use_signal(|| 0);
+    let mut success_count = use_signal(|| 0);
+    let mut error_count = use_signal(|| 0);
+
     let handle_submit = move |_| {
         let media_uuids = media_uuids.clone();
         async move {
             if let Some(collection_uuid) = selected_collection() {
-                status_message.set(format!(
+                // figure out what is already in the collection
+                let current_media = match search_media_in_collection(&SearchMediaInCollectionReq {
+                    collection_uuid,
+                    filter: SearchFilter::SubstringAny {
+                        filter: HashSet::new(),
+                    },
+                })
+                .await
+                {
+                    Ok(v) => v.media,
+                    Err(err) => {
+                        status_signal.set(format!("Error fetching collection: {err}"));
+                        return;
+                    }
+                };
+
+                status_signal.set(format!(
                     "Adding {} media items to collection...",
                     media_count
                 ));
@@ -831,6 +850,10 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 // Process each media item
                 for media_uuid in media_uuids.clone() {
                     processing_count.set(processing_count() + 1);
+
+                    if current_media.contains(&media_uuid) {
+                        continue;
+                    }
 
                     match add_media_to_collection(&AddMediaToCollectionReq {
                         collection_uuid,
@@ -849,12 +872,12 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
 
                 // Update overall status
                 if error_count() == 0 {
-                    status_message.set(format!(
+                    status_signal.set(format!(
                         "Successfully added all {} items to collection",
                         success_count()
                     ));
                 } else {
-                    status_message.set(format!(
+                    status_signal.set(format!(
                         "Added {} items, {} failed",
                         success_count(),
                         error_count()
@@ -871,13 +894,13 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                     task.forget();
                 }
             } else {
-                status_message.set("Please select a collection first".into());
+                status_signal.set("Please select a collection first".into());
             }
         }
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
         div {
             class: "modal-buttons",
             style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
@@ -895,13 +918,6 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 "Add to Collection"
             }
         }
-    };
-
-    // Get collections data for display
-    let collections = match &*collections_future.read() {
-        Some(Ok(response)) => Some(response.collections.clone()),
-        Some(Err(_)) => None,
-        None => None,
     };
 
     rsx! {

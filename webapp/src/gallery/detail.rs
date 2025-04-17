@@ -60,6 +60,8 @@ struct GalleryInnerProps {
 #[component]
 fn GalleryInner(props: GalleryInnerProps) -> Element {
     let mut update_signal = props.update_signal;
+
+    // annoying parse step because the Router is String-only
     let media_uuid = props.media_uuid.parse::<MediaUuid>().show(|_| {
         let message = "The media_uuid could not be parsed".to_string();
         rsx! {
