@@ -152,121 +152,132 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let formatted_time = local_time(library.mtime);
 
     rsx! {
-        div { class: "container",
-            // breadcrumb navigation
-            div { class: "breadcrumb", style: "margin-bottom: var(--space-4);",
-                Link { to: Route::LibrarySearch {}, "Libraries" }
-                span { " / " }
-                span { "{library.path}" }
-            }
-            // library detail view header
-            div {
-                class: "library-detail-header",
-                style: "
-                    background-color: var(--surface);
-                    border-radius: var(--radius-lg);
-                    padding: var(--space-4);
-                    margin-bottom: var(--space-4);
-                    box-shadow: var(--shadow-sm);
-                ",
-                div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
-                    // Library info
-                    div {
-                        h1 { style: "margin: 0 0 var(--space-2) 0;", "Library: {library.path}" }
-                        div { style: "
-                                display: flex;
-                                gap: var(--space-4);
-                                margin-bottom: var(--space-3);
-                                color: var(--text-secondary);
-                                font-size: 0.875rem;
-                            ",
-                            span { "Owner: {library.uid}" }
-                            span { "Group: {library.gid}" }
-                            span { "Last scanned: {formatted_time}" }
-                            span { "File count: {library.count}" }
-                        }
-                        TaskBar { update_signal, library_uuid }
-                    }
-                    // Action buttons
-                    div { style: "display: flex; gap: var(--space-2);",
-                        button {
-                            class: "btn btn-secondary",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid())));
-                            },
-                            "Start Task"
-                        }
-                    }
-                }
-            }
-            SearchBar {
-                search_signal: media_search_signal,
-                storage_key: MEDIA_SEARCH_KEY,
-                placeholder: "Search media in this library...",
-                status: format!(
-                    "Found {} items{}",
-                    media.len(),
-                    if show_hidden() { " (including hidden)" } else { "" },
-                ),
-                action_button,
-            }
-            // media grid
-            if media.is_empty() {
+        div { class: "container with-sticky",
+            ModalBox { update_signal }
+
+            div { class: "sticky-header",
+                // breadcrumb navigation
                 div {
-                    class: "empty-state",
+                    class: "breadcrumb",
+                    style: "margin-bottom: var(--space-4);",
+                    Link { to: Route::LibrarySearch {}, "Libraries" }
+                    span { " / " }
+                    span { "{library.path}" }
+                }
+
+                // library detail view header
+                div {
+                    class: "library-detail-header",
                     style: "
-                        padding: var(--space-8) var(--space-4);
-                        text-align: center;
                         background-color: var(--surface);
                         border-radius: var(--radius-lg);
-                        margin-top: var(--space-4);
+                        padding: var(--space-4);
+                        margin-bottom: var(--space-4);
+                        box-shadow: var(--shadow-sm);
                     ",
-                    div { style: "
-                            font-size: 4rem;
-                            margin-bottom: var(--space-4);
-                            color: var(--neutral-400);
-                        ",
-                        "🖼️"
-                    }
-                    h3 { style: "
-                            margin-bottom: var(--space-2);
-                            color: var(--text-primary);
-                        ",
-                        "No Media Found"
-                    }
-                    p { style: "
-                            color: var(--text-secondary);
-                            max-width: 500px;
-                            margin: 0 auto;
-                        ",
-                        if show_hidden() {
-                            "No media matches your search criteria in this library."
-                        } else {
-                            "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                    div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
+                        // Library info
+                        div {
+                            h1 { style: "margin: 0 0 var(--space-2) 0;", "Library: {library.path}" }
+                            div { style: "
+                                    display: flex;
+                                    gap: var(--space-4);
+                                    margin-bottom: var(--space-3);
+                                    color: var(--text-secondary);
+                                    font-size: 0.875rem;
+                                ",
+                                span { "Owner: {library.uid}" }
+                                span { "Group: {library.gid}" }
+                                span { "Last scanned: {formatted_time}" }
+                                span { "File count: {library.count}" }
+                            }
+                            TaskBar { update_signal, library_uuid }
                         }
-                    }
-                    if !show_hidden() {
-                        button {
-                            class: "btn btn-secondary",
-                            style: "margin-top: var(--space-4);",
-                            onclick: move |_| {
-                                show_hidden.set(true);
-                            },
-                            "Show Hidden Files"
+                        // Action buttons
+                        div { style: "display: flex; gap: var(--space-2);",
+                            button {
+                                class: "btn btn-secondary",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid())));
+                                },
+                                "Start Task"
+                            }
                         }
                     }
                 }
-            } else {
-                div {
-                    class: "media-grid",
-                    style: "
-                        display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                        gap: var(--space-4);
-                        margin-top: var(--space-4);
-                    ",
-                    for media_uuid in media.iter() {
-                        crate::components::media_card::MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
+
+                SearchBar {
+                    search_signal: media_search_signal,
+                    storage_key: MEDIA_SEARCH_KEY,
+                    placeholder: "Search media in this library...",
+                    status: format!(
+                        "Found {} items{}",
+                        media.len(),
+                        if show_hidden() { " (including hidden)" } else { "" },
+                    ),
+                    action_button,
+                }
+            }
+
+            div { class: "scrollable-content",
+                // media grid
+                if media.is_empty() {
+                    div {
+                        class: "empty-state",
+                        style: "
+                            padding: var(--space-8) var(--space-4);
+                            text-align: center;
+                            background-color: var(--surface);
+                            border-radius: var(--radius-lg);
+                            margin-top: var(--space-4);
+                        ",
+                        div { style: "
+                                font-size: 4rem;
+                                margin-bottom: var(--space-4);
+                                color: var(--neutral-400);
+                            ",
+                            "🖼️"
+                        }
+                        h3 { style: "
+                                margin-bottom: var(--space-2);
+                                color: var(--text-primary);
+                            ",
+                            "No Media Found"
+                        }
+                        p { style: "
+                                color: var(--text-secondary);
+                                max-width: 500px;
+                                margin: 0 auto;
+                            ",
+                            if show_hidden() {
+                                "No media matches your search criteria in this library."
+                            } else {
+                                "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                            }
+                        }
+                        if !show_hidden() {
+                            button {
+                                class: "btn btn-secondary",
+                                style: "margin-top: var(--space-4);",
+                                onclick: move |_| {
+                                    show_hidden.set(true);
+                                },
+                                "Show Hidden Files"
+                            }
+                        }
+                    }
+                } else {
+                    div {
+                        class: "media-grid",
+                        style: "
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: var(--space-4);
+                            margin-top: var(--space-4);
+                        ",
+                        for media_uuid in media.iter() {
+                            crate::components::media_card::MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
+                        }
                     }
                 }
             }

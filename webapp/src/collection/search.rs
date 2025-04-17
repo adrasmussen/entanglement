@@ -54,95 +54,101 @@ pub fn CollectionSearch() -> Element {
     };
 
     rsx! {
-        div { class: "container",
+        div { class: "container with-sticky",
             // Modal container for popups
             ModalBox { update_signal }
 
-            // Page header
-            div { class: "page-header", style: "margin-bottom: var(--space-4);",
-                h1 { class: "section-title", "Collections" }
-                p { "Organize and browse your media collections" }
-            }
-
-            // Search controls
-            SearchBar {
-                search_signal: collection_search_signal,
-                storage_key: COLLECTION_SEARCH_KEY,
-                placeholder: "Search by collection name or description...",
-                status,
-                action_button,
-            }
-
-            // Collection grid
-            match &*collection_future.read() {
-                Some(Ok(resp)) => {
-                    rsx! {
-                        CollectionGrid { collections: resp.collections.clone() }
-                    }
+            div { class: "sticky-header",
+                // Page header
+                div {
+                    class: "page-header",
+                    style: "margin-bottom: var(--space-4);",
+                    h1 { class: "section-title", "Collections" }
+                    p { "Organize and browse your media collections" }
                 }
-                Some(Err(err)) => rsx! {
-                    div {
-                        class: "error-state",
-                        style: "
-                                                padding: var(--space-4);
-                                                background-color: var(--surface);
-                                                border-radius: var(--radius-lg);
-                                                margin-top: var(--space-4);
-                                                color: var(--error);
-                                                text-align: center;
-                                            ",
-                        "Error: {err}"
+
+                // Search controls
+                SearchBar {
+                    search_signal: collection_search_signal,
+                    storage_key: COLLECTION_SEARCH_KEY,
+                    placeholder: "Search by collection name or description...",
+                    status,
+                    action_button,
+                }
+            }
+
+            div { class: "scrollable-content",
+                // Collection grid
+                match &*collection_future.read() {
+                    Some(Ok(resp)) => {
+                        rsx! {
+                            CollectionGrid { collections: resp.collections.clone() }
+                        }
                     }
-                },
-                None => rsx! {
-                    div {
-                        class: "loading-state collections-grid",
-                        style: "
-                                                display: grid;
-                                                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                                                gap: var(--space-4);
-                                                margin-top: var(--space-4);
-                                            ",
-                        for _ in 0..6 {
-                            div {
-                                class: "collection-card loading",
-                                style: "
-                                                        background-color: var(--surface);
-                                                        border-radius: var(--radius-lg);
-                                                        overflow: hidden;
-                                                        box-shadow: var(--shadow-sm);
-                                                        height: 100%;
-                                                    ",
-                                // Skeleton loading UI
-                                div { class: "skeleton", style: "height: 180px;" }
-                                div { style: "padding: var(--space-3);",
-                                    div {
-                                        class: "skeleton",
-                                        style: "width: 70%; height: 24px; margin-bottom: var(--space-2);",
-                                    }
-                                    div {
-                                        class: "skeleton",
-                                        style: "width: 100%; height: 16px; margin-bottom: var(--space-1);",
-                                    }
-                                    div {
-                                        class: "skeleton",
-                                        style: "width: 90%; height: 16px; margin-bottom: var(--space-3);",
-                                    }
-                                    div { style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
+                    Some(Err(err)) => rsx! {
+                        div {
+                            class: "error-state",
+                            style: "
+                                padding: var(--space-4);
+                                background-color: var(--surface);
+                                border-radius: var(--radius-lg);
+                                margin-top: var(--space-4);
+                                color: var(--error);
+                                text-align: center;
+                            ",
+                            "Error: {err}"
+                        }
+                    },
+                    None => rsx! {
+                        div {
+                            class: "loading-state collections-grid",
+                            style: "
+                                display: grid;
+                                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                                gap: var(--space-4);
+                                margin-top: var(--space-4);
+                            ",
+                            for _ in 0..6 {
+                                div {
+                                    class: "collection-card loading",
+                                    style: "
+                                        background-color: var(--surface);
+                                        border-radius: var(--radius-lg);
+                                        overflow: hidden;
+                                        box-shadow: var(--shadow-sm);
+                                        height: 100%;
+                                    ",
+                                    // Skeleton loading UI
+                                    div { class: "skeleton", style: "height: 180px;" }
+                                    div { style: "padding: var(--space-3);",
                                         div {
                                             class: "skeleton",
-                                            style: "width: 40px; height: 24px;",
+                                            style: "width: 70%; height: 24px; margin-bottom: var(--space-2);",
                                         }
                                         div {
                                             class: "skeleton",
-                                            style: "width: 40px; height: 24px;",
+                                            style: "width: 100%; height: 16px; margin-bottom: var(--space-1);",
+                                        }
+                                        div {
+                                            class: "skeleton",
+                                            style: "width: 90%; height: 16px; margin-bottom: var(--space-3);",
+                                        }
+                                        div { style: "display: flex; justify-content: flex-end; gap: var(--space-2);",
+                                            div {
+                                                class: "skeleton",
+                                                style: "width: 40px; height: 24px;",
+                                            }
+                                            div {
+                                                class: "skeleton",
+                                                style: "width: 40px; height: 24px;",
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                },
+                    },
+                }
             }
         }
     }

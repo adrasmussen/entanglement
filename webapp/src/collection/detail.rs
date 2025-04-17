@@ -136,141 +136,152 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
     rsx! {
-        div { class: "container",
-            // breadcrumb navigation
-            div { class: "breadcrumb", style: "margin-bottom: var(--space-4);",
-                Link { to: Route::CollectionSearch {}, "Collections" }
-                span { " / " }
-                span { "{collection.name}" }
-            }
-            // collection detail view header
-            div {
-                class: "collection-detail-header",
-                style: "
-                    background-color: var(--surface);
-                    border-radius: var(--radius-lg);
-                    padding: var(--space-4);
-                    margin-bottom: var(--space-4);
-                    box-shadow: var(--shadow-sm);
-                ",
-                div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
-                    // Collection info
-                    div {
-                        h1 { style: "margin: 0 0 var(--space-2) 0;", "{collection.name}" }
-                        div { style: "
-                                display: flex;
-                                gap: var(--space-4);
-                                margin-bottom: var(--space-3);
-                                color: var(--text-secondary);
-                                font-size: 0.875rem;
-                            ",
-                            span { "Owner: {collection.uid}" }
-                            span { "Group: {collection.gid}" }
-                            span { "Last modified: {formatted_time}" }
-                        }
+        div { class: "container with-sticky",
+            ModalBox { update_signal }
 
-                        if !collection.note.is_empty() {
-                            p { style: "
-                                    padding: var(--space-3);
-                                    background-color: var(--neutral-50);
-                                    border-radius: var(--radius-md);
-                                    font-style: italic;
-                                    color: var(--text-secondary);
-                                    max-width: 700px;
-                                ",
-                                "{collection.note}"
-                            }
-                        }
-                        if !collection.tags.is_empty() {
-                            p { style: "
-                                    padding: var(--space-3);
-                                    background-color: var(--neutral-50);
-                                    border-radius: var(--radius-md);
-                                    font-style: italic;
-                                    color: var(--text-secondary);
-                                    max-width: 700px;
-                                ",
-                                "Tags: {formatted_tags}"
-                            }
-                        }
-                    }
-                    // Action buttons
-                    div { style: "display: flex; gap: var(--space-2);",
-                        button {
-                            class: "btn btn-secondary",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::EditCollection(collection_uuid())));
-                            },
-                            "Edit Collection"
-                        }
-                        button {
-                            class: "btn btn-danger",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.push(Modal::DeleteCollection(collection_uuid())));
-                            },
-                            "Delete Collection"
-                        }
-                    }
-                }
-            }
-            SearchBar {
-                search_signal: media_search_signal,
-                storage_key: MEDIA_SEARCH_KEY,
-                placeholder: "Search media in this collection...",
-                status: format!("Found {} items in this collection", media.len()),
-            }
-            // media grid
-            if media.is_empty() {
+            div { class: "sticky-header",
+                // breadcrumb navigation
                 div {
-                    class: "empty-state",
+                    class: "breadcrumb",
+                    style: "margin-bottom: var(--space-4);",
+                    Link { to: Route::CollectionSearch {}, "Collections" }
+                    span { " / " }
+                    span { "{collection.name}" }
+                }
+
+                // collection detail view header
+                div {
+                    class: "collection-detail-header",
                     style: "
-                        padding: var(--space-8) var(--space-4);
-                        text-align: center;
                         background-color: var(--surface);
                         border-radius: var(--radius-lg);
-                        margin-top: var(--space-4);
+                        padding: var(--space-4);
+                        margin-bottom: var(--space-4);
+                        box-shadow: var(--shadow-sm);
                     ",
-                    div { style: "
-                            font-size: 4rem;
-                            margin-bottom: var(--space-4);
-                            color: var(--neutral-400);
-                        ",
-                        "🖼️"
-                    }
-                    h3 { style: "
-                            margin-bottom: var(--space-2);
-                            color: var(--text-primary);
-                        ",
-                        "No Media in This Collection"
-                    }
-                    p { style: "
-                            color: var(--text-secondary);
-                            max-width: 500px;
-                            margin: 0 auto;
-                        ",
-                        "This collection doesn't contain any media yet. Add some media to get started."
-                    }
-                    button {
-                        class: "btn btn-primary",
-                        style: "margin-top: var(--space-4);",
-                        onclick: move |_| {},
-                        "Add Media to Collection"
+                    div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
+                        // Collection info
+                        div {
+                            h1 { style: "margin: 0 0 var(--space-2) 0;", "{collection.name}" }
+                            div { style: "
+                                    display: flex;
+                                    gap: var(--space-4);
+                                    margin-bottom: var(--space-3);
+                                    color: var(--text-secondary);
+                                    font-size: 0.875rem;
+                                ",
+                                span { "Owner: {collection.uid}" }
+                                span { "Group: {collection.gid}" }
+                                span { "Last modified: {formatted_time}" }
+                            }
+
+                            if !collection.note.is_empty() {
+                                p { style: "
+                                        padding: var(--space-3);
+                                        background-color: var(--neutral-50);
+                                        border-radius: var(--radius-md);
+                                        font-style: italic;
+                                        color: var(--text-secondary);
+                                        max-width: 700px;
+                                    ",
+                                    "{collection.note}"
+                                }
+                            }
+                            if !collection.tags.is_empty() {
+                                p { style: "
+                                        padding: var(--space-3);
+                                        background-color: var(--neutral-50);
+                                        border-radius: var(--radius-md);
+                                        font-style: italic;
+                                        color: var(--text-secondary);
+                                        max-width: 700px;
+                                    ",
+                                    "Tags: {formatted_tags}"
+                                }
+                            }
+                        }
+                        // Action buttons
+                        div { style: "display: flex; gap: var(--space-2);",
+                            button {
+                                class: "btn btn-secondary",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.push(Modal::EditCollection(collection_uuid())));
+                                },
+                                "Edit Collection"
+                            }
+                            button {
+                                class: "btn btn-danger",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.push(Modal::DeleteCollection(collection_uuid())));
+                                },
+                                "Delete Collection"
+                            }
+                        }
                     }
                 }
-            } else {
-                div {
-                    class: "media-grid",
-                    style: "
-                        display: grid;
-                        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                        gap: var(--space-4);
-                        margin-top: var(--space-4);
-                    ",
-                    for media_uuid in media.iter() {
-                        MediaCard {
-                            key: "{media_uuid}",
-                            media_uuid: *media_uuid,
-                            collection_uuid: Some(collection_uuid()),
+
+                SearchBar {
+                    search_signal: media_search_signal,
+                    storage_key: MEDIA_SEARCH_KEY,
+                    placeholder: "Search media in this collection...",
+                    status: format!("Found {} items in this collection", media.len()),
+                }
+            }
+
+            div { class: "scrollable-content",
+                // media grid
+                if media.is_empty() {
+                    div {
+                        class: "empty-state",
+                        style: "
+                            padding: var(--space-8) var(--space-4);
+                            text-align: center;
+                            background-color: var(--surface);
+                            border-radius: var(--radius-lg);
+                            margin-top: var(--space-4);
+                        ",
+                        div { style: "
+                                font-size: 4rem;
+                                margin-bottom: var(--space-4);
+                                color: var(--neutral-400);
+                            ",
+                            "🖼️"
+                        }
+                        h3 { style: "
+                                margin-bottom: var(--space-2);
+                                color: var(--text-primary);
+                            ",
+                            "No Media in This Collection"
+                        }
+                        p { style: "
+                                color: var(--text-secondary);
+                                max-width: 500px;
+                                margin: 0 auto;
+                            ",
+                            "This collection doesn't contain any media yet. Add some media to get started."
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            style: "margin-top: var(--space-4);",
+                            onclick: move |_| {},
+                            "Add Media to Collection"
+                        }
+                    }
+                } else {
+                    div {
+                        class: "media-grid",
+                        style: "
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: var(--space-4);
+                            margin-top: var(--space-4);
+                        ",
+                        for media_uuid in media.iter() {
+                            MediaCard {
+                                key: "{media_uuid}",
+                                media_uuid: *media_uuid,
+                                collection_uuid: Some(collection_uuid()),
+                            }
                         }
                     }
                 }

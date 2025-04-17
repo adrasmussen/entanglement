@@ -106,5 +106,36 @@ a:hover {
 .search-input {
   flex-grow: 1;
 }
+
+.sticky-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  overflow: hidden;
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background-color: var(--background);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-2);
+}
+
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: var(--space-4);
+}
+
+/* Adjust the container to work with sticky headers */
+.container.with-sticky {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  padding-bottom: 0;
+}
+
 "#
 );

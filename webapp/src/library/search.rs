@@ -28,73 +28,79 @@ pub fn LibrarySearch() -> Element {
     };
 
     rsx! {
-        div { class: "container",
+        div { class: "container with-sticky",
             ModalBox { update_signal }
 
-            div { class: "page-header", style: "margin-bottom: var(--space-4);",
-                h1 { class: "section-title", "Libraries" }
-                p { "Manage your media source libraries" }
-            }
-
-            SearchBar {
-                search_signal: library_search_signal,
-                storage_key: LIBRARY_SEARCH_KEY,
-                placeholder: "Search by library path...",
-                status,
-            }
-
-            match &*library_future.read() {
-                Some(Ok(resp)) => {
-                    rsx! {
-                        LibraryTable { libraries: resp.libraries.clone(), update_signal }
-                    }
+            div { class: "sticky-header",
+                div {
+                    class: "page-header",
+                    style: "margin-bottom: var(--space-4);",
+                    h1 { class: "section-title", "Libraries" }
+                    p { "Manage your media source libraries" }
                 }
-                Some(Err(err)) => rsx! {
-                    div {
-                        class: "error-state",
-                        style: "
-                                                padding: var(--space-4);
-                                                background-color: var(--surface);
-                                                border-radius: var(--radius-lg);
-                                                margin-top: var(--space-4);
-                                                color: var(--error);
-                                                text-align: center;
-                                            ",
-                        "Error: {err}"
+
+                SearchBar {
+                    search_signal: library_search_signal,
+                    storage_key: LIBRARY_SEARCH_KEY,
+                    placeholder: "Search by library path...",
+                    status,
+                }
+            }
+
+            div { class: "scrollable-content",
+                match &*library_future.read() {
+                    Some(Ok(resp)) => {
+                        rsx! {
+                            LibraryTable { libraries: resp.libraries.clone(), update_signal }
+                        }
                     }
-                },
-                None => rsx! {
-                    div {
-                        class: "loading-state libraries-table",
-                        style: "
-                                                margin-top: var(--space-4);
-                                                background-color: var(--surface);
-                                                border-radius: var(--radius-lg);
-                                                overflow: hidden;
-                                                box-shadow: var(--shadow-sm);
-                                            ",
-                        // Library table skeleton loading UI
-                        table { style: "width: 100%; border-collapse: collapse;",
-                            thead {
-                                tr {
-                                    for _ in 0..4 {
-                                        th {
-                                            div {
-                                                class: "skeleton",
-                                                style: "height: 24px; width: 100%;",
+                    Some(Err(err)) => rsx! {
+                        div {
+                            class: "error-state",
+                            style: "
+                                padding: var(--space-4);
+                                background-color: var(--surface);
+                                border-radius: var(--radius-lg);
+                                margin-top: var(--space-4);
+                                color: var(--error);
+                                text-align: center;
+                            ",
+                            "Error: {err}"
+                        }
+                    },
+                    None => rsx! {
+                        div {
+                            class: "loading-state libraries-table",
+                            style: "
+                                margin-top: var(--space-4);
+                                background-color: var(--surface);
+                                border-radius: var(--radius-lg);
+                                overflow: hidden;
+                                box-shadow: var(--shadow-sm);
+                            ",
+                            // Library table skeleton loading UI
+                            table { style: "width: 100%; border-collapse: collapse;",
+                                thead {
+                                    tr {
+                                        for _ in 0..4 {
+                                            th {
+                                                div {
+                                                    class: "skeleton",
+                                                    style: "height: 24px; width: 100%;",
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                            tbody {
-                                for _ in 0..5 {
-                                    tr {
-                                        for _ in 0..4 {
-                                            td {
-                                                div {
-                                                    class: "skeleton",
-                                                    style: "height: 18px; width: 90%;",
+                                tbody {
+                                    for _ in 0..5 {
+                                        tr {
+                                            for _ in 0..4 {
+                                                td {
+                                                    div {
+                                                        class: "skeleton",
+                                                        style: "height: 18px; width: 90%;",
+                                                    }
                                                 }
                                             }
                                         }
@@ -102,8 +108,8 @@ pub fn LibrarySearch() -> Element {
                                 }
                             }
                         }
-                    }
-                },
+                    },
+                }
             }
         }
     }
