@@ -252,7 +252,7 @@ pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
                 AdvancedTab {
                     tab_signal,
                     target: TabTarget::_BulkTagEdit,
-                    text: "Show Collections",
+                    text: "Bulk Edit Tags",
                 }
                 AdvancedTab {
                     tab_signal,

@@ -85,6 +85,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     // the library media search is the only place where we can specify hidden = true
     let mut show_hidden = use_signal(|| false);
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+
     let media_future = use_resource(move || async move {
         update_signal();
         let library_uuid = library_uuid();
@@ -215,9 +216,9 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
                     status: format!(
-                        "Found {} items{}",
+                        "Found {} {}items",
                         media.len(),
-                        if show_hidden() { " (including hidden)" } else { "" },
+                        if show_hidden() { "hidden " } else { "" },
                     ),
                     action_button,
                 }

@@ -259,6 +259,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                     style: "margin-bottom: var(--space-6);",
                                     input {
                                         id: "hidden-checkbox",
+                                        style: "margin: 0 8px 0 0;",
                                         r#type: "checkbox",
                                         checked: media.hidden,
                                         onclick: move |_| async move {

@@ -50,8 +50,9 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
             // Add selection overlay in bulk edit mode
             if bulk_edit_mode_signal() {
                 div {
-                    onclick: toggle_selection,
                     style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: pointer;",
+                    onclick: toggle_selection,
+                    // somewhat inexplicably, this is the radio button in the corner of the tile
                     div { style: "position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background-color: var(--surface); border: 2px solid var(--primary); display: flex; align-items: center; justify-content: center;",
                         if is_selected {
                             div { style: "width: 12px; height: 12px; background-color: var(--primary); border-radius: 50%;" }
@@ -89,7 +90,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                                     if info.media.note.is_empty() {
                                         "No description"
                                     } else {
-                                        {info.media.note.clone()}
+                                        {info.media.note.clone().lines().next().unwrap_or_else(|| "No description")}
                                     }
                                 }
                             }

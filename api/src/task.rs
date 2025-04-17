@@ -79,7 +79,7 @@ pub struct ShowTasksResp {
     pub tasks: Vec<Task>,
 }
 
-// display implmentations
+// display impls so that we can output these cleanly to logs
 impl Display for TaskType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
