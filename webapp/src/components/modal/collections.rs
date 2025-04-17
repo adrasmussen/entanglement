@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{ModalSize, ModernModal, MODAL_STACK};
+use crate::components::modal::{Modal, ModalSize, ModernModal, MODAL_STACK, search::ModalSearchBar};
 use api::{
     auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter, unfold_set,
     FOLDING_SEPARATOR,
@@ -221,31 +221,32 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                                                                                                                                                                                                                display: flex;
-                                                                                                                                                                                                                                flex-wrap: wrap;
-                                                                                                                                                                                                                                gap: var(--space-2);
-                                                                                                                                                                                                                            ",
+                                                                                                                                                                                                                                                                                                        display: flex;
+                                                                                                                                                                                                                                                                                                        flex-wrap: wrap;
+                                                                                                                                                                                                                                                                                                        gap: var(--space-2);
+                                                                                                                                                                                                                                                                                                    ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                                                                                                                                                                        display: inline-flex;
-                                                                                                                                                                                                                                        align-items: center;
-                                                                                                                                                                                                                                        padding: var(--space-1) var(--space-2);
-                                                                                                                                                                                                                                        background-color: var(--primary-light);
-                                                                                                                                                                                                                                        color: white;
-                                                                                                                                                                                                                                        border-radius: var(--radius-full);
-                                                                                                                                                                                                                                        font-size: 0.75rem;
-                                                                                                                                                                                                                                    ",
+                                                                                                                                                                                                                                                                                                                display: inline-flex;
+                                                                                                                                                                                                                                                                                                                align-items: center;
+                                                                                                                                                                                                                                                                                                                padding: var(--space-1) var(--space-2);
+                                                                                                                                                                                                                                                                                                                background-color: var(--primary-light);
+                                                                                                                                                                                                                                                                                                                color: white;
+                                                                                                                                                                                                                                                                                                                border-radius: var(--radius-full);
+                                                                                                                                                                                                                                                                                                                font-size: 0.75rem;
+                                                                                                                                                                                                                                                                                                            ",
                                                 "{member}"
                                             }
                                         }
                                     }
-                                    div { style: "
-                                                                                                                                                                                                                            margin-top: var(--space-2);
-                                                                                                                                                                                                                            font-size: 0.75rem;
-                                                                                                                                                                                                                            color: var(--text-tertiary);
-                                                                                                                                                                                                                        ",
+                                    div {
+                                        style: "
+                                                                                                                                                                                                                                                                                                    margin-top: var(--space-2);
+                                                                                                                                                                                                                                                                                                    font-size: 0.75rem;
+                                                                                                                                                                                                                                                                                                    color: var(--text-tertiary);
+                                                                                                                                                                                                                                                                                                ",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -587,8 +588,8 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
     let mut status_message = use_signal(|| String::new());
 
     // Search state
-    let mut collection_search_signal = use_signal(|| String::new());
-    let mut selected_collection = use_signal(|| None::<CollectionUuid>);
+    let collection_search_signal = use_signal(|| String::new());
+    let selected_collection = use_signal(|| None::<CollectionUuid>);
 
     // Fetch collections based on search term
     let collections_future = use_resource(move || async move {
@@ -664,91 +665,10 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
     rsx! {
         ModernModal { title: "Add to Collection", size: ModalSize::Medium, footer,
             div {
-                div {
-                    class: "search-bar",
-                    style: "
-                        display: flex;
-                        align-items: center;
-                        gap: var(--space-2);
-                        margin-bottom: var(--space-6);
-                        background-color: var(--surface);
-                        padding: var(--space-3);
-                        border-radius: var(--radius-lg);
-                        box-shadow: var(--shadow-sm);
-                    ",
-                    form {
-                        class: "form-group",
-                        style: "width: 100%;",
-                        onsubmit: move |event| async move {
-                            let filter = match event.values().get("search_filter") {
-                                Some(val) => val.as_value(),
-                                None => String::from(""),
-                            };
-                            collection_search_signal.set(filter.clone());
-                        },
-                        label { class: "form-label", "Search Collections" }
-                        div { style: "display: flex; gap: var(--space-2); align-items: center;",
-                            input {
-                                class: "form-input",
-                                r#type: "text",
-                                name: "search_filter",
-                                value: "{collection_search_signal()}",
-                                placeholder: "Enter collection name or description...",
-                                style: "flex: 1;",
-                            }
-                            button { class: "btn btn-primary", r#type: "submit", "Search" }
-                        }
-                    }
-                }
+                p { "Search Collections" }
+                ModalSearchBar { search_signal: collection_search_signal, placeholder: "Enter collection name or description..." }
 
-                // Collections list
-                div {
-                    class: "collections-list",
-                    style: "
-                        margin-top: var(--space-4);
-                        max-height: 300px;
-                        overflow-y: auto;
-                        border: 1px solid var(--border);
-                        border-radius: var(--radius-md);
-                    ",
-
-                    match collections {
-                        Some(collections) => {
-                            if collections.is_empty() {
-                                rsx! {
-                                    div {
-                                        class: "empty-state",
-                                        style: "
-                                                                                                                                                                                                                                padding: var(--space-6);
-                                                                                                                                                                                                                                text-align: center;
-                                                                                                                                                                                                                                color: var(--text-tertiary);
-                                                                                                                                                                                                                            ",
-                                        "No collections found. Try a different search term or create a new collection."
-                                    }
-                                }
-                            } else {
-                                rsx! {
-                                    for collection_uuid in collections {
-                                        CollectionSelectionItem {
-                                            key: "{collection_uuid}",
-                                            collection_uuid,
-                                            is_selected: selected_collection() == Some(collection_uuid),
-                                            on_select: move |_| selected_collection.set(Some(collection_uuid)),
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            rsx! {
-                                // Loading state
-                                for _ in 0..3 {
-                                    div { class: "skeleton", style: "height: 60px; margin-bottom: 8px;" }
-                                }
-                            }
-                        }
-                    }
-                }
+                CollectionSelectionList {collections, selected_collection}
 
                 // Create new collection button
                 div { style: "margin-top: var(--space-4); text-align: center;",
@@ -757,136 +677,11 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                         onclick: move |_| {
                             MODAL_STACK
                                 .with_mut(|v| {
-                                    v.pop();
-                                    v.push(crate::components::modal::Modal::CreateCollection);
+                                    v.push(Modal::CreateCollection);
                                 });
                         },
                         "Create New Collection"
                     }
-                }
-            }
-        }
-    }
-}
-
-// Helper component for collection selection items
-#[derive(Clone, PartialEq, Props)]
-struct CollectionSelectionItemProps {
-    collection_uuid: CollectionUuid,
-    is_selected: bool,
-    on_select: EventHandler<MouseEvent>,
-}
-
-#[component]
-fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
-    let collection_uuid = props.collection_uuid;
-    let is_selected = props.is_selected;
-
-    // Fetch collection details
-    let collection_future =
-        use_resource(
-            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
-        );
-
-    let collection = &*collection_future.read();
-
-    match collection {
-        Some(Ok(result)) => {
-            let collection = result.collection.clone();
-            let description = if collection.note.is_empty() {
-                "No description"
-            } else {
-                &collection.note
-            };
-
-            rsx! {
-                div {
-                    class: if is_selected { "collection-item selected" } else { "collection-item" },
-                    style: {
-                        let base_style = "
-                                                                                                                                padding: var(--space-3);
-                                                                                                                                border-bottom: 1px solid var(--border);
-                                                                                                                                display: flex;
-                                                                                                                                align-items: center;
-                                                                                                                                cursor: pointer;
-                                                                                                                                transition: background-color var(--transition-fast) var(--easing-standard);
-                                                                                                                            ";
-                        if is_selected {
-                            format!(
-                                "{}background-color: var(--primary-light); color: white;",
-                                base_style,
-                            )
-                        } else {
-                            base_style.to_string()
-                        }
-                    },
-                    onclick: move |evt| props.on_select.call(evt),
-
-                    // Radio button indicator
-                    div { style: "margin-right: var(--space-3);",
-                        div {
-                            style: {
-                                let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
-                                format!(
-                                    "
-                                                                                                                                                            width: 18px;
-                                                                                                                                                            height: 18px;
-                                                                                                                                                            border-radius: 50%;
-                                                                                                                                                            border: 2px solid {};
-                                                                                                                                                            display: flex;
-                                                                                                                                                            align-items: center;
-                                                                                                                                                            justify-content: center;
-                                                                                                                                                        ",
-                                    border_color,
-                                )
-                            },
-                            if is_selected {
-                                div { style: "
-                                    width: 10px;
-                                    height: 10px;
-                                    border-radius: 50%;
-                                    background-color: white;
-                                " }
-                            }
-                        }
-                    }
-
-                    // Collection info
-                    div { style: "flex: 1;",
-                        div { style: "font-weight: 500;", "{collection.name}" }
-                        div {
-                            style: {
-                                if is_selected {
-                                    "font-size: 0.875rem; color: rgba(255, 255, 255, 0.9);"
-                                } else {
-                                    "font-size: 0.875rem; color: var(--text-tertiary);"
-                                }
-                            },
-                            "Group: {collection.gid} • {description}"
-                        }
-                    }
-                }
-            }
-        }
-        Some(Err(_)) => {
-            rsx! {
-                div {
-                    class: "collection-item error",
-                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border); color: var(--error);",
-                    "Error loading collection #{collection_uuid}"
-                }
-            }
-        }
-        None => {
-            rsx! {
-                div {
-                    class: "collection-item loading",
-                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border);",
-                    div {
-                        class: "skeleton",
-                        style: "height: 24px; width: 60%; margin-bottom: 4px;",
-                    }
-                    div { class: "skeleton", style: "height: 16px; width: 80%;" }
                 }
             }
         }
@@ -978,6 +773,390 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
                     style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
                     p { "Media ID: {media_uuid}" }
                     p { "Collection: {collection_name} (ID: {collection_uuid})" }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct BulkAddToCollectionModalProps {
+    update_signal: Signal<()>,
+    media_uuids: HashSet<MediaUuid>,
+}
+
+#[component]
+pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element {
+    let mut update_signal = props.update_signal;
+    let media_uuids = props.media_uuids.clone();
+
+    let media_count = media_uuids.len();
+
+    let mut status_message = use_signal(|| String::new());
+
+    // Search state
+    let collection_search_signal = use_signal(|| String::new());
+    let selected_collection = use_signal(|| None::<CollectionUuid>);
+    let mut processing_count = use_signal(|| 0);
+    let mut success_count = use_signal(|| 0);
+    let mut error_count = use_signal(|| 0);
+
+    // Fetch collections based on search term
+    let collections_future = use_resource(move || async move {
+        let filter = collection_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
+
+        search_collections(&SearchCollectionsReq {
+            filter: SearchFilter::SubstringAny { filter },
+        })
+        .await
+    });
+
+    // Handle bulk submission
+    let handle_submit = move |_| {
+        let media_uuids = media_uuids.clone();
+        async move {
+            if let Some(collection_uuid) = selected_collection() {
+                status_message.set(format!(
+                    "Adding {} media items to collection...",
+                    media_count
+                ));
+
+                processing_count.set(0);
+                success_count.set(0);
+                error_count.set(0);
+
+                // Process each media item
+                for media_uuid in media_uuids.clone() {
+                    processing_count.set(processing_count() + 1);
+
+                    match add_media_to_collection(&AddMediaToCollectionReq {
+                        collection_uuid,
+                        media_uuid,
+                    })
+                    .await
+                    {
+                        Ok(_) => {
+                            success_count.set(success_count() + 1);
+                        }
+                        Err(_) => {
+                            error_count.set(error_count() + 1);
+                        }
+                    }
+                }
+
+                // Update overall status
+                if error_count() == 0 {
+                    status_message.set(format!(
+                        "Successfully added all {} items to collection",
+                        success_count()
+                    ));
+                } else {
+                    status_message.set(format!(
+                        "Added {} items, {} failed",
+                        success_count(),
+                        error_count()
+                    ));
+                }
+
+                update_signal.set(());
+
+                // Close the modal after a delay if successful
+                if error_count() == 0 {
+                    let task = gloo_timers::callback::Timeout::new(1500, move || {
+                        MODAL_STACK.with_mut(|v| v.pop());
+                    });
+                    task.forget();
+                }
+            } else {
+                status_message.set("Please select a collection first".into());
+            }
+        }
+    };
+
+    let footer = rsx! {
+        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Cancel"
+            }
+            button {
+                class: "btn btn-primary",
+                disabled: selected_collection().is_none(),
+                onclick: handle_submit,
+                "Add to Collection"
+            }
+        }
+    };
+
+    // Get collections data for display
+    let collections = match &*collections_future.read() {
+        Some(Ok(response)) => Some(response.collections.clone()),
+        Some(Err(_)) => None,
+        None => None,
+    };
+
+    rsx! {
+        ModernModal {
+            title: format!("Add {} Items to Collection", media_count),
+            size: ModalSize::Medium,
+            footer,
+            div {
+                // Progress indicator during operation
+                if processing_count() > 0 && processing_count() < media_count {
+                    div {
+                        class: "progress-container",
+                        style: "margin-bottom: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                        p { "Processing... {processing_count()} of {media_count} items" }
+                        div {
+                            class: "progress-bar",
+                            style: "height: 8px; background-color: var(--neutral-200); border-radius: var(--radius-full); overflow: hidden; margin-top: var(--space-2);",
+                            div {
+                                style: format!(
+                                    "height: 100%; background-color: var(--primary); width: {}%;",
+                                    (processing_count() as f32 / media_count as f32 * 100.0) as i32,
+                                ),
+                            }
+                        }
+                        div { style: "display: flex; justify-content: space-between; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
+                            span { "Success: {success_count()}" }
+                            if error_count() > 0 {
+                                span { style: "color: var(--error);", "Failed: {error_count()}" }
+                            }
+                        }
+                    }
+                } else if success_count() > 0 || error_count() > 0 {
+                    div {
+                        class: "result-container",
+                        style: "margin-bottom: var(--space-4); padding: var(--space-3); border-radius: var(--radius-md);",
+                        style: if error_count() > 0 { "background-color: rgba(239, 68, 68, 0.1);" } else { "background-color: rgba(16, 185, 129, 0.1);" },
+                        if error_count() == 0 {
+                            p { style: "color: var(--success); font-weight: 500;",
+                                "Successfully added all {success_count()} items to collection"
+                            }
+                        } else {
+                            p { "Added {success_count()} items, {error_count()} failed" }
+                        }
+                    }
+                }
+
+                p { "Search Collections" }
+                ModalSearchBar { search_signal: collection_search_signal, placeholder: "Enter collection name or description..." }
+
+                CollectionSelectionList {collections, selected_collection}
+
+                // Media count summary
+                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
+                        "{media_count} items selected for bulk operation"
+                    }
+                }
+
+                // Create new collection button
+                div { style: "margin-top: var(--space-4); text-align: center;",
+                    button {
+                        class: "btn btn-secondary",
+                        onclick: move |_| {
+                            MODAL_STACK
+                                .with_mut(|v| {
+                                    v.push(Modal::CreateCollection);
+                                });
+                        },
+                        "Create New Collection"
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper component for collection selection items
+#[derive(Clone, PartialEq, Props)]
+struct CollectionSelectionItemProps {
+    collection_uuid: CollectionUuid,
+    is_selected: bool,
+    on_select: EventHandler<MouseEvent>,
+}
+
+#[component]
+fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
+    let collection_uuid = props.collection_uuid;
+    let is_selected = props.is_selected;
+
+    // Fetch collection details
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
+
+    let collection = &*collection_future.read();
+
+    match collection {
+        Some(Ok(result)) => {
+            let collection = result.collection.clone();
+            let description = if collection.note.is_empty() {
+                "No description"
+            } else {
+                &collection.note
+            };
+
+            rsx! {
+                div {
+                    class: if is_selected { "collection-item selected" } else { "collection-item" },
+                    style: {
+                        let base_style = "
+                            padding: var(--space-3);
+                            border-bottom: 1px solid var(--border);
+                            display: flex;
+                            align-items: center;
+                            cursor: pointer;
+                            transition: background-color var(--transition-fast) var(--easing-standard);
+                        ";
+                        if is_selected {
+                            format!(
+                                "{}background-color: var(--primary-light); color: white;",
+                                base_style,
+                            )
+                        } else {
+                            base_style.to_string()
+                        }
+                    },
+                    onclick: move |evt| props.on_select.call(evt),
+
+                    // Radio button indicator
+                    div { style: "margin-right: var(--space-3);",
+                        div {
+                            style: {
+                                let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
+                                format!("
+                                    width: 18px;
+                                    height: 18px;
+                                    border-radius: 50%;
+                                    border: 2px solid {};
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                ",
+                                    border_color,
+                                )
+                            },
+                            if is_selected {
+                                div { style: "
+                                    width: 10px;
+                                    height: 10px;
+                                    border-radius: 50%;
+                                    background-color: white;
+                                " }
+                            }
+                        }
+                    }
+
+                    // Collection info
+                    div { style: "flex: 1;",
+                        div { style: "font-weight: 500;", "{collection.name}" }
+                        div {
+                            style: {
+                                if is_selected {
+                                    "font-size: 0.875rem; color: rgba(255, 255, 255, 0.9);"
+                                } else {
+                                    "font-size: 0.875rem; color: var(--text-tertiary);"
+                                }
+                            },
+                            "Group: {collection.gid} • {description}"
+                        }
+                    }
+                }
+            }
+        }
+        Some(Err(_)) => {
+            rsx! {
+                div {
+                    class: "collection-item error",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border); color: var(--error);",
+                    "Error loading collection #{collection_uuid}"
+                }
+            }
+        }
+        None => {
+            rsx! {
+                div {
+                    class: "collection-item loading",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border);",
+                    div {
+                        class: "skeleton",
+                        style: "height: 24px; width: 60%; margin-bottom: 4px;",
+                    }
+                    div { class: "skeleton", style: "height: 16px; width: 80%;" }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct CollectionSelectionListProps {
+    collections: Option<Vec<CollectionUuid>>,
+    selected_collection: Signal<Option<CollectionUuid>>,
+}
+
+#[component]
+fn CollectionSelectionList(props: CollectionSelectionListProps) -> Element {
+    let collections = props.collections;
+    let mut selected_collection = props.selected_collection;
+
+    rsx! {
+        div {
+            class: "collections-list",
+            style: "
+                margin-top: var(--space-4);
+                max-height: 300px;
+                overflow-y: auto;
+                border: 1px solid var(--border);
+                border-radius: var(--radius-md);
+            ",
+
+            match collections {
+                Some(collections) => {
+                    if collections.is_empty() {
+                        rsx! {
+                            div {
+                                class: "empty-state",
+                                style: "
+                                    padding: var(--space-6);
+                                    text-align: center;
+                                    color: var(--text-tertiary);
+                                ",
+                                "No collections found. Try a different search term or create a new collection."
+                            }
+                        }
+                    } else {
+                        rsx! {
+                            for collection_uuid in collections {
+                                CollectionSelectionItem {
+                                    key: "{collection_uuid}",
+                                    collection_uuid,
+                                    is_selected: selected_collection() == Some(collection_uuid),
+                                    on_select: move |_| selected_collection.set(Some(collection_uuid)),
+                                }
+                            }
+                        }
+                    }
+                }
+                None => {
+                    rsx! {
+                        // Loading state
+                        for _ in 0..3 {
+                            div { class: "skeleton", style: "height: 60px; margin-bottom: 8px;" }
+                        }
+                    }
                 }
             }
         }

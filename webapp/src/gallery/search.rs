@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 
 use crate::{
@@ -12,8 +14,9 @@ use api::{media::*, search::SearchFilter};
 #[component]
 pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
-
     let mut advanced_expanded = use_signal(|| false);
+    let mut bulk_edit_mode_signal = use_signal(|| false);
+    let mut selected_media_signal = use_signal(|| HashSet::new());
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
@@ -33,8 +36,14 @@ pub fn GallerySearch() -> Element {
         button {
             class: "btn btn-secondary",
             onclick: move |_| {
+                if advanced_expanded() {
+                    bulk_edit_mode_signal.set(false);
+                    selected_media_signal.set(HashSet::new());
+                }
+
                 advanced_expanded.set(!advanced_expanded());
             },
+
             if advanced_expanded() {
                 "Hide Advanced"
             } else {
@@ -70,7 +79,7 @@ pub fn GallerySearch() -> Element {
                 {
                     if advanced_expanded() {
                         rsx! {
-                            AdvancedContainer { media_search_signal }
+                            AdvancedContainer { media_search_signal, bulk_edit_mode_signal, selected_media_signal }
                         }
                     } else {
                         rsx! {}
@@ -89,7 +98,7 @@ pub fn GallerySearch() -> Element {
                             } else {
                                 div { class: "media-grid",
                                     for media_uuid in resp.media.iter() {
-                                        MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
+                                        MediaCard { key: "{media_uuid}", media_uuid: *media_uuid, bulk_edit_mode_signal, selected_media_signal  }
                                     }
                                 }
                             }

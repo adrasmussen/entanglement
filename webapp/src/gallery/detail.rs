@@ -87,7 +87,8 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
     let media_data = &*media_future.read();
 
     // converting the option to an error and bubbling it up results in the page never reloading, so we
-    // transpose to handle the possible error first and then match/return early
+    // transpose to handle the possible error first (via show(), which causes the outer component to
+    // render the GalleryError) and then match/return early for the Option
     let media_data = match media_data.clone().transpose().show(|error| {
         rsx! {
             GalleryError { message: error }

@@ -1,11 +1,12 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
     common::{local_time, storage::*},
     components::{
-        modal::{Modal, ModalBox, MODAL_STACK},
-        search_bar::SearchBar,
+        media_card::MediaCard, modal::{Modal, ModalBox, MODAL_STACK}, search_bar::SearchBar
     },
     library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
@@ -64,6 +65,9 @@ struct LibraryInnerProps {
 #[component]
 fn LibraryInner(props: LibraryInnerProps) -> Element {
     let update_signal = props.update_signal;
+    let bulk_edit_mode_signal = use_signal(|| false);
+    let selected_media_signal = use_signal(|| HashSet::new());
+
     let library_uuid = props.library_uuid.parse::<LibraryUuid>().show(|_| {
         let message = "The library_uuid could not be parsed".to_string();
         rsx! {
@@ -276,7 +280,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             margin-top: var(--space-4);
                         ",
                         for media_uuid in media.iter() {
-                            crate::components::media_card::MediaCard { key: "{media_uuid}", media_uuid: *media_uuid }
+                            MediaCard { key: "{media_uuid}", media_uuid: *media_uuid,  bulk_edit_mode_signal, selected_media_signal }
                         }
                     }
                 }

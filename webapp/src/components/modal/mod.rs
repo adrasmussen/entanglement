@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 
 use api::{
@@ -10,7 +12,7 @@ use comments::DeleteCommentModal;
 mod collections;
 use collections::{
     AddMediaToCollectionModal, CreateCollectionModal, DeleteCollectionModal, EditCollectionModal,
-    RmFromCollectionModal,
+    RmFromCollectionModal, BulkAddToCollectionModal,
 };
 
 mod enhanced_media_modal;
@@ -18,6 +20,8 @@ use enhanced_media_modal::EnhancedMediaModal;
 
 mod library;
 use library::{StartTaskModal, StopTaskModal};
+
+mod search;
 
 // global modal signal
 //
@@ -38,6 +42,7 @@ pub enum Modal {
     DeleteCollection(CollectionUuid),
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
+    BulkAddToCollection(HashSet<MediaUuid>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
 }
@@ -94,6 +99,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                         media_uuid,
                         collection_uuid,
                     }
+                }
+            }
+            Modal::BulkAddToCollection(ref media_uuids) => {
+                rsx! {
+                    BulkAddToCollectionModal { update_signal, media_uuids: media_uuids.clone() }
                 }
             }
             Modal::StartTask(library_uuid) => {
