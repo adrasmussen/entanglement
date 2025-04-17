@@ -221,31 +221,31 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                     div {
                                         class: "members-list",
                                         style: "
-                                                                                display: flex;
-                                                                                flex-wrap: wrap;
-                                                                                gap: var(--space-2);
-                                                                            ",
+                                                                                                                                                        display: flex;
+                                                                                                                                                        flex-wrap: wrap;
+                                                                                                                                                        gap: var(--space-2);
+                                                                                                                                                    ",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                        display: inline-flex;
-                                                                                        align-items: center;
-                                                                                        padding: var(--space-1) var(--space-2);
-                                                                                        background-color: var(--primary-light);
-                                                                                        color: white;
-                                                                                        border-radius: var(--radius-full);
-                                                                                        font-size: 0.75rem;
-                                                                                    ",
+                                                                                                                                                                display: inline-flex;
+                                                                                                                                                                align-items: center;
+                                                                                                                                                                padding: var(--space-1) var(--space-2);
+                                                                                                                                                                background-color: var(--primary-light);
+                                                                                                                                                                color: white;
+                                                                                                                                                                border-radius: var(--radius-full);
+                                                                                                                                                                font-size: 0.75rem;
+                                                                                                                                                            ",
                                                 "{member}"
                                             }
                                         }
                                     }
                                     div { style: "
-                                                                            margin-top: var(--space-2);
-                                                                            font-size: 0.75rem;
-                                                                            color: var(--text-tertiary);
-                                                                        ",
+                                                                                                                                                    margin-top: var(--space-2);
+                                                                                                                                                    font-size: 0.75rem;
+                                                                                                                                                    color: var(--text-tertiary);
+                                                                                                                                                ",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -719,10 +719,10 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                                     div {
                                         class: "empty-state",
                                         style: "
-                                                                                padding: var(--space-6);
-                                                                                text-align: center;
-                                                                                color: var(--text-tertiary);
-                                                                            ",
+                                                                                                                                                        padding: var(--space-6);
+                                                                                                                                                        text-align: center;
+                                                                                                                                                        color: var(--text-tertiary);
+                                                                                                                                                    ",
                                         "No collections found. Try a different search term or create a new collection."
                                     }
                                 }
@@ -804,13 +804,13 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                     class: if is_selected { "collection-item selected" } else { "collection-item" },
                     style: {
                         let base_style = "
-                                                                padding: var(--space-3);
-                                                                border-bottom: 1px solid var(--border);
-                                                                display: flex;
-                                                                align-items: center;
-                                                                cursor: pointer;
-                                                                transition: background-color var(--transition-fast) var(--easing-standard);
-                                                            ";
+                                                                                                padding: var(--space-3);
+                                                                                                border-bottom: 1px solid var(--border);
+                                                                                                display: flex;
+                                                                                                align-items: center;
+                                                                                                cursor: pointer;
+                                                                                                transition: background-color var(--transition-fast) var(--easing-standard);
+                                                                                            ";
                         if is_selected {
                             format!(
                                 "{}background-color: var(--primary-light); color: white;",
@@ -829,14 +829,14 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
                                 format!(
                                     "
-                                                            width: 18px;
-                                                            height: 18px;
-                                                            border-radius: 50%;
-                                                            border: 2px solid {};
-                                                            display: flex;
-                                                            align-items: center;
-                                                            justify-content: center;
-                                                        ",
+                                                                                                            width: 18px;
+                                                                                                            height: 18px;
+                                                                                                            border-radius: 50%;
+                                                                                                            border: 2px solid {};
+                                                                                                            display: flex;
+                                                                                                            align-items: center;
+                                                                                                            justify-content: center;
+                                                                                                        ",
                                     border_color,
                                 )
                             },
