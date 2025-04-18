@@ -116,22 +116,24 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
         button {
             class: if &*tab_signal.read() == &target { "tab-button active" } else { "tab-button" },
             style: "
-                                                padding: var(--space-2) var(--space-4);
-                                                background: none;
-                                                border: none;
-                                                border-bottom: 3px solid transparent;
-                                                cursor: pointer;
-                                                font-weight: 500;
-                                                color: var(--text-secondary);
-                                                transition: all var(--transition-fast) var(--easing-standard);
-                                                margin-right: var(--space-2);
-                                                "
+                padding: var(--space-2) var(--space-4);
+                background: none;
+                border: none;
+                border-bottom: 3px solid transparent;
+                cursor: pointer;
+                font-weight: 500;
+                color: var(--text-secondary);
+                transition: all var(--transition-fast) var(--easing-standard);
+                margin-right: var(--space-2);
+                "
                 .to_string()
                 + if &*tab_signal.read() == &target {
                     "color: var(--primary); border-bottom-color: var(--primary);"
                 } else {
                     ""
                 },
+            // the bulk-edit modes want to share context if the tabs change,
+            // but generic tabs may want to reset their specialty signals
             onclick: move |_| tab_signal.set(target.clone()),
 
             "{text}"
