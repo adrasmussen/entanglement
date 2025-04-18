@@ -393,16 +393,16 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
                         edit_mode_signal,
                         title: "Add tags to media",
                         description: "Add tags to media if they are not already present",
-                        icon: "✚",
+                        icon: "🏷️",
                     }
                     TagEditOption {
                         edit_mode: TagEditMode::Remove,
                         edit_mode_signal,
                         title: "Remove tags from media",
                         description: "Remove tags from media if they are present",
-                        icon: "❌",
+                        icon: "🚫",
                     }
-                
+
                 }
                 div { class: "form-group",
                     label { class: "form-label" }

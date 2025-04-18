@@ -35,7 +35,7 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
             ",
             form {
                 class: "flex items-center",
-                style: "flex: 1; display: flex; align-items: center;", // Make the form take up available space
+                style: "flex: 1; display: flex; align-items: center;",
                 onsubmit: move |event| async move {
                     let filter = match event.values().get("search_filter") {
                         Some(val) => val.as_value(),
@@ -46,10 +46,10 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
                 },
                 div {
                     class: "search-input",
-                    style: "flex: 1; margin-right: var(--space-2);", // Make input field fill available space
+                    style: "flex: 1; margin-right: var(--space-2);",
                     input {
                         class: "form-input",
-                        style: "width: 100%;", // Full width input
+                        style: "width: 100%;",
                         name: "search_filter",
                         r#type: "text",
                         placeholder: "{placeholder}",
