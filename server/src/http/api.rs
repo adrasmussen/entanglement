@@ -19,6 +19,23 @@ use crate::{
 };
 use api::{auth::*, collection::*, comment::*, library::*, media::*, task::*};
 
+// http api endpoints
+//
+// even the most casual observer will notice that the http endpoints
+// are one-to-one (but not onto) the database service messages, which
+// begs the question -- why introduce this extra layer?
+//
+// first, not all of the rust db crates are async safe, and trying to
+// cram them into the axum Router state doesn't always work
+//
+// as a corrollary, this means that we don't need to worry about the
+// database service details, as they are hidden behind the ESM layer
+//
+// second, it is the http service's job to enforce the correct auth
+// policy for each of its endpoints; the db service just makes edits
+// with none of the policy logic attached.  crucially, this includes
+// clearing the access cache when collection contents are changed
+
 // auth handlers
 #[instrument(skip_all)]
 pub(super) async fn get_users_in_group(
