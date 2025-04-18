@@ -6,7 +6,9 @@ use dioxus_router::prelude::*;
 use crate::{
     common::{local_time, storage::*},
     components::{
-        media_card::MediaCard, modal::{Modal, ModalBox, MODAL_STACK}, search_bar::SearchBar
+        media_card::MediaCard,
+        modal::{Modal, ModalBox, MODAL_STACK},
+        search_bar::SearchBar,
     },
     library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
@@ -215,11 +217,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
-                    status: format!(
-                        "Found {} {}items",
-                        media.len(),
-                        if show_hidden() { "hidden " } else { "" },
-                    ),
+                    status: format!("Found {} {}items", media.len(), if show_hidden() { "hidden " } else { "" }),
                     action_button,
                 }
             }
@@ -281,7 +279,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             margin-top: var(--space-4);
                         ",
                         for media_uuid in media.iter() {
-                            MediaCard { key: "{media_uuid}", media_uuid: *media_uuid,  bulk_edit_mode_signal, selected_media_signal }
+                            MediaCard {
+                                key: "{media_uuid}",
+                                media_uuid: *media_uuid,
+                                bulk_edit_mode_signal,
+                                selected_media_signal,
+                            }
                         }
                     }
                 }

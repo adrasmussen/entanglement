@@ -40,7 +40,6 @@ pub fn GallerySearch() -> Element {
                     bulk_edit_mode_signal.set(false);
                     selected_media_signal.set(HashSet::new());
                 }
-
                 advanced_expanded.set(!advanced_expanded());
             },
 
@@ -79,7 +78,11 @@ pub fn GallerySearch() -> Element {
                 {
                     if advanced_expanded() {
                         rsx! {
-                            AdvancedContainer { media_search_signal, bulk_edit_mode_signal, selected_media_signal }
+                            AdvancedContainer {
+                                media_search_signal,
+                                bulk_edit_mode_signal,
+                                selected_media_signal,
+                            }
                         }
                     } else {
                         rsx! {}
@@ -98,7 +101,12 @@ pub fn GallerySearch() -> Element {
                             } else {
                                 div { class: "media-grid",
                                     for media_uuid in resp.media.iter() {
-                                        MediaCard { key: "{media_uuid}", media_uuid: *media_uuid, bulk_edit_mode_signal, selected_media_signal  }
+                                        MediaCard {
+                                            key: "{media_uuid}",
+                                            media_uuid: *media_uuid,
+                                            bulk_edit_mode_signal,
+                                            selected_media_signal,
+                                        }
                                     }
                                 }
                             }

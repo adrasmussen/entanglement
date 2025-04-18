@@ -285,7 +285,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                             MediaCard {
                                 key: "{media_uuid}",
                                 media_uuid: *media_uuid,
-                                collection_uuid: Some(collection_uuid()),bulk_edit_mode_signal, selected_media_signal
+                                collection_uuid: Some(collection_uuid()),
+                                bulk_edit_mode_signal,
+                                selected_media_signal,
                             }
                         }
                     }

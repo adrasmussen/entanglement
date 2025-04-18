@@ -2,9 +2,10 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
+use tracing::error;
 
 use crate::components::modal::{
-    search::ModalSearchBar, Modal, ModalSize, ModernModal, MODAL_STACK,
+    search::ModalSearchBar, Modal, ModalSize, ModernModal, ProgressBar, MODAL_STACK,
 };
 use api::{
     auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter, unfold_set,
@@ -220,11 +221,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                 rsx! {
                                     div {
                                         class: "members-list",
-                                        style: "
-                                            display: flex;
-                                            flex-wrap: wrap;
-                                            gap: var(--space-2);
-                                        ",
+                                        style: "display: flex; flex-wrap: wrap; gap: var(--space-2);",
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
@@ -235,18 +232,12 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                                     background-color: var(--primary-light);
                                                     color: white;
                                                     border-radius: var(--radius-full);
-                                                    font-size: 0.75rem;
-                                                ",
+                                                    font-size: 0.75rem;",
                                                 "{member}"
                                             }
                                         }
                                     }
-                                    div {
-                                        style: "
-                                            margin-top: var(--space-2);
-                                            font-size: 0.75rem;
-                                            color: var(--text-tertiary);
-                                        ",
+                                    div { style: "margin-top: var(--space-2); font-size: 0.75rem; color: var(--text-tertiary);",
                                         "Total members: {members.len()}"
                                     }
                                 }
@@ -537,11 +528,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
                 },
                 "Cancel"
             }
-            button {
-                class: "btn btn-danger",
-                onclick: handle_submit,
-                "Delete Collection"
-            }
+            button { class: "btn btn-danger", onclick: handle_submit, "Delete Collection" }
         }
     };
 
@@ -565,8 +552,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
                         background-color: rgba(239, 68, 68, 0.1);
                         border-left: 3px solid var(--error);
                         border-radius: var(--radius-md);
-                        color: var(--text-secondary);
-                    ",
+                        color: var(--text-secondary);",
                     "Note: This will only delete the collection. The media files within the collection will remain in your library."
                 }
             }
@@ -665,9 +651,12 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
         ModernModal { title: "Add to Collection", size: ModalSize::Medium, footer,
             div {
                 p { "Search Collections" }
-                ModalSearchBar { search_signal: collection_search_signal, placeholder: "Enter collection name or description..." }
+                ModalSearchBar {
+                    search_signal: collection_search_signal,
+                    placeholder: "Enter collection name or description...",
+                }
 
-                CollectionSelectionList {collections, selected_collection}
+                CollectionSelectionList { collections, selected_collection }
 
                 // Create new collection button
                 div { style: "margin-top: var(--space-4); text-align: center;",
@@ -751,11 +740,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
                 },
                 "Cancel"
             }
-            button {
-                class: "btn btn-danger",
-                onclick: handle_submit,
-                "Remove from Collection"
-            }
+            button { class: "btn btn-danger", onclick: handle_submit, "Remove from Collection" }
         }
     };
 
@@ -813,10 +798,11 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     let mut status_signal = use_signal(|| String::new());
 
     let media_uuids = props.media_uuids.clone();
-    let media_count = media_uuids.len();
+
     let mut processing_count = use_signal(|| 0);
     let mut success_count = use_signal(|| 0);
     let mut error_count = use_signal(|| 0);
+    let media_count = media_uuids.len() as i64;
 
     let handle_submit = move |_| {
         let media_uuids = media_uuids.clone();
@@ -864,7 +850,8 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                         Ok(_) => {
                             success_count.set(success_count() + 1);
                         }
-                        Err(_) => {
+                        Err(err) => {
+                            error!("failed to add media to collection while bulk adding: {err}");
                             error_count.set(error_count() + 1);
                         }
                     }
@@ -878,7 +865,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                     ));
                 } else {
                     status_signal.set(format!(
-                        "Added {} items, {} failed",
+                        "Added {} items, {} failed; see browser console",
                         success_count(),
                         error_count()
                     ));
@@ -926,48 +913,20 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
             size: ModalSize::Medium,
             footer,
             div {
-                // Progress indicator during operation
-                if processing_count() > 0 && processing_count() < media_count {
-                    div {
-                        class: "progress-container",
-                        style: "margin-bottom: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                        p { "Processing... {processing_count()} of {media_count} items" }
-                        div {
-                            class: "progress-bar",
-                            style: "height: 8px; background-color: var(--neutral-200); border-radius: var(--radius-full); overflow: hidden; margin-top: var(--space-2);",
-                            div {
-                                style: format!(
-                                    "height: 100%; background-color: var(--primary); width: {}%;",
-                                    (processing_count() as f32 / media_count as f32 * 100.0) as i32,
-                                ),
-                            }
-                        }
-                        div { style: "display: flex; justify-content: space-between; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
-                            span { "Success: {success_count()}" }
-                            if error_count() > 0 {
-                                span { style: "color: var(--error);", "Failed: {error_count()}" }
-                            }
-                        }
-                    }
-                } else if success_count() > 0 || error_count() > 0 {
-                    div {
-                        class: "result-container",
-                        style: "margin-bottom: var(--space-4); padding: var(--space-3); border-radius: var(--radius-md);",
-                        style: if error_count() > 0 { "background-color: rgba(239, 68, 68, 0.1);" } else { "background-color: rgba(16, 185, 129, 0.1);" },
-                        if error_count() == 0 {
-                            p { style: "color: var(--success); font-weight: 500;",
-                                "Successfully added all {success_count()} items to collection"
-                            }
-                        } else {
-                            p { "Added {success_count()} items, {error_count()} failed" }
-                        }
-                    }
+                ProgressBar {
+                    processing_count,
+                    success_count,
+                    error_count,
+                    media_count,
                 }
 
                 p { "Search Collections" }
-                ModalSearchBar { search_signal: collection_search_signal, placeholder: "Enter collection name or description..." }
+                ModalSearchBar {
+                    search_signal: collection_search_signal,
+                    placeholder: "Enter collection name or description...",
+                }
 
-                CollectionSelectionList {collections, selected_collection}
+                CollectionSelectionList { collections, selected_collection }
 
                 // Media count summary
                 div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
@@ -1065,12 +1024,7 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                                 )
                             },
                             if is_selected {
-                                div { style: "
-                                    width: 10px;
-                                    height: 10px;
-                                    border-radius: 50%;
-                                    background-color: white;
-                                " }
+                                div { style: "width: 10px; height: 10px; border-radius: 50%; background-color: white;" }
                             }
                         }
                     }
@@ -1131,13 +1085,7 @@ fn CollectionSelectionList(props: CollectionSelectionListProps) -> Element {
     rsx! {
         div {
             class: "collections-list",
-            style: "
-                margin-top: var(--space-4);
-                max-height: 300px;
-                overflow-y: auto;
-                border: 1px solid var(--border);
-                border-radius: var(--radius-md);
-            ",
+            style: "margin-top: var(--space-4); max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
 
             match collections {
                 Some(collections) => {
@@ -1145,11 +1093,7 @@ fn CollectionSelectionList(props: CollectionSelectionListProps) -> Element {
                         rsx! {
                             div {
                                 class: "empty-state",
-                                style: "
-                                    padding: var(--space-6);
-                                    text-align: center;
-                                    color: var(--text-tertiary);
-                                ",
+                                style: "padding: var(--space-6); text-align: center; color: var(--text-tertiary);",
                                 "No collections found. Try a different search term or create a new collection."
                             }
                         }

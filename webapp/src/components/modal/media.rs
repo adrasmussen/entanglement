@@ -1,7 +1,10 @@
-use dioxus::prelude::*;
+use std::collections::HashSet;
 
-use crate::components::{modal::ModernModal, modal::MODAL_STACK};
-use api::{full_link, media::*};
+use dioxus::prelude::*;
+use tracing::error;
+
+use crate::components::modal::{ModalSize, ModernModal, ProgressBar, MODAL_STACK};
+use api::{full_link, media::*, unfold_set, FOLDING_SEPARATOR};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct EnhancedMediaModalProps {
@@ -232,4 +235,241 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
     };
 
     element
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct BulkAddTagsModalProps {
+    update_signal: Signal<()>,
+    media_uuids: HashSet<MediaUuid>,
+}
+
+#[component]
+pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
+    let mut update_signal = props.update_signal;
+
+    let mut edit_tags = use_signal(|| String::new());
+
+    let edit_mode_signal = use_signal(|| TagEditMode::Add);
+
+    let mut status_signal = use_signal(|| String::new());
+
+    let media_uuids = props.media_uuids.clone();
+
+    let mut processing_count = use_signal(|| 0);
+    let mut success_count = use_signal(|| 0);
+    let mut error_count = use_signal(|| 0);
+    let media_count = media_uuids.len() as i64;
+
+    let handle_submit = move |_| {
+        let media_uuids = media_uuids.clone();
+        async move {
+            status_signal.set(format!("Adding tags on {} media items...", media_count));
+
+            processing_count.set(0);
+            success_count.set(0);
+            error_count.set(0);
+
+            let edit_tags = unfold_set(&edit_tags());
+
+            // Process each media item
+            for media_uuid in media_uuids.clone() {
+                processing_count.set(processing_count() + 1);
+
+                let media = match get_media(&GetMediaReq { media_uuid }).await {
+                    Ok(v) => v.media,
+                    Err(err) => {
+                        error!("failed to get media while bulk editing tags: {err}");
+                        error_count.set(error_count() + 1);
+                        continue;
+                    }
+                };
+
+                let tags = media.tags.clone();
+
+                let new_tags: HashSet<String> = match edit_mode_signal() {
+                    TagEditMode::Add => {
+                        if edit_tags.difference(&tags).collect::<Vec<_>>().len() == 0 {
+                            success_count.set(success_count() + 1);
+                            continue;
+                        }
+
+                        tags.union(&edit_tags).map(|v| v.clone()).collect()
+                    }
+                    TagEditMode::Remove => {
+                        if edit_tags.intersection(&tags).collect::<Vec<_>>().len() == 0 {
+                            success_count.set(success_count() + 1);
+                            continue;
+                        }
+
+                        tags.difference(&edit_tags).map(|v| v.clone()).collect()
+                    }
+                };
+
+                match update_media(&UpdateMediaReq {
+                    media_uuid,
+                    update: MediaUpdate {
+                        hidden: None,
+                        date: None,
+                        note: None,
+                        tags: Some(new_tags),
+                    },
+                })
+                .await
+                {
+                    Ok(_) => {
+                        success_count.set(success_count() + 1);
+                    }
+                    Err(err) => {
+                        error!("failed to update media while bulk editing tags: {err}");
+                        error_count.set(error_count() + 1);
+                    }
+                }
+            }
+
+            // Update overall status
+            if error_count() == 0 {
+                status_signal.set(format!(
+                    "Successfully added tags to {} items",
+                    success_count()
+                ));
+            } else {
+                status_signal.set(format!(
+                    "Modified {} items, {} failed; see browser console",
+                    success_count(),
+                    error_count()
+                ));
+            }
+
+            update_signal.set(());
+
+            // Close the modal after a delay if successful
+            if error_count() == 0 {
+                let task = gloo_timers::callback::Timeout::new(1500, move || {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                });
+                task.forget();
+            }
+        }
+    };
+
+    let footer = rsx! {
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Cancel"
+            }
+            button {
+                class: "btn btn-primary",
+                disabled: edit_tags().is_empty(),
+                onclick: handle_submit,
+                "Edit Tags"
+            }
+        }
+    };
+
+    rsx! {
+        ModernModal {
+            title: format!("Add Tags to {} Items", media_count),
+            size: ModalSize::Medium,
+            footer,
+            div {
+                ProgressBar {
+                    processing_count,
+                    success_count,
+                    error_count,
+                    media_count,
+                }
+
+                p { "Add tags to media" }
+                div { class: "task-options",
+                    TagEditOption {
+                        edit_mode: TagEditMode::Add,
+                        edit_mode_signal,
+                        title: "Add tags to media",
+                        description: "Add tags to media if they are not already present",
+                        icon: "✚",
+                    }
+                    TagEditOption {
+                        edit_mode: TagEditMode::Remove,
+                        edit_mode_signal,
+                        title: "Remove tags from media",
+                        description: "Remove tags from media if they are present",
+                        icon: "❌",
+                    }
+                
+                }
+                div { class: "form-group",
+                    label { class: "form-label" }
+                    div { style: "display: flex; gap: var(--space-2);",
+                        input {
+                            class: "form-input",
+                            r#type: "text",
+                            value: "{edit_tags()}",
+                            oninput: move |evt| edit_tags.set(evt.value().clone()),
+                            placeholder: "tag 1|tag 2|...",
+                            style: "flex: 1;",
+                        }
+                    }
+                    div {
+                        class: "form-help",
+                        style: "color: var(--text-tertiary); font-size: 0.875rem; margin-top: 0.25rem;",
+                        "Enter tags separated by {FOLDING_SEPARATOR}"
+                    }
+                }
+
+                // Media count summary
+                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
+                        "{media_count} items selected for bulk operation"
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum TagEditMode {
+    Add,
+    Remove,
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct TagEditOptionProps {
+    edit_mode: TagEditMode,
+    edit_mode_signal: Signal<TagEditMode>,
+    title: String,
+    description: String,
+    icon: String,
+}
+
+#[component]
+fn TagEditOption(props: TagEditOptionProps) -> Element {
+    let edit_mode = props.edit_mode;
+    let mut edit_mode_signal = props.edit_mode_signal;
+
+    rsx! {
+        div {
+            class: if edit_mode == edit_mode_signal() { "task-option selected" } else { "task-option" },
+            onclick: move |_| edit_mode_signal.set(edit_mode),
+            div { class: "task-radio",
+                div { class: "task-radio-outer",
+                    if edit_mode == edit_mode_signal() {
+                        div { class: "task-radio-inner" }
+                    }
+                }
+            }
+            div { class: "task-icon", "{props.icon}" }
+            div { class: "task-info",
+                div { class: "task-name", "{props.title}" }
+                div { class: "task-description", "{props.description}" }
+            }
+        }
+    }
 }

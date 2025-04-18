@@ -11,15 +11,15 @@ use comments::DeleteCommentModal;
 
 mod collections;
 use collections::{
-    AddMediaToCollectionModal, CreateCollectionModal, DeleteCollectionModal, EditCollectionModal,
-    RmFromCollectionModal, BulkAddToCollectionModal,
+    AddMediaToCollectionModal, BulkAddToCollectionModal, CreateCollectionModal,
+    DeleteCollectionModal, EditCollectionModal, RmFromCollectionModal,
 };
-
-mod enhanced_media_modal;
-use enhanced_media_modal::EnhancedMediaModal;
 
 mod library;
 use library::{StartTaskModal, StopTaskModal};
+
+mod media;
+use media::{BulkEditTagsModal, EnhancedMediaModal};
 
 mod search;
 
@@ -34,6 +34,7 @@ pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new())
 // this enumerates all of the modal boxes we can display, and what the relevant
 // data is to show the correct box.  pushing this onto the modal stack will
 // trigger the ModalBox, below
+#[derive(Clone, Debug, PartialEq)]
 pub enum Modal {
     EnhancedImageView(MediaUuid),
     DeleteComment(CommentUuid, MediaUuid),
@@ -43,6 +44,7 @@ pub enum Modal {
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
     BulkAddToCollection(HashSet<MediaUuid>),
+    BulkEditTagsModal(HashSet<MediaUuid>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
 }
@@ -104,6 +106,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             Modal::BulkAddToCollection(ref media_uuids) => {
                 rsx! {
                     BulkAddToCollectionModal { update_signal, media_uuids: media_uuids.clone() }
+                }
+            }
+            Modal::BulkEditTagsModal(ref media_uuids) => {
+                rsx! {
+                    BulkEditTagsModal { update_signal, media_uuids: media_uuids.clone() }
                 }
             }
             Modal::StartTask(library_uuid) => {
@@ -204,6 +211,60 @@ pub fn ModernModal(props: ModalProps) -> Element {
                         style: "display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);",
                         {footer.clone()}
                     }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct ProgressBarProps {
+    processing_count: Signal<i64>,
+    success_count: Signal<i64>,
+    error_count: Signal<i64>,
+    media_count: i64,
+}
+
+#[component]
+pub fn ProgressBar(props: ProgressBarProps) -> Element {
+    let processing_count = props.processing_count;
+    let success_count = props.success_count;
+    let error_count = props.error_count;
+    let media_count = props.media_count;
+    rsx! {
+        if processing_count() > 0 && processing_count() < media_count {
+            div {
+                class: "progress-container",
+                style: "margin-bottom: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                p { "Processing... {processing_count()} of {media_count} items" }
+                div {
+                    class: "progress-bar",
+                    style: "height: 8px; background-color: var(--neutral-200); border-radius: var(--radius-full); overflow: hidden; margin-top: var(--space-2);",
+                    div {
+                        style: format!(
+                            "height: 100%; background-color: var(--primary); width: {}%;",
+                            (processing_count() as f64 / media_count as f64 * 100.0) as i64,
+                        ),
+                    }
+                }
+                div { style: "display: flex; justify-content: space-between; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
+                    span { "Success: {success_count()}" }
+                    if error_count() > 0 {
+                        span { style: "color: var(--error);", "Failed: {error_count()}" }
+                    }
+                }
+            }
+        } else if success_count() > 0 || error_count() > 0 {
+            div {
+                class: "result-container",
+                style: "margin-bottom: var(--space-4); padding: var(--space-3); border-radius: var(--radius-md);",
+                style: if error_count() > 0 { "background-color: rgba(239, 68, 68, 0.1);" } else { "background-color: rgba(16, 185, 129, 0.1);" },
+                if error_count() == 0 {
+                    p { style: "color: var(--success); font-weight: 500;",
+                        "Successfully modified {success_count()} items"
+                    }
+                } else {
+                    p { "Modified {success_count()} items, {error_count()} failed" }
                 }
             }
         }
