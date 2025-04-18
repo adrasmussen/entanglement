@@ -402,7 +402,6 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
                         description: "Remove tags from media if they are present",
                         icon: "🚫",
                     }
-
                 }
                 div { class: "form-group",
                     label { class: "form-label" }

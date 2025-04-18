@@ -213,7 +213,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                                             aspect-ratio: 1;
                                             object-fit: cover;
                                         ",
-                                        loading: "lazy"
+                                        loading: "lazy",
                                     }
                                 }
                             }

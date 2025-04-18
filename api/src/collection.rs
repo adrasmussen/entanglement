@@ -16,6 +16,7 @@ pub struct Collection {
     pub name: String,
     pub note: String,
     pub tags: HashSet<String>,
+    pub cover: Option<MediaUuid>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

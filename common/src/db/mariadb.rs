@@ -522,7 +522,7 @@ impl DbBackend for MariaDBBackend {
         debug!({ collection_name = collection.name }, "adding collection");
 
         let mut result = r"
-            INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags)
+            INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags, cover)
             SELECT
                 UUID_SHORT(),
                 :uid,
@@ -530,7 +530,8 @@ impl DbBackend for MariaDBBackend {
                 :mtime,
                 :name,
                 :note,
-                :tags
+                :tags,
+                :cover
             FROM
                 DUAL
             WHERE NOT EXISTS(
@@ -547,7 +548,8 @@ impl DbBackend for MariaDBBackend {
                 "mtime" => Local::now().timestamp(),
                 "name" => collection.name.clone(),
                 "note" => collection.note,
-                "tags" => fold_set(collection.tags)?
+                "tags" => fold_set(collection.tags)?,
+                "cover" => collection.cover,
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -573,7 +575,7 @@ impl DbBackend for MariaDBBackend {
         );
 
         let mut result = r"
-            SELECT uid, gid, mtime, name, note, tags FROM collections WHERE collection_uuid = :collection_uuid"
+            SELECT uid, gid, mtime, name, note, tags, cover FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "collection_uuid" => collection_uuid,
         })
@@ -587,7 +589,15 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(String, String, i64, String, String, String)>(row)?;
+        let data = from_row_opt::<(
+            String,
+            String,
+            i64,
+            String,
+            String,
+            String,
+            Option<MediaUuid>,
+        )>(row)?;
 
         debug!(
             { collection_uuid = collection_uuid },
@@ -601,6 +611,7 @@ impl DbBackend for MariaDBBackend {
             name: data.3,
             note: data.4,
             tags: unfold_set(&data.5),
+            cover: data.6,
         }))
     }
 

@@ -371,6 +371,7 @@ pub(super) async fn add_collection(
                     name: message.collection.name,
                     note: message.collection.note,
                     tags: message.collection.tags,
+                    cover: message.collection.cover,
                 },
             }
             .into(),
