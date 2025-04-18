@@ -226,13 +226,13 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                    display: inline-flex;
-                                                    align-items: center;
-                                                    padding: var(--space-1) var(--space-2);
-                                                    background-color: var(--primary-light);
-                                                    color: white;
-                                                    border-radius: var(--radius-full);
-                                                    font-size: 0.75rem;",
+                                                                                        display: inline-flex;
+                                                                                        align-items: center;
+                                                                                        padding: var(--space-1) var(--space-2);
+                                                                                        background-color: var(--primary-light);
+                                                                                        color: white;
+                                                                                        border-radius: var(--radius-full);
+                                                                                        font-size: 0.75rem;",
                                                 "{member}"
                                             }
                                         }
@@ -988,13 +988,13 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                     class: if is_selected { "collection-item selected" } else { "collection-item" },
                     style: {
                         let base_style = "
-                            padding: var(--space-3);
-                            border-bottom: 1px solid var(--border);
-                            display: flex;
-                            align-items: center;
-                            cursor: pointer;
-                            transition: background-color var(--transition-fast) var(--easing-standard);
-                        ";
+                                            padding: var(--space-3);
+                                            border-bottom: 1px solid var(--border);
+                                            display: flex;
+                                            align-items: center;
+                                            cursor: pointer;
+                                            transition: background-color var(--transition-fast) var(--easing-standard);
+                                        ";
                         if is_selected {
                             format!(
                                 "{}background-color: var(--primary-light); color: white;",
@@ -1011,15 +1011,16 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                         div {
                             style: {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
-                                format!("
-                                    width: 18px;
-                                    height: 18px;
-                                    border-radius: 50%;
-                                    border: 2px solid {};
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                ",
+                                format!(
+                                    "
+                                                            width: 18px;
+                                                            height: 18px;
+                                                            border-radius: 50%;
+                                                            border: 2px solid {};
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                        ",
                                     border_color,
                                 )
                             },

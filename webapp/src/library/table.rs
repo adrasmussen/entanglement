@@ -174,7 +174,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                             class: "btn btn-secondary",
                                             style: "margin-right: var(--space-2);",
                                             onclick: move |_| {
-                                                tracing::info!("Scan library {library_uuid} clicked");
+                                                MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid)));
                                             },
                                             "Task History"
                                         }

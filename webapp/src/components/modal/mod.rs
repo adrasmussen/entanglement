@@ -16,7 +16,7 @@ use collections::{
 };
 
 mod library;
-use library::{StartTaskModal, StopTaskModal};
+use library::{StartTaskModal, StopTaskModal, TaskHistoryModal};
 
 mod media;
 use media::{BulkEditTagsModal, EnhancedMediaModal};
@@ -47,6 +47,7 @@ pub enum Modal {
     BulkEditTagsModal(HashSet<MediaUuid>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
+    TaskHistory(LibraryUuid),
 }
 
 // ModalBox
@@ -121,6 +122,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             Modal::StopTask(library_uuid) => {
                 rsx! {
                     StopTaskModal { update_signal, library_uuid }
+                }
+            }
+            Modal::TaskHistory(library_uuid) => {
+                rsx! {
+                    TaskHistoryModal { update_signal, library_uuid }
                 }
             }
         },

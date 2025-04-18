@@ -280,3 +280,136 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
         }
     }
 }
+
+#[derive(Clone, PartialEq, Props)]
+pub struct TaskHistoryModalProps {
+    update_signal: Signal<()>,
+    library_uuid: LibraryUuid,
+}
+
+#[component]
+pub fn TaskHistoryModal(props: TaskHistoryModalProps) -> Element {
+    let library_uuid = props.library_uuid;
+
+    let task_history_future =
+        use_resource(move || async move { show_tasks(&ShowTasksReq { library_uuid }).await });
+
+    let status_signal = use_signal(|| String::new());
+
+    let footer = rsx! {
+        span { class: "status-message", "{status_signal}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-primary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Close"
+            }
+        }
+    };
+
+    rsx! {
+        ModernModal { title: "Task History", size: ModalSize::Large, footer,
+
+            div {
+                class: "task-history-content",
+                style: "max-height: 60vh; overflow-y: auto;",
+                match &*task_history_future.read() {
+                    Some(Ok(response)) => {
+                        if response.tasks.is_empty() {
+                            rsx! {
+                                div {
+                                    class: "empty-state",
+                                    style: "padding: var(--space-6); text-align: center; color: var(--text-tertiary);",
+                                    "No task history available for this library."
+                                }
+                            }
+                        } else {
+                            rsx! {
+                                div { class: "table-container", style: "position: relative;",
+                                    table { style: "width: 100%; border-collapse: collapse; table-layout: fixed;",
+                                        thead {
+                                            tr {
+                                                th { "Task Type" }
+                                                th { "Status" }
+                                                th { "User" }
+                                                th { "Started" }
+                                                th { "Completed" }
+                                                th { "Warnings" }
+                                            }
+                                        }
+                                        tbody {
+                                            for (index , task) in response.tasks.iter().enumerate() {
+                                                tr {
+                                                    key: "{index}",
+                                                    class: if index % 2 == 0 { "" } else { "row-alt" },
+                                                    style: "border-bottom: 1px solid var(--border);",
+                                                    td {
+                                                        style: match task.status {
+                                                            TaskStatus::Running => "font-weight: 600; color: var(--primary);",
+                                                            _ => "",
+                                                        },
+                                                        "{task.task_type}"
+                                                    }
+                                                    td {
+                                                        style: match task.status {
+                                                            TaskStatus::Success => "color: var(--success);",
+                                                            TaskStatus::Running => "color: var(--primary);",
+                                                            TaskStatus::Failure | TaskStatus::Aborted => "color: var(--error);",
+                                                            _ => "color: var(--text-tertiary);",
+                                                        },
+                                                        "{task.status}"
+                                                    }
+                                                    td { "{task.uid}" }
+                                                    td { "{local_time(task.start)}" }
+                                                    td {
+                                                        if let Some(end_time) = task.end {
+                                                            "{local_time(end_time)}"
+                                                        } else {
+                                                            "-"
+                                                        }
+                                                    }
+                                                    td {
+                                                        if let Some(warning_count) = task.warnings {
+                                                            if warning_count > 0 {
+                                                                span { style: "color: var(--warning);", "{warning_count}" }
+                                                            } else {
+                                                                span { "0" }
+                                                            }
+                                                        } else {
+                                                            "-"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                div { style: "margin-top: var(--space-4); font-size: 0.875rem; color: var(--text-tertiary);",
+                                    "Showing {response.tasks.len()} task(s)"
+                                }
+                            }
+                        }
+                    }
+                    Some(Err(err)) => rsx! {
+                        div {
+                            class: "error-state",
+                            style: "padding: var(--space-4); color: var(--error); text-align: center;",
+                            "Failed to load task history: {err}"
+                        }
+                    },
+                    None => rsx! {
+                        div { class: "loading-state",
+                            for _ in 0..4 {
+                                div { class: "skeleton", style: "height: 36px; margin-bottom: 8px;" }
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
