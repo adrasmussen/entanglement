@@ -1,5 +1,3 @@
-// webapp/src/library/search.rs
-
 use dioxus::prelude::*;
 
 use crate::{

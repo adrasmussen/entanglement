@@ -15,14 +15,7 @@ pub struct TaskBarProps {
 #[component]
 pub fn TaskBar(props: TaskBarProps) -> Element {
     rsx! {
-        div { style: "
-            display: flex;
-            gap: var(--space-4);
-            margin-bottom: var(--space-3);
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            ",
-
+        div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary); font-size: 0.875rem;",
             ErrorBoundary {
                 handle_error: |error: ErrorContext| {
                     rsx! {

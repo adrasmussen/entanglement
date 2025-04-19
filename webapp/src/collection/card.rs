@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::Route;
-use api::collection::*;
+use api::{collection::*, thumbnail_link};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionCardProps {
@@ -120,29 +120,23 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                         transition: background-color var(--transition-normal) var(--easing-standard);
                     ",
 
-                    // placeholder emoji -- eventually this will be collection.cover or similar
-                    div { style: "
-                            width: 64px;
-                            height: 64px;
-                            border-radius: var(--radius-lg);
-                            background-color: var(--surface-raised);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                        ",
-                        "🖼️"
+                    if let Some(media_uuid) = collection.cover {
+                        img {
+                            src: thumbnail_link(media_uuid),
+                            alt: format!("Cover for {}", collection.name),
+                            style: "width: 100%; height: 100%; object-fit: cover;",
+                        }
+                    } else {
+                        div { style: "width: 64px; height: 64px; border-radius: var(--radius-lg); background-color: var(--surface-raised); display: flex; align-items: center; justify-content: center;",
+                            "🖼️"
+                        }
                     }
                 }
             }
 
             div {
                 class: "collection-info",
-                style: "
-                    padding: var(--space-3);
-                    flex-grow: 1;
-                    display: flex;
-                    flex-direction: column;
-                ",
+                style: "padding: var(--space-3); flex-grow: 1; display: flex; flex-direction: column;",
 
                 Link {
                     to: Route::CollectionDetail {
@@ -150,25 +144,14 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                     },
                     h3 {
                         class: "collection-title",
-                        style: "
-                            margin: 0 0 var(--space-1) 0;
-                            font-size: 1.125rem;
-                            font-weight: 600;
-                            color: var(--text-primary);
-                        ",
+                        style: "margin: 0 0 var(--space-1) 0; font-size: 1.125rem; font-weight: 600; color: var(--text-primary);",
                         "{collection.name}"
                     }
                 }
 
                 div {
                     class: "collection-metadata",
-                    style: "
-                        display: flex;
-                        justify-content: space-between;
-                        margin-bottom: var(--space-1);
-                        font-size: 0.875rem;
-                        color: var(--text-tertiary);
-                    ",
+                    style: "display: flex; justify-content: space-between; margin-bottom: var(--space-1); font-size: 0.875rem; color: var(--text-tertiary);",
                     span { "Owner: {collection.uid}" }
                     span { "Group: {collection.gid}" }
                 }
@@ -201,13 +184,7 @@ fn CollectionCardSkeleton() -> Element {
     rsx! {
         div {
             class: "collection-card loading",
-            style: "
-                background-color: var(--surface);
-                border-radius: var(--radius-lg);
-                overflow: hidden;
-                box-shadow: var(--shadow-sm);
-                height: 100%;
-            ",
+            style: "background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); height: 100%;",
             div { class: "skeleton", style: "height: 180px;" }
 
             div { style: "padding: var(--space-3);",

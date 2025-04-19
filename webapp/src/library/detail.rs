@@ -175,24 +175,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                 // library detail view header
                 div {
                     class: "library-detail-header",
-                    style: "
-                        background-color: var(--surface);
-                        border-radius: var(--radius-lg);
-                        padding: var(--space-4);
-                        margin-bottom: var(--space-4);
-                        box-shadow: var(--shadow-sm);
-                    ",
+                    style: "background-color: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); margin-bottom: var(--space-4); box-shadow: var(--shadow-sm);",
                     div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
                         // Library info
                         div {
                             h1 { style: "margin: 0 0 var(--space-2) 0;", "Library: {library.path}" }
-                            div { style: "
-                                    display: flex;
-                                    gap: var(--space-4);
-                                    margin-bottom: var(--space-3);
-                                    color: var(--text-secondary);
-                                    font-size: 0.875rem;
-                                ",
+                            div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary) font-size: 0.875rem;",
                                 span { "Owner: {library.uid}" }
                                 span { "Group: {library.gid}" }
                                 span { "Last scanned: {formatted_time}" }
@@ -227,31 +215,14 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                 if media.is_empty() {
                     div {
                         class: "empty-state",
-                        style: "
-                            padding: var(--space-8) var(--space-4);
-                            text-align: center;
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            margin-top: var(--space-4);
-                        ",
-                        div { style: "
-                                font-size: 4rem;
-                                margin-bottom: var(--space-4);
-                                color: var(--neutral-400);
-                            ",
+                        style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                        div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
                             "🖼️"
                         }
-                        h3 { style: "
-                                margin-bottom: var(--space-2);
-                                color: var(--text-primary);
-                            ",
+                        h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
                             "No Media Found"
                         }
-                        p { style: "
-                                color: var(--text-secondary);
-                                max-width: 500px;
-                                margin: 0 auto;
-                            ",
+                        p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
                             if show_hidden() {
                                 "No media matches your search criteria in this library."
                             } else {
@@ -272,12 +243,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                 } else {
                     div {
                         class: "media-grid",
-                        style: "
-                            display: grid;
-                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                            gap: var(--space-4);
-                            margin-top: var(--space-4);
-                        ",
+                        style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
                         for media_uuid in media.iter() {
                             MediaCard {
                                 key: "{media_uuid}",
@@ -309,11 +275,7 @@ fn LibraryDetailSkeleton() -> Element {
                 class: "skeleton",
                 style: "height: 60px; margin-bottom: 16px;",
             }
-            div { style: "
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                    gap: var(--space-4);
-                ",
+            div { style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4);",
                 for _ in 0..6 {
                     div { class: "skeleton", style: "height: 200px;" }
                 }

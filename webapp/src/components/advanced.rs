@@ -173,11 +173,7 @@ pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
 
             div {
                 class: "tabs-navigation",
-                style: "
-                    display: flex;
-                    border-bottom: 1px solid var(--neutral-200);
-                    margin-bottom: var(--space-4);
-                ",
+                style: "display: flex; border-bottom: 1px solid var(--neutral-200); margin-bottom: var(--space-4);",
                 AdvancedTab {
                     tab_signal,
                     target: TabTarget::Search,

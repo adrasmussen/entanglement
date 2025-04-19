@@ -1,5 +1,3 @@
-// webapp/src/library/table.rs
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
@@ -25,31 +23,14 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
         return rsx! {
             div {
                 class: "empty-state",
-                style: "
-                    padding: var(--space-8) var(--space-4);
-                    text-align: center;
-                    background-color: var(--surface);
-                    border-radius: var(--radius-lg);
-                    margin-top: var(--space-4);
-                ",
-                div { style: "
-                        font-size: 4rem;
-                        margin-bottom: var(--space-4);
-                        color: var(--neutral-400);
-                    ",
+                style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
                     "📚"
                 }
-                h3 { style: "
-                        margin-bottom: var(--space-2);
-                        color: var(--text-primary);
-                    ",
+                h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
                     "No Libraries Found"
                 }
-                p { style: "
-                        color: var(--text-secondary);
-                        max-width: 500px;
-                        margin: 0 auto;
-                    ",
+                p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
                     "No libraries match your search criteria. Try adjusting your search or contact an administrator to set up libraries."
                 }
             }
@@ -92,13 +73,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
             rsx! {
                 div {
                     class: "table-container",
-                    style: "
-                        margin-top: var(--space-4);
-                        background-color: var(--surface);
-                        border-radius: var(--radius-lg);
-                        overflow: hidden;
-                        box-shadow: var(--shadow-sm);
-                    ",
+                    style: "margin-top: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);",
                     table { style: "width: 100%; border-collapse: collapse;",
                         thead {
                             tr { style: "background-color: var(--primary); color: white;",
@@ -141,13 +116,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     td { style: "padding: var(--space-3);",
                                         span {
                                             class: "group-badge",
-                                            style: "
-                                                display: inline-block;
-                                                padding: var(--space-1) var(--space-2);
-                                                background-color: var(--neutral-100);
-                                                border-radius: var(--radius-full);
-                                                font-size: 0.875rem;
-                                            ",
+                                            style: "display: inline-block; padding: var(--space-1) var(--space-2); background-color: var(--neutral-100); border-radius: var(--radius-full); font-size: 0.875rem;",
                                             "{library.gid}"
                                         }
                                     }

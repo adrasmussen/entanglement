@@ -1,9 +1,7 @@
-// webapp/src/collection/grid.rs
-
-use crate::collection::card::CollectionCard;
-use crate::components::modal::{Modal, MODAL_STACK};
-use api::collection::CollectionUuid;
 use dioxus::prelude::*;
+
+use crate::{collection::card::CollectionCard, components::modal::{Modal, MODAL_STACK}};
+use api::collection::CollectionUuid;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionGridProps {
