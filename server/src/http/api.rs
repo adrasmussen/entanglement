@@ -7,7 +7,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Local;
-use dashmap::DashMap;
 use tokio::sync::Mutex;
 use tracing::instrument;
 
@@ -839,6 +838,10 @@ pub(super) async fn show_tasks(
     Ok(Json(ShowTasksResp { tasks: result }).into_response())
 }
 
+// see notes in api/search.rs
+//
+// there are probably a dozen ways to do this better, including moving logic
+// into the database calls, avoiding an expensive copy at the end, and so on
 #[instrument(skip_all)]
 pub(super) async fn batch_search_and_sort(
     State(state): State<Arc<HttpEndpoint>>,

@@ -13,7 +13,10 @@ use crate::{
     library::{taskbar::TaskBar, MEDIA_SEARCH_KEY},
     Route,
 };
-use api::{library::*, search::SearchFilter};
+use api::{sort::SortMethod,
+    library::*,
+    search::{batch_search_and_sort, BatchSearchAndSortReq, SearchFilter, SearchRequest},
+};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryDetailProps {
@@ -97,10 +100,13 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             .map(|s| s.to_owned())
             .collect();
 
-        search_media_in_library(&SearchMediaInLibraryReq {
-            library_uuid,
-            hidden,
-            filter: SearchFilter::SubstringAny { filter },
+        batch_search_and_sort(&BatchSearchAndSortReq {
+            req: SearchRequest::Library(SearchMediaInLibraryReq {
+                library_uuid,
+                hidden,
+                filter: SearchFilter::SubstringAny { filter },
+            }),
+            sort: SortMethod::Date,
         })
         .await
     });
@@ -252,10 +258,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     div {
                         class: "media-grid",
                         style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
-                        for media_uuid in media.iter() {
+                        for media in media.iter() {
                             MediaCard {
-                                key: "{media_uuid}",
-                                media_uuid: *media_uuid,
+                                key: "{media.media_uuid}",
+                                media_uuid: media.media_uuid,
+                                media: media.media.clone(),
+                                collections: media.collections.clone(),
                                 bulk_edit_mode_signal,
                                 selected_media_signal,
                             }

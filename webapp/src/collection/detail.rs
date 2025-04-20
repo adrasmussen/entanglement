@@ -13,7 +13,12 @@ use crate::{
     },
     Route,
 };
-use api::{collection::*, fold_set, search::SearchFilter};
+use api::{
+    collection::*,
+    fold_set,
+    search::{batch_search_and_sort, BatchSearchAndSortReq, SearchFilter, SearchRequest},
+    sort::SortMethod,
+};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
@@ -88,16 +93,18 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let media_future = use_resource(move || async move {
-        update_signal();
         let collection_uuid = collection_uuid();
         let filter = media_search_signal()
             .split_whitespace()
             .map(|s| s.to_owned())
             .collect();
 
-        search_media_in_collection(&SearchMediaInCollectionReq {
-            collection_uuid,
-            filter: SearchFilter::SubstringAny { filter },
+        batch_search_and_sort(&BatchSearchAndSortReq {
+            req: SearchRequest::Collection(SearchMediaInCollectionReq {
+                collection_uuid,
+                filter: SearchFilter::SubstringAny { filter },
+            }),
+            sort: SortMethod::Date,
         })
         .await
     });
@@ -281,11 +288,12 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                             gap: var(--space-4);
                             margin-top: var(--space-4);
                         ",
-                        for media_uuid in media.iter() {
+                        for media in media.iter() {
                             MediaCard {
-                                key: "{media_uuid}",
-                                media_uuid: *media_uuid,
-                                collection_uuid: Some(collection_uuid()),
+                                key: "{media.media_uuid}",
+                                media_uuid: media.media_uuid,
+                                media: media.media.clone(),
+                                collections: media.collections.clone(),
                                 bulk_edit_mode_signal,
                                 selected_media_signal,
                             }

@@ -1,13 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-};
+use std::{collections::HashSet, fmt::Debug};
 
 use regex::escape;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    collection::{CollectionUuid, SearchMediaInCollectionReq}, comment::CommentUuid, endpoint, library::SearchMediaInLibraryReq, media::{Media, MediaUuid, SearchMediaReq}, sort::SortMethod
+    collection::{CollectionUuid, SearchMediaInCollectionReq},
+    comment::CommentUuid,
+    endpoint,
+    library::SearchMediaInLibraryReq,
+    media::{Media, MediaUuid, SearchMediaReq},
+    sort::SortMethod,
 };
 
 // this struct is a first attempt at making a more generalized search mechanism that is
@@ -114,6 +116,15 @@ impl SearchFilter {
     }
 }
 
+// batch searching
+//
+// sending individual GetMedia requests for each of the referenced media uuids returned by
+// the search requests causes the reverse proxy (apache) to fall over, as there is no
+// throttling or other flow control from the frontend
+//
+// unfortunately, the current implementation isn't particularly performant... and this will
+// generally be one of the most important functions in the system.  thus, we will need to
+// think very carefully about the architecture and optimizations involved.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SearchRequest {
     Media(SearchMediaReq),

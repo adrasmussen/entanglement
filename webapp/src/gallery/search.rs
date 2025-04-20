@@ -9,7 +9,11 @@ use crate::{
     },
     gallery::MEDIA_SEARCH_KEY,
 };
-use api::{media::*, search::SearchFilter};
+use api::{
+    media::*,
+    search::{batch_search_and_sort, BatchSearchAndSortReq, SearchFilter, SearchRequest},
+    sort::SortMethod,
+};
 
 #[component]
 pub fn GallerySearch() -> Element {
@@ -26,8 +30,11 @@ pub fn GallerySearch() -> Element {
             .map(|s| s.to_owned())
             .collect();
 
-        search_media(&SearchMediaReq {
-            filter: SearchFilter::SubstringAny { filter },
+        batch_search_and_sort(&BatchSearchAndSortReq {
+            req: SearchRequest::Media(SearchMediaReq {
+                filter: SearchFilter::SubstringAny { filter },
+            }),
+            sort: SortMethod::Date,
         })
         .await
     });
@@ -100,10 +107,12 @@ pub fn GallerySearch() -> Element {
                                 }
                             } else {
                                 div { class: "media-grid",
-                                    for media_uuid in resp.media.iter() {
+                                    for search_resp in resp.media.iter() {
                                         MediaCard {
-                                            key: "{media_uuid}",
-                                            media_uuid: *media_uuid,
+                                            key: "{search_resp.media_uuid}",
+                                            media_uuid: search_resp.media_uuid,
+                                            media: search_resp.media.clone(),
+                                            collections: search_resp.collections.clone(),
                                             bulk_edit_mode_signal,
                                             selected_media_signal,
                                         }
