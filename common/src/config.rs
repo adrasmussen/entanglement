@@ -5,7 +5,7 @@ use tokio;
 use toml;
 use tracing::{debug, instrument, Level};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ESConfig {
     pub authn_backend: AuthnBackend,
     pub authz_backend: AuthzBackend,
@@ -24,7 +24,7 @@ pub struct ESConfig {
 
 // authentication config options
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum AuthnBackend {
     // header set by reverse proxy
     ProxyHeader,
@@ -32,39 +32,39 @@ pub enum AuthnBackend {
     TomlFile,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProxyHeaderConfig {
     pub header: String,
 }
 
 // authorization config options
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum AuthzBackend {
     // a toml file with group memberships
     TomlFile,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TomlFileConfig {
     pub filename: PathBuf,
 }
 
 // database config options
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DbBackend {
     MariaDB,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MariaDbConfig {
     pub url: String,
 }
 
 // core service config options
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FsConfig {
     // read-only source path where media can be located
     //
@@ -76,7 +76,7 @@ pub struct FsConfig {
     pub media_srvdir: PathBuf,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HttpConfig {
     // ip and port for http server
     pub socket: String,
@@ -91,7 +91,7 @@ pub struct HttpConfig {
     pub doc_root: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     // maximum number of tokio tasks use for running scan jobs,
     // which should be less than the number of OS threads since
@@ -105,7 +105,7 @@ pub struct TaskConfig {
 
 // in order to extract the config table from a larger document, we need to specify it
 // as a subtable of the root node, i.e. a substruct
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TomlConfigFile {
     config: ESConfig,
 }

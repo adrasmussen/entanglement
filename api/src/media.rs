@@ -11,7 +11,7 @@ use crate::{
 
 pub type MediaUuid = i64;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum MediaMetadata {
     Image,
     Video,
@@ -19,7 +19,7 @@ pub enum MediaMetadata {
     Audio,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Media {
     pub library_uuid: LibraryUuid,
     pub path: String,
@@ -34,7 +34,7 @@ pub struct Media {
     pub metadata: MediaMetadata,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MediaUpdate {
     pub hidden: Option<bool>,
     pub date: Option<String>,
@@ -47,12 +47,12 @@ pub struct MediaUpdate {
 // fetch the media information for a particular file
 endpoint!(GetMedia);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetMediaReq {
     pub media_uuid: MediaUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetMediaResp {
     pub media: Media,
     pub collections: Vec<CollectionUuid>,
@@ -62,13 +62,13 @@ pub struct GetMediaResp {
 // update the metadata
 endpoint!(UpdateMedia);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateMediaReq {
     pub media_uuid: MediaUuid,
     pub update: MediaUpdate,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateMediaResp {}
 
 // search media
@@ -77,12 +77,12 @@ pub struct UpdateMediaResp {}
 // filter struct later
 endpoint!(SearchMedia);
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchMediaReq {
     pub filter: SearchFilter,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
 }
@@ -90,13 +90,13 @@ pub struct SearchMediaResp {
 // find similar media
 endpoint!(SimilarMedia);
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SimilarMediaReq {
     pub media_uuid: MediaUuid,
     pub distance: i64,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct SimilarMediaResp {
     pub media: Vec<MediaUuid>,
 }

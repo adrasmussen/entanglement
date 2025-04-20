@@ -17,12 +17,12 @@ use crate::config::ESConfig;
 // toml file authentication and authorization
 //
 // this is the simplest possible static database of users and groups
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TomlAuthnFile {
     filename: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TomlUser {
     name: String,
     password: Option<String>,
@@ -32,7 +32,7 @@ impl TomlAuthnFile {
     async fn parse(&self) -> Result<HashMap<String, TomlUser>> {
         let doc = read_to_string(&self.filename).await?;
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Deserialize, Serialize)]
         struct TomlData {
             users: HashMap<String, TomlUser>,
         }
@@ -92,12 +92,12 @@ impl Display for TomlAuthnFile {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TomlAuthzFile {
     filename: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct TomlGroup {
     name: Option<String>,
     members: HashSet<String>,
@@ -107,7 +107,7 @@ impl TomlAuthzFile {
     async fn parse(&self) -> Result<HashMap<String, TomlGroup>> {
         let doc = read_to_string(&self.filename).await?;
 
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Deserialize, Serialize)]
         struct TomlData {
             groups: HashMap<String, TomlGroup>,
         }

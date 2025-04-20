@@ -1,7 +1,14 @@
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use regex::escape;
 use serde::{Deserialize, Serialize};
+
+use crate::{
+    collection::{CollectionUuid, SearchMediaInCollectionReq}, comment::CommentUuid, endpoint, library::SearchMediaInLibraryReq, media::{Media, MediaUuid, SearchMediaReq}, sort::SortMethod
+};
 
 // this struct is a first attempt at making a more generalized search mechanism that is
 // still agnostic to the particular database backend
@@ -15,7 +22,7 @@ use serde::{Deserialize, Serialize};
 //
 // TODO -- to use the Substring filters more optimally, we need a better splitting
 // algorithm than whitespace so as to keep quoted phrases together
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SearchFilter {
     SubstringAny { filter: HashSet<String> },
     SubstringAll { filter: HashSet<String> },
@@ -105,4 +112,32 @@ impl SearchFilter {
             }
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum SearchRequest {
+    Media(SearchMediaReq),
+    Collection(SearchMediaInCollectionReq),
+    Library(SearchMediaInLibraryReq),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SearchResponse {
+    pub media_uuid: MediaUuid,
+    pub media: Media,
+    pub collections: Vec<CollectionUuid>,
+    pub comments: Vec<CommentUuid>,
+}
+
+endpoint!(BatchSearchAndSort);
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BatchSearchAndSortReq {
+    pub req: SearchRequest,
+    pub sort: SortMethod,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BatchSearchAndSortResp {
+    pub media: Vec<SearchResponse>,
 }

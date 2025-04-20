@@ -1,14 +1,14 @@
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow;
-
 use axum::{
     extract::{Extension, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use chrono::Local;
-
+use dashmap::DashMap;
+use tokio::sync::Mutex;
 use tracing::instrument;
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
     http::{auth::CurrentUser, svc::HttpEndpoint, AppError},
     task::msg::TaskMsg,
 };
-use api::{auth::*, collection::*, comment::*, library::*, media::*, task::*};
+use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
 
 // http api endpoints
 //
@@ -837,4 +837,99 @@ pub(super) async fn show_tasks(
     let result = rx.await??;
 
     Ok(Json(ShowTasksResp { tasks: result }).into_response())
+}
+
+#[instrument(skip_all)]
+pub(super) async fn batch_search_and_sort(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<BatchSearchAndSortReq>,
+) -> Result<Response, AppError> {
+    let state = state.clone();
+    let uid = current_user.uid.clone();
+
+    let gid = state.groups_for_user(&uid).await?;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    match message.req {
+        SearchRequest::Media(request) => {
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SearchMedia {
+                        resp: tx,
+                        gid: gid,
+                        filter: request.filter,
+                    }
+                    .into(),
+                )
+                .await?;
+        }
+        SearchRequest::Collection(request) => {
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SearchMediaInCollection {
+                        resp: tx,
+                        gid: gid,
+                        collection_uuid: request.collection_uuid,
+                        filter: request.filter,
+                    }
+                    .into(),
+                )
+                .await?;
+        }
+        SearchRequest::Library(request) => {
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::SearchMediaInLibrary {
+                        resp: tx,
+                        gid: gid,
+                        library_uuid: request.library_uuid,
+                        hidden: request.hidden,
+                        filter: request.filter,
+                    }
+                    .into(),
+                )
+                .await?;
+        }
+    };
+
+    let media_uuids = rx.await??;
+
+    let out = Mutex::new(Vec::<SearchResponse>::new());
+
+    for media_uuid in media_uuids {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        state
+            .db_svc_sender
+            .send(
+                DbMsg::GetMedia {
+                    resp: tx,
+                    media_uuid: media_uuid,
+                }
+                .into(),
+            )
+            .await?;
+
+        let media_data = rx
+            .await??
+            .ok_or_else(|| anyhow::Error::msg("unknown media_uuid"))?;
+
+        let mut out = out.lock().await;
+
+        out.push(SearchResponse {
+            media_uuid: media_uuid,
+            media: media_data.0,
+            collections: media_data.1,
+            comments: media_data.2,
+        });
+    }
+
+    let out = out.lock().await;
+
+    Ok(Json(BatchSearchAndSortResp {media: out.to_vec()}).into_response())
 }

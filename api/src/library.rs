@@ -6,7 +6,7 @@ use crate::{endpoint, media::MediaUuid, search::SearchFilter};
 
 pub type LibraryUuid = i64;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {
     // the path to the library, relative to the media_srcdir
     pub path: String,
@@ -20,12 +20,12 @@ pub struct Library {
     pub count: i64,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryUpdate {
     pub count: Option<i64>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LibraryScanJob {
     pub start_time: i64,
     pub file_count: i64,
@@ -38,12 +38,12 @@ pub struct LibraryScanJob {
 // get the details for a particular library
 endpoint!(GetLibrary);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLibraryReq {
     pub library_uuid: LibraryUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLibraryResp {
     pub library: Library,
 }
@@ -51,12 +51,12 @@ pub struct GetLibraryResp {
 // find libraries
 endpoint!(SearchLibraries);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchLibrariesReq {
     pub filter: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchLibrariesResp {
     pub libraries: Vec<LibraryUuid>,
 }
@@ -64,14 +64,14 @@ pub struct SearchLibrariesResp {
 // find media inside of a library
 endpoint!(SearchMediaInLibrary);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInLibraryReq {
     pub library_uuid: LibraryUuid,
     pub hidden: bool,
     pub filter: SearchFilter,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
 }

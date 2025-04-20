@@ -8,7 +8,7 @@ use crate::{endpoint, media::MediaUuid, search::SearchFilter};
 
 pub type CollectionUuid = i64;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Collection {
     pub uid: String,
     pub gid: String,
@@ -19,7 +19,7 @@ pub struct Collection {
     pub cover: Option<MediaUuid>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CollectionUpdate {
     pub name: Option<String>,
     pub note: Option<String>,
@@ -31,12 +31,12 @@ pub struct CollectionUpdate {
 // create a new collection
 endpoint!(AddCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddCollectionReq {
     pub collection: Collection,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddCollectionResp {
     pub collection_uuid: CollectionUuid,
 }
@@ -47,12 +47,12 @@ pub struct AddCollectionResp {
 // a blank filter in another call
 endpoint!(GetCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetCollectionReq {
     pub collection_uuid: CollectionUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetCollectionResp {
     pub collection: Collection,
 }
@@ -60,48 +60,48 @@ pub struct GetCollectionResp {
 // delete an collection
 endpoint!(DeleteCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteCollectionReq {
     pub collection_uuid: CollectionUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteCollectionResp {}
 
 // change collection properties
 endpoint!(UpdateCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateCollectionReq {
     pub collection_uuid: CollectionUuid,
     pub update: CollectionUpdate,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateCollectionResp {}
 
 // add media to an collection
 endpoint!(AddMediaToCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddMediaToCollectionReq {
     pub collection_uuid: CollectionUuid,
     pub media_uuid: MediaUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddMediaToCollectionResp {}
 
 // remove media from an collection
 endpoint!(RmMediaFromCollection);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RmMediaFromCollectionReq {
     pub collection_uuid: CollectionUuid,
     pub media_uuid: MediaUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RmMediaFromCollectionResp {}
 
 // search collections
@@ -109,12 +109,12 @@ pub struct RmMediaFromCollectionResp {}
 // defaults to ""
 endpoint!(SearchCollections);
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
     pub filter: SearchFilter,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchCollectionsResp {
     pub collections: Vec<CollectionUuid>,
 }
@@ -122,13 +122,13 @@ pub struct SearchCollectionsResp {
 // search media inside a particular collection
 endpoint!(SearchMediaInCollection);
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionReq {
     pub collection_uuid: CollectionUuid,
     pub filter: SearchFilter,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionResp {
     pub media: Vec<MediaUuid>,
 }

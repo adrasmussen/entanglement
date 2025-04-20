@@ -8,6 +8,7 @@ pub mod comment;
 pub mod library;
 pub mod media;
 pub mod search;
+pub mod sort;
 pub mod task;
 
 // filesystem/http paths
@@ -54,12 +55,9 @@ pub fn fold_set(set: HashSet<String>) -> anyhow::Result<String> {
     Ok(set
         .iter()
         .fold(String::new(), |a, b| a + b + FOLDING_SEPARATOR)
-        .trim_matches(
-            FOLDING_SEPARATOR
-                .chars()
-                .next()
-                .ok_or_else(|| anyhow::Error::msg("internal error: folding separator const is zero length"))?,
-        )
+        .trim_matches(FOLDING_SEPARATOR.chars().next().ok_or_else(|| {
+            anyhow::Error::msg("internal error: folding separator const is zero length")
+        })?)
         .to_string())
 }
 

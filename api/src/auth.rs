@@ -11,12 +11,12 @@ use crate::endpoint;
 // look up users in a group
 endpoint!(GetUsersInGroup);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetUsersInGroupReq {
     pub gid: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetUsersInGroupResp {
     pub uids: HashSet<String>,
 }

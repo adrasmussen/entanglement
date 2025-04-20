@@ -10,6 +10,8 @@ enum TabTarget {
     Search,
     BulkEditTags,
     BulkAddToCollection,
+    //BulkHide,
+    //BulkRmFromCollection,
 }
 
 #[derive(Clone, PartialEq, Props)]

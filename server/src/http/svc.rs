@@ -15,7 +15,10 @@ use axum::{
     Router,
 };
 use hyper::{body::Incoming, service::service_fn};
-use hyper_util::{server::conn::auto::Builder, rt::{TokioExecutor, TokioIo}};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder,
+};
 use regex::Regex;
 use tokio::{
     net::TcpListener,
@@ -249,6 +252,7 @@ impl HttpEndpoint {
             .route("/StartTask", post(start_task))
             .route("/StopTask", post(stop_task))
             .route("/ShowTasks", post(show_tasks))
+            .route("BatchSearchAndSort", post(batch_search_and_sort))
             .with_state(state.clone());
 
         // combine the routes (note that this can panic if the routes overlap) and add any relevant

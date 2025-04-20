@@ -7,7 +7,7 @@ use crate::{endpoint, library::LibraryUuid};
 // structs and types
 pub type TaskUuid = i64;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskType {
     ScanLibrary,
     CleanLibrary,
@@ -16,7 +16,7 @@ pub enum TaskType {
     //AsyncTranscode,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskStatus {
     Unknown,
     Running,
@@ -25,13 +25,13 @@ pub enum TaskStatus {
     Aborted,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskUid {
     User { uid: String },
     System,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Task {
     pub task_type: TaskType,
     pub uid: TaskUid,
@@ -46,35 +46,35 @@ pub struct Task {
 // start a task on a library
 endpoint!(StartTask);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StartTaskReq {
     pub library_uuid: LibraryUuid,
     pub task_type: TaskType,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StartTaskResp {}
 
 // stop a running task
 endpoint!(StopTask);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StopTaskReq {
     pub library_uuid: LibraryUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StopTaskResp {}
 
 // show tasks
 endpoint!(ShowTasks);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowTasksReq {
     pub library_uuid: LibraryUuid,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowTasksResp {
     pub tasks: Vec<Task>,
 }

@@ -197,6 +197,14 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                                 },
                                 "Start Task"
                             }
+                            button {
+                                class: "btn btn-secondary",
+                                style: "margin-right: var(--space-2);",
+                                onclick: move |_| {
+                                    MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid())));
+                                },
+                                "Task History"
+                            }
                         }
                     }
                 }
