@@ -43,6 +43,8 @@ use common::{
 // this module is mostly tooling for running library scans, including convenience functions,
 // a global scan context, and a per-file context that automatically drops any filesystem
 // resources needed to process the incoming media.
+const KNOWN_EXTENSIONS: &[&str] = &["jpg" , "png" , "tiff", "mp4"];
+
 pub async fn get_path_and_metadata(
     entry: walkdir::Result<DirEntry>,
 ) -> Result<(PathBuf, Metadata)> {
@@ -129,6 +131,7 @@ pub struct ScanContext {
 pub struct ScanFile {
     context: Arc<ScanContext>,
     path: PathBuf,
+    ext: String,
     pathstr: String,
     metadata: Metadata,
     hash: String,
@@ -164,6 +167,21 @@ impl ScanFile {
             .ok_or_else(|| anyhow::Error::msg("failed to convert path to str"))?
             .to_owned();
 
+        // in lieu of some more complicated introspection, we rely on the file extention being
+        // a (mostly) correct representation of the file's contents.  both the image and video
+        // collectors are somewhat flexible on their inputs.
+        let ext = path
+            .extension()
+            .map(|f| f.to_str())
+            .flatten()
+            .map(|s| s.to_lowercase())
+            .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
+
+        if !KNOWN_EXTENSIONS.contains(&ext.as_str()) {
+            debug!({ path = pathstr}, "unknown file extension");
+            return Ok(None)
+        }
+
         // check if the file exists in the database first, and if so, early return before we do
         // any of the actual computation (hashes, thumbnails, etc)
         if let Some(media_uuid) = path_exists_in_database(context.clone(), &pathstr).await? {
@@ -183,6 +201,7 @@ impl ScanFile {
         Ok(Some(ScanFile {
             context,
             path,
+            ext,
             pathstr,
             metadata,
             hash,
@@ -284,14 +303,7 @@ impl ScanFile {
         //
         // note that the extensions are also used by the http service to guess the mime type of
         // the media files; see http/stream.rs for details.
-        let ext = self
-            .path
-            .extension()
-            .map(|f| f.to_str())
-            .flatten()
-            .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
-
-        let media_data: MediaData = match ext {
+        let media_data: MediaData = match self.ext.as_str() {
             "jpg" | "png" | "tiff" => process_image(&self.path).await?,
             "mp4" => process_video(&self.path, &self.scratch_dir).await?,
             _ => return Err(anyhow::Error::msg("no metadata collector for extension")),

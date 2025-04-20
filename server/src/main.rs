@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use clap::Parser;
 use tracing::{info, Level};
 use tracing_subscriber::{
     filter::FilterFn,
@@ -19,8 +20,17 @@ use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::{config::read_config, db::MariaDBBackend};
 use service::{ESMRegistry, EntanglementService};
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value = "/etc/entanglement/config.toml")]
+    config: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
     let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
         .with_max_level_hint(Level::INFO);
 
@@ -32,10 +42,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("entanglement server starting up, processing config file");
 
-    let config = read_config(PathBuf::from(
-        "/srv/home/alex/workspace/entanglement/dev/config.toml",
-    ))
-    .await;
+    let config = read_config(PathBuf::from(args.config)).await;
 
     info!("performing filesystem sanity checks");
 

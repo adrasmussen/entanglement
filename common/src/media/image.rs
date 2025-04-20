@@ -47,13 +47,12 @@ pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
 
         let exifreader = exif::Reader::new();
 
-        let exif = exifreader.read_from_container(&mut bufreader)?;
-
-        // process the exif fields
-        let datetime_original = match exif.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
-        {
-            Some(dto) => format!("{}", dto.display_value()),
+        let datetime_original = match exifreader.read_from_container(&mut bufreader).ok() {
             None => String::from(""),
+            Some(exif) => exif
+                .get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY)
+                .map(|dto| format!("{}", dto.display_value()))
+                .unwrap_or_default(),
         };
 
         Result::<(PathBuf, String)>::Ok((path, datetime_original))

@@ -14,8 +14,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use hyper::{body::Incoming, server::conn::http2::Builder, service::service_fn};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper::{body::Incoming, service::service_fn};
+use hyper_util::{server::conn::auto::Builder, rt::{TokioExecutor, TokioIo}};
 use regex::Regex;
 use tokio::{
     net::TcpListener,
