@@ -2,6 +2,7 @@ use std::{
     net::{SocketAddr, SocketAddrV6},
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -13,6 +14,10 @@ use axum::{
     response::Redirect,
     routing::{get, post},
     Router,
+};
+use futures::{
+    stream::{FuturesUnordered, StreamExt},
+    FutureExt,
 };
 use hyper::{body::Incoming, server::conn::http2::Builder, service::service_fn};
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -285,30 +290,63 @@ impl HttpEndpoint {
         //
         // we want to return the handle to the caller, not the future, and so we just spawn it here
         let handle = spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
-                let service = service.clone();
+            let mut connection_tasks = FuturesUnordered::new();
 
-                let io = TokioIo::new(stream);
+            // Create a timer for periodic cleanup of finished tasks
+            let mut cleanup_interval = tokio::time::interval(Duration::from_secs(20));
 
-                spawn(async move {
-                    match Builder::new(TokioExecutor::new())
-                        .serve_connection(io, service.clone())
-                        .await
-                    {
-                        Ok(()) => (),
-                        Err(err) => {
-                            // this is a hamfisted and abi-unstable way to filter out connection errors
-                            if format!("{err:?}").contains("Io") {
-                                debug!({service = "http_service", conn = "http", error = ?err})
-                            } else {
-                                warn!({service = "http_service", conn = "http", error = ?err})
+            loop {
+                tokio::select! {
+                    // Accept new connections
+                    accept_result = listener.accept() => {
+                        match accept_result {
+                            Ok((stream, _)) => {
+                                let service = service.clone();
+                                let io = TokioIo::new(stream);
+
+                                let conn_fut = async move {
+                                    let result = tokio::time::timeout(
+                                        Duration::from_secs(120),
+                                        Builder::new(TokioExecutor::new())
+                                            .keep_alive_interval(Duration::from_secs(20))
+                                            .keep_alive_timeout(Duration::from_secs(20))
+                                            .serve_connection(io, service)
+                                    ).await;
+
+                                    match result {
+                                        Ok(Ok(())) => (),
+                                        Ok(Err(err)) => {
+                                            if format!("{err:?}").contains("Io") {
+                                                debug!({error = ?err}, "io error")
+                                            } else {
+                                                warn!({error = ?err}, "non-io error")
+                                            }
+                                        },
+                                        Err(_) => {
+                                            debug!("Connection timed out");
+                                        }
+                                    }
+                                };
+
+                                connection_tasks.push(spawn(conn_fut));
+                            },
+                            Err(err) => {
+                                error!({error = ?err}, "error accepting connection");
+                                // small delay to avoid CPU spinning on repeated errors
+                                tokio::time::sleep(Duration::from_millis(100)).await;
                             }
                         }
-                    }
-                });
-            }
+                    },
 
-            Err(anyhow::Error::msg("http_service http channel disconnected"))
+                    // Clean up finished tasks
+                    _ = cleanup_interval.tick() => {
+                        while let Some(Some(_)) = connection_tasks.next().now_or_never() {}
+                    },
+
+                    // Monitor for exit condition
+                    // _ = shutdown_signal => break,
+                }
+            }
         });
 
         debug!("started axum/hyper http listener");
