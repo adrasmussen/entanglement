@@ -29,16 +29,24 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    console_subscriber::ConsoleLayer::builder()
+    // set how long the console will retain data from completed tasks
+    .retention(std::time::Duration::from_secs(1200))
+    // set the address the server is bound to
+    .server_addr(([0,0,0,0], 6669))
+    // ... other configurations ...
+    .init();
+
     let args = Args::parse();
 
-    let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
-        .with_max_level_hint(Level::INFO);
+    // let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
+    //     .with_max_level_hint(Level::INFO);
 
-    let fmt_layer = tracing_subscriber::fmt::layer();
+    // let fmt_layer = tracing_subscriber::fmt::layer();
 
-    tracing_subscriber::registry()
-        .with(fmt_layer.with_filter(crate_filter))
-        .init();
+    // tracing_subscriber::registry()
+    //     .with(fmt_layer.with_filter(crate_filter))
+    //     .init();
 
     info!("entanglement server starting up, processing config file");
 

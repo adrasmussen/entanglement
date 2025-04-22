@@ -14,7 +14,7 @@ use api::{
 
 #[async_trait]
 pub trait AuthCheck: ESInner + Debug {
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> Result<()> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -32,7 +32,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn groups_for_user(&self, uid: &String) -> Result<HashSet<String>> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -50,7 +50,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn is_group_member(&self, uid: &String, gid: HashSet<String>) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -69,7 +69,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -88,7 +88,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -107,7 +107,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn can_access_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -129,7 +129,7 @@ pub trait AuthCheck: ESInner + Debug {
         self.can_access_media(uid, &comment.media_uuid).await
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn owns_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -151,7 +151,7 @@ pub trait AuthCheck: ESInner + Debug {
         Ok(uid.to_owned() == comment.uid)
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn can_access_collection(
         &self,
         uid: &String,
@@ -178,7 +178,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn owns_collection(
         &self,
         uid: &String,
@@ -204,7 +204,7 @@ pub trait AuthCheck: ESInner + Debug {
         Ok(uid.to_owned() == collection.uid)
     }
 
-    #[instrument(level=Level::DEBUG)]
+    #[instrument]
     async fn owns_library(&self, uid: &String, library_uuid: &LibraryUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();

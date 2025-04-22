@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
+use tracing::error;
 
 use crate::{
     components::modal::{Modal, MODAL_STACK},
@@ -55,7 +56,7 @@ fn CollectionTableInner(props: CollectionTableInnerProps) -> Element {
                 match get_collection(&GetCollectionReq { collection_uuid }).await {
                     Ok(resp) => collections.push((collection_uuid, resp.collection)),
                     Err(err) => {
-                        tracing::error!("Failed to fetch collection for {collection_uuid}: {err}");
+                        error!("Failed to fetch collection for {collection_uuid}: {err}");
                     }
                 }
             }
