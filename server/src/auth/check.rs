@@ -3,7 +3,7 @@ use std::fmt::Debug;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use tracing::{instrument, Level};
+use tracing::instrument;
 
 use crate::auth::msg::AuthMsg;
 use crate::db::msg::DbMsg;

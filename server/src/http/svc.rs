@@ -20,12 +20,13 @@ use futures::{
     FutureExt,
 };
 use hyper::{body::Incoming, server::conn::http2::Builder, service::service_fn};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use regex::Regex;
 use tokio::{
     net::TcpListener,
     sync::Mutex,
     task::{spawn, JoinHandle},
+    time::timeout,
 };
 use tower::Service;
 use tower_http::{
@@ -305,11 +306,12 @@ impl HttpEndpoint {
                                 let io = TokioIo::new(stream);
 
                                 let conn_fut = async move {
-                                    let result = tokio::time::timeout(
+                                    let result = timeout(
                                         Duration::from_secs(120),
                                         Builder::new(TokioExecutor::new())
                                             .keep_alive_interval(Duration::from_secs(20))
                                             .keep_alive_timeout(Duration::from_secs(20))
+                                            .timer(TokioTimer::new())
                                             .serve_connection(io, service)
                                     ).await;
 

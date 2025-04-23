@@ -934,5 +934,8 @@ pub(super) async fn batch_search_and_sort(
 
     let out = out.lock().await;
 
-    Ok(Json(BatchSearchAndSortResp {media: out.to_vec()}).into_response())
+    Ok(Json(BatchSearchAndSortResp {
+        media: out.to_vec(),
+    })
+    .into_response())
 }

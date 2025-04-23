@@ -43,7 +43,7 @@ use common::{
 // this module is mostly tooling for running library scans, including convenience functions,
 // a global scan context, and a per-file context that automatically drops any filesystem
 // resources needed to process the incoming media.
-const KNOWN_EXTENSIONS: &[&str] = &["jpg" , "png" , "tiff", "mp4"];
+const KNOWN_EXTENSIONS: &[&str] = &["jpg", "png", "tiff", "mp4"];
 
 pub async fn get_path_and_metadata(
     entry: walkdir::Result<DirEntry>,
@@ -178,8 +178,8 @@ impl ScanFile {
             .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
 
         if !KNOWN_EXTENSIONS.contains(&ext.as_str()) {
-            debug!({ path = pathstr}, "unknown file extension");
-            return Ok(None)
+            debug!({ path = pathstr }, "unknown file extension");
+            return Ok(None);
         }
 
         // check if the file exists in the database first, and if so, early return before we do
