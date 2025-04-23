@@ -268,7 +268,7 @@ impl ESTaskService for TaskRunner {
             _ => return Err(anyhow::Error::msg("unsupported task")),
         };
 
-        info!({ start = start }, "starting task");
+        info!({start = start}, "starting task");
 
         // watcher thread
         //
@@ -313,7 +313,7 @@ impl ESTaskService for TaskRunner {
             abort_rx.close();
 
             // since the watcher future should not be able to fail, we collect all of the various
-            // failure modes associated with sending the completin message and print their errors
+            // failure modes associated with sending the completion message and print their errors
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             // this blocks on the write lock for the running task, since we need it to take() the
@@ -469,7 +469,7 @@ impl ESTaskService for TaskRunner {
         });
 
         info!(
-            { start = completed_task.task.start },
+            {start = completed_task.task.start},
             "task saved to history"
         );
 

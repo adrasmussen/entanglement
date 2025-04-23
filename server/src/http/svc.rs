@@ -293,18 +293,30 @@ impl HttpEndpoint {
         let handle = spawn(async move {
             let mut connection_tasks = FuturesUnordered::new();
 
-            // Create a timer for periodic cleanup of finished tasks
+            // automatic http connection cleanup
+            //
+            // clients (reverse proxies and broswers) are not always good about closing stale connections,
+            // which leads to a large number of tasks accumulating in the runtime. to prevent this from
+            // happening, we take a two-pronged approach:
+            //   1) set an explicit keepalive interval and timeout
+            //   2) tokio timeout for the whole future
+            //
+            // all of the logic lives in a loop, so we have to explicitly handle errors when accepting
+            // the connection, and the resulting connection future that is polled to drive http has to be
+            // spawned on the runtime.
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(20));
 
             loop {
                 tokio::select! {
-                    // Accept new connections
+                    // attempt to accept a new connection
                     accept_result = listener.accept() => {
                         match accept_result {
                             Ok((stream, _)) => {
                                 let service = service.clone();
                                 let io = TokioIo::new(stream);
 
+                                // the connection future that enforces the timeout, as well
+                                // as handles errors from the http connection
                                 let conn_fut = async move {
                                     let result = timeout(
                                         Duration::from_secs(120),
@@ -325,11 +337,12 @@ impl HttpEndpoint {
                                             }
                                         },
                                         Err(_) => {
-                                            debug!("Connection timed out");
+                                            debug!("http connection timed out");
                                         }
                                     }
                                 };
 
+                                // spawn the connection future and collect the join handle
                                 connection_tasks.push(spawn(conn_fut));
                             },
                             Err(err) => {
@@ -340,12 +353,12 @@ impl HttpEndpoint {
                         }
                     },
 
-                    // Clean up finished tasks
+                    // clean up finished tasks when the interval future ticks
                     _ = cleanup_interval.tick() => {
                         while let Some(Some(_)) = connection_tasks.next().now_or_never() {}
                     },
 
-                    // Monitor for exit condition
+                    // TODO: add broadcast channel for shutdown signals
                     // _ = shutdown_signal => break,
                 }
             }

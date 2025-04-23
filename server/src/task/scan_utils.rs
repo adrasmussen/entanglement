@@ -178,7 +178,7 @@ impl ScanFile {
             .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
 
         if !KNOWN_EXTENSIONS.contains(&ext.as_str()) {
-            debug!({ path = pathstr }, "unknown file extension");
+            debug!({path = pathstr}, "unknown file extension");
             return Ok(None);
         }
 
@@ -186,7 +186,7 @@ impl ScanFile {
         // any of the actual computation (hashes, thumbnails, etc)
         if let Some(media_uuid) = path_exists_in_database(context.clone(), &pathstr).await? {
             debug!(
-                { media_uuid = media_uuid },
+                {media_uuid = media_uuid},
                 "media already exists in database"
             );
             return Ok(None);

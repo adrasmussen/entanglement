@@ -5,6 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
+use tokio::sync::Mutex;
 use tracing::{debug, info, instrument};
 
 use crate::{config::ESConfig, db::DbBackend};
@@ -20,6 +21,11 @@ use api::{
 
 pub struct MariaDBBackend {
     pool: Pool,
+    media_mutex: Mutex<()>,
+    comment_mutex: Mutex<()>,
+    library_mutex: Mutex<()>,
+    contents_mutex: Mutex<()>,
+    collection_mutex: Mutex<()>,
 }
 
 #[async_trait]
@@ -35,6 +41,11 @@ impl DbBackend for MariaDBBackend {
 
         Ok(Self {
             pool: Pool::new(url.as_str()),
+            media_mutex: Mutex::new(()),
+            comment_mutex: Mutex::new(()),
+            library_mutex: Mutex::new(()),
+            contents_mutex: Mutex::new(()),
+            collection_mutex: Mutex::new(()),
         })
     }
 
@@ -84,6 +95,8 @@ impl DbBackend for MariaDBBackend {
     #[instrument(skip_all)]
     async fn add_media(&self, media: Media) -> Result<MediaUuid> {
         debug!({ media_path = media.path }, "adding media");
+
+        let _ = self.media_mutex.lock().await;
 
         let mut result = r"
             INSERT INTO media (media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type)
@@ -521,6 +534,8 @@ impl DbBackend for MariaDBBackend {
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid> {
         debug!({ collection_name = collection.name }, "adding collection");
 
+        let _ = self.collection_mutex.lock().await;
+
         let mut result = r"
             INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags, cover)
             SELECT
@@ -707,6 +722,8 @@ impl DbBackend for MariaDBBackend {
     ) -> Result<()> {
         debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "adding media to collection");
 
+        let _ = self.contents_mutex.lock().await;
+
         let mut result = r"
             INSERT INTO collection_contents (media_uuid, collection_uuid)
             SELECT
@@ -882,6 +899,8 @@ impl DbBackend for MariaDBBackend {
         // to use that as the primary key.  but those strings might be arbitrarily complex,
         // so instead using an i64 as a handle is much simpler
         debug!({ library_path = library.path }, "adding library");
+
+        let _ = self.library_mutex.lock().await;
 
         let mut result = r"
             INSERT INTO libraries (library_uuid, path, gid, mtime, count)
@@ -1062,6 +1081,8 @@ impl DbBackend for MariaDBBackend {
     #[instrument(skip_all)]
     async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
         debug!({ media_uuid = comment.media_uuid }, "adding comment");
+
+        let _ = self.comment_mutex.lock().await;
 
         let mut result = r"
             INSERT INTO comments (comment_uuid, media_uuid, mtime, uid, text)
