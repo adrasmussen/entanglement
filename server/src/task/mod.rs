@@ -33,12 +33,3 @@ pub trait ESTaskService: ESInner {
         end: i64,
     ) -> Result<()>;
 }
-
-// task debugging task
-#[tracing::instrument]
-async fn sleep_task(library_uuid: LibraryUuid) -> Result<i64> {
-    tracing::info!("info from task");
-    tokio::time::sleep(std::time::Duration::from_secs(100)).await;
-
-    Ok(-1)
-}

@@ -54,7 +54,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
-                                error!({service = "task", channel = "esm", error = %err})
+                                error!({service = "db", channel = "esm", error = %err})
                             }
                         }
                     });

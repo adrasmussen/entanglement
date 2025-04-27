@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
+    http::{header::AUTHORIZATION, {HeaderName, StatusCode}},
     middleware::Next,
     response::Response,
 };
@@ -24,7 +24,7 @@ pub async fn proxy_auth(
     let auth_header = req
         .headers()
         .get(
-            http::header::HeaderName::from_lowercase(state.to_lowercase().as_bytes())
+            HeaderName::from_lowercase(state.to_lowercase().as_bytes())
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
         )
         .and_then(|header| header.to_str().ok());
@@ -53,7 +53,7 @@ async fn _password_auth(
     // attempt to unpack the auth header, returning None if we cannot convert to a str
     let auth_header = req
         .headers()
-        .get(http::header::AUTHORIZATION)
+        .get(AUTHORIZATION)
         .and_then(|header| header.to_str().ok());
 
     let auth_header = match auth_header {

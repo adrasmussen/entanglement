@@ -15,6 +15,7 @@ mod fs;
 mod http;
 mod service;
 mod task;
+mod debug;
 
 use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::{config::read_config, db::MariaDBBackend};

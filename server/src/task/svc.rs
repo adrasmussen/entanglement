@@ -15,8 +15,9 @@ use tracing::{debug, error, info, instrument, span, Instrument, Level};
 
 use crate::{
     db::msg::DbMsg,
+    debug::sleep_task,
     service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
-    task::{msg::TaskMsg, scan::scan_library, sleep_task, ESTaskService},
+    task::{msg::TaskMsg, scan::scan_library, ESTaskService},
 };
 use api::{
     library::LibraryUuid,
@@ -268,7 +269,7 @@ impl ESTaskService for TaskRunner {
             _ => return Err(anyhow::Error::msg("unsupported task")),
         };
 
-        info!({start = start}, "starting task");
+        info!({ start = start }, "starting task");
 
         // watcher thread
         //
@@ -469,7 +470,7 @@ impl ESTaskService for TaskRunner {
         });
 
         info!(
-            {start = completed_task.task.start},
+            { start = completed_task.task.start },
             "task saved to history"
         );
 
