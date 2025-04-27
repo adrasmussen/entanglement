@@ -18,7 +18,7 @@ use common::config::ESConfig;
 //
 // this module contains several constructs that are useful for debugging the server,
 // but are not meant to be used in production as they may caused defined but almost
-// certainly unintended behavior
+// certainly unintended behavior.
 
 // task debugging task
 #[allow(dead_code)]

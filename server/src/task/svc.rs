@@ -67,7 +67,7 @@ impl EntanglementService for TaskService {
 
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
+                    spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
@@ -83,7 +83,7 @@ impl EntanglementService for TaskService {
             }
         };
 
-        self.handle.set(tokio::task::spawn(serve));
+        self.handle.set(spawn(serve));
 
         debug!("started task service");
         Ok(())

@@ -1,4 +1,8 @@
-use std::{collections::HashSet, fmt::Display, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -16,7 +20,7 @@ pub mod tomlfile;
 // TODO -- make all of these functions correctly falliable, and ensure that they have
 // some sort of retry logic built in
 #[async_trait]
-pub trait AuthzBackend: Display + Send + Sync + 'static {
+pub trait AuthzBackend: Debug + Display + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;
@@ -27,7 +31,7 @@ pub trait AuthzBackend: Display + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait AuthnBackend: Display + Send + Sync + 'static {
+pub trait AuthnBackend: Debug + Display + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;

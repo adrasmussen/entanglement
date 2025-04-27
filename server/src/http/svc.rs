@@ -105,7 +105,7 @@ impl EntanglementService for HttpService {
 
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
+                    spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
@@ -116,13 +116,12 @@ impl EntanglementService for HttpService {
                 }
 
                 Err(anyhow::Error::msg(format!(
-                    "http_service esm channel disconnected"
+                    "http service esm channel disconnected"
                 )))
             }
         };
 
-        let msg_handle = tokio::task::spawn(msg_serve);
-        self.msg_handle.set(msg_handle);
+        self.msg_handle.set(spawn(msg_serve));
 
         debug!("started http service");
         Ok(())
@@ -222,8 +221,6 @@ impl HttpEndpoint {
         ));
 
         // media -- streaming files to clients
-
-        // we will likely need more routes here once we do more complicated things with videos
         let media_router = Router::new()
             .route("/{dir}/{media_uuid}", get(stream_media))
             .with_state(state.clone());
@@ -285,7 +282,7 @@ impl HttpEndpoint {
         // for the moment, we just panic if the socket is in use
         let listener = TcpListener::bind(socket)
             .await
-            .expect("http_service failed to bind tcp socket");
+            .expect("hyper listener failed to bind tcp socket");
 
         // the main http server loop
         //
@@ -330,7 +327,7 @@ impl HttpEndpoint {
                                     match result {
                                         Ok(Ok(())) => (),
                                         Ok(Err(err)) => {
-                                            if format!("{err:?}").contains("KeepAliveTimeout") {
+                                            if format!("{err:?}").contains("KeepAliveTimedOut") {
                                                 debug!({error = ?err}, "http connection timed out")
                                             } else if format!("{err:?}").contains("Io") {
                                                 debug!({error = ?err}, "io error")

@@ -9,6 +9,7 @@ use crate::config::ESConfig;
 // reverse proxy authentication
 //
 // stub module for when all http calls are handled via the reverse proxy
+#[derive(Debug)]
 pub struct ProxyAuth {}
 
 #[async_trait]

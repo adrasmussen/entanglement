@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
-use tokio::sync::Mutex;
+use tokio::{task::spawn, sync::Mutex};
 use tracing::{debug, error, info, instrument};
 
 use crate::db::msg::DbMsg;
@@ -50,7 +50,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
 
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
+                    spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
@@ -60,16 +60,15 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
                     });
                 }
 
-                Err::<(), anyhow::Error>(anyhow::Error::msg(format!("channel disconnected")))
+                Err(anyhow::Error::msg(format!(
+                    "db service esm channel disconnected"
+                )))
             }
         };
 
-        let handle = tokio::task::spawn(serve);
-
-        self.handle.set(handle);
+        self.handle.set(spawn(serve));
 
         debug!("started db service");
-
         Ok(())
     }
 }

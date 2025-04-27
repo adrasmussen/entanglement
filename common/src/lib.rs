@@ -1,6 +1,4 @@
-use std::cmp::Eq;
-use std::future::Future;
-use std::hash::Hash;
+use std::{cmp::Eq, future::Future, hash::Hash, fmt::Debug};
 
 use dashmap::{mapref::entry::Entry, DashMap};
 
@@ -28,11 +26,11 @@ pub const GROUP_REGEX: &str = r"^[a-zA-Z0-9_.-]{1,64}$";
 // note that there have historically been some issues with DashMap and holding references across
 // await boundaries, but they have largely been cleared up
 #[derive(Debug)]
-pub struct AwaitCache<K: Eq + Hash + Clone, V: Clone> {
+pub struct AwaitCache<K: Clone + Debug + Eq + Hash , V: Clone + Debug> {
     items: DashMap<K, V>,
 }
 
-impl<K: Eq + Hash + Clone, V: Clone> AwaitCache<K, V> {
+impl<K: Clone + Debug + Eq + Hash , V: Clone + Debug> AwaitCache<K, V> {
     pub fn new() -> Self {
         AwaitCache {
             items: DashMap::new(),
@@ -62,6 +60,6 @@ impl<K: Eq + Hash + Clone, V: Clone> AwaitCache<K, V> {
     }
 
     pub fn remove(&self, key: &K) {
-        self.items.remove(key);
+        let v =self.items.remove(key);
     }
 }

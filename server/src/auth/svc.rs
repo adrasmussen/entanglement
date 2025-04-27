@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use regex::Regex;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::spawn};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -77,7 +77,7 @@ impl EntanglementService for AuthService {
 
                 while let Some(msg) = receiver.recv().await {
                     let state = Arc::clone(&state);
-                    tokio::task::spawn(async move {
+                    spawn(async move {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
@@ -88,20 +88,19 @@ impl EntanglementService for AuthService {
                 }
 
                 Err(anyhow::Error::msg(format!(
-                    "auth_service esm channel disconnected"
+                    "auth service esm channel disconnected"
                 )))
             }
         };
 
-        let handle = tokio::task::spawn(serve);
-
-        self.handle.set(handle);
+        self.handle.set(spawn(serve));
 
         debug!("started auth service");
         Ok(())
     }
 }
 
+#[derive(Debug)]
 pub struct AuthCache {
     registry: ESMRegistry,
     authn_provider: Box<dyn AuthnBackend>,
@@ -236,6 +235,7 @@ impl AuthCache {
 #[async_trait]
 impl ESAuthService for AuthCache {
     // cache management
+    #[instrument(skip(self))]
     async fn clear_user_cache(&self, uid: Vec<String>) -> anyhow::Result<()> {
         let user_cache = self.user_cache.clone();
 
@@ -244,14 +244,19 @@ impl ESAuthService for AuthCache {
                 user_cache.clear();
             }
             _ => {
-                let _ = uid.into_iter().map(|uid| user_cache.remove(&uid));
+                for k in uid {
+                    user_cache.remove(&k)
+                }
             }
         }
 
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> anyhow::Result<()> {
+        debug!("clearing access cache");
+
         let access_cache = self.access_cache.clone();
 
         match media_uuid.len() {
@@ -259,9 +264,9 @@ impl ESAuthService for AuthCache {
                 access_cache.clear();
             }
             _ => {
-                let _ = media_uuid
-                    .into_iter()
-                    .map(|media_uuid| access_cache.remove(&media_uuid));
+                for k in media_uuid {
+                    access_cache.remove(&k)
+                }
             }
         }
 
