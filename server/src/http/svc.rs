@@ -109,7 +109,7 @@ impl EntanglementService for HttpService {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
-                                error!({service = "http_service", channel = "esm", error = %err})
+                                error!({service = "http", channel = "esm", error = %err})
                             }
                         }
                     });
@@ -330,14 +330,16 @@ impl HttpEndpoint {
                                     match result {
                                         Ok(Ok(())) => (),
                                         Ok(Err(err)) => {
-                                            if format!("{err:?}").contains("Io") {
+                                            if format!("{err:?}").contains("KeepAliveTimeout") {
+                                                debug!({error = ?err}, "http connection timed out")
+                                            } else if format!("{err:?}").contains("Io") {
                                                 debug!({error = ?err}, "io error")
                                             } else {
                                                 warn!({error = ?err}, "non-io error")
                                             }
                                         },
-                                        Err(_) => {
-                                            debug!("http connection timed out");
+                                        Err(err) => {
+                                            debug!({error = ?err}, "http connection timed out");
                                         }
                                     }
                                 };

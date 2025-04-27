@@ -81,7 +81,7 @@ impl EntanglementService for AuthService {
                         match state.message_handler(msg).await {
                             Ok(()) => (),
                             Err(err) => {
-                                error!({service = "auth_service", channel = "esm", error = %err})
+                                error!({service = "auth", channel = "esm", error = %err})
                             }
                         }
                     });

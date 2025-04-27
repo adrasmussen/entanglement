@@ -12,6 +12,7 @@ use common::config::ESConfig;
 pub enum ServiceType {
     Auth,
     Db,
+    Echo,
     Http,
     Task,
 }
