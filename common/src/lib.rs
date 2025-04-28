@@ -60,6 +60,6 @@ impl<K: Clone + Debug + Eq + Hash , V: Clone + Debug> AwaitCache<K, V> {
     }
 
     pub fn remove(&self, key: &K) {
-        let v =self.items.remove(key);
+        self.items.remove(key);
     }
 }
