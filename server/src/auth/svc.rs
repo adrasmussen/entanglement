@@ -1,9 +1,9 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use regex::Regex;
-use tokio::{sync::Mutex, task::spawn};
+use tokio::{sync::Mutex, task::spawn, time::timeout};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -282,7 +282,14 @@ impl ESAuthService for AuthCache {
         let user_cache = self.user_cache.clone();
 
         let groups = user_cache
-            .perhaps(uid.clone(), self.groups_from_providers(uid))
+            .perhaps(uid.clone(), async {
+                let fut = timeout(Duration::from_secs(10), self.groups_from_providers(uid));
+                match fut.await {
+                    Ok(Ok(v)) => Ok(v),
+                    Ok(Err(err)) => Err(err),
+                    Err(err) => Err(anyhow::Error::from(err)),
+                }
+            })
             .await?;
 
         Ok(groups.clone())
@@ -303,7 +310,17 @@ impl ESAuthService for AuthCache {
         let access_cache = self.access_cache.clone();
 
         let groups = access_cache
-            .perhaps(media_uuid.clone(), self.media_access_groups(media_uuid))
+            .perhaps(media_uuid.clone(), async {
+                let fut = timeout(
+                    Duration::from_secs(10),
+                    self.media_access_groups(media_uuid),
+                );
+                match fut.await {
+                    Ok(Ok(v)) => Ok(v),
+                    Ok(Err(err)) => Err(err),
+                    Err(err) => Err(anyhow::Error::from(err)),
+                }
+            })
             .await?;
 
         Ok(self.is_group_member(uid, groups).await?)

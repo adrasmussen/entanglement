@@ -43,8 +43,8 @@ impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
     #[instrument(skip(self, init))]
     pub async fn perhaps<Fut: Future<Output = Result<V>>>(&self, key: K, init: Fut) -> Result<V> {
         // since we need to determine if a thread should initialize the value in the map while
-        // holding the lock, we can't use the native get() -- it would need to return Mutex<Option<>>
-        // instead of the reverse
+        // holding the lock, we can't use the native get() -- it would need to return Mutex<Option<V>>
+        // instead of the transpose
         let (cell, set) = match self.items.entry(key.clone()) {
             Entry::Occupied(entry) => (entry.get().clone(), false),
             Entry::Vacant(entry) => {
