@@ -57,33 +57,22 @@ impl DbBackend for MariaDBBackend {
         //  * if the media is not hidden, any collection that contains the media
         //  * the library that contains that media
         let result = r"
-        SELECT
-            gid
-        FROM
-            (
-                SELECT
-                    collection_uuid
-                FROM
-                    collections
-                INNER JOIN collection_contents ON collections.collection_uuid = collection_contents.collection_uuid
-                INNER JOIN media ON collection_contents.media_uuid = media.media_uuid
-                WHERE
-                    media.media_uuid = :media_uuid AND media.hidden = FALSE
-            ) AS t1
-            INNER JOIN collections ON t1.collection_uuid = collections.collection_uuid
-        UNION
-        SELECT
-            gid
-        FROM
-            (
-                SELECT
-                    library_uuid
-                FROM
-                    media
-                WHERE
-                    media.media_uuid = :media_uuid
-            ) AS t2
-            INNER JOIN libraries ON t2.library_uuid = libraries.library_uuid"
+            SELECT
+                gid
+            FROM
+                collections
+            INNER JOIN collection_contents ON collections.collection_uuid = collection_contents.collection_uuid
+            INNER JOIN media ON collection_contents.media_uuid = media.media_uuid
+            WHERE
+                media.media_uuid = :media_uuid AND media.hidden = FALSE
+            UNION
+            SELECT
+                gid
+            FROM
+                libraries
+            INNER JOIN media ON libraries.library_uuid = media.library_uuid
+            WHERE
+                media.media_uuid = :media_uuid"
             .with(params! {
                 "media_uuid" => media_uuid,
             })
