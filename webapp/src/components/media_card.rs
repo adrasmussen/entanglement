@@ -90,7 +90,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         if media.note.is_empty() {
                             "No description"
                         } else {
-                            {media.note.clone().lines().next().unwrap_or_else(|| "No description")}
+                            {media.note.clone().lines().next().unwrap_or("No description")}
                         }
                     }
                 }

@@ -21,17 +21,17 @@ pub struct CreateCollectionModalProps {
 pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut update_signal = props.update_signal;
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     // for the modal boxes, the submission action is tied to the footer buttons
     // and not to the forms themselves.  thus, we use Signals to store the state
-    let mut collection_name = use_signal(|| String::new());
-    let mut collection_group = use_signal(|| String::new());
-    let mut collection_note = use_signal(|| String::new());
-    let mut collection_tags = use_signal(|| String::new());
+    let mut collection_name = use_signal(String::new);
+    let mut collection_group = use_signal(String::new);
+    let mut collection_note = use_signal(String::new);
+    let mut collection_tags = use_signal(String::new);
 
-    let mut name_error = use_signal(|| String::new());
-    let mut group_error = use_signal(|| String::new());
+    let mut name_error = use_signal(String::new);
+    let mut group_error = use_signal(String::new);
 
     let handle_submit = move |_| async move {
         name_error.set(String::new());
@@ -99,10 +99,10 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         }
 
         match get_users_in_group(&GetUsersInGroupReq { gid }).await {
-            Ok(resp) => return resp.uids,
+            Ok(resp) => resp.uids,
             Err(err) => {
                 group_error.set(err.to_string());
-                return HashSet::new();
+                HashSet::new()
             }
         }
     });
@@ -307,24 +307,22 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
     // Fetch collection details to pre-fill the form
     let collection_uuid = props.collection_uuid;
 
-    let collection_future = use_resource(move || async move {
-        get_collection(&GetCollectionReq {
-            collection_uuid: collection_uuid,
-        })
-        .await
-    });
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     // Form validation state
-    let mut collection_name = use_signal(|| String::new());
-    let mut collection_note = use_signal(|| String::new());
-    let mut collection_tags = use_signal(|| String::new());
+    let mut collection_name = use_signal(String::new);
+    let mut collection_note = use_signal(String::new);
+    let mut collection_tags = use_signal(String::new);
 
     // see similar logic in GalleryInner
     let mut valid_tags = true;
 
-    let mut name_error = use_signal(|| String::new());
+    let mut name_error = use_signal(String::new);
 
     let handle_submit = move |_| async move {
         // Reset validation errors
@@ -482,12 +480,10 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
 
     let collection_uuid = props.collection_uuid;
 
-    let collection_future = use_resource(move || async move {
-        get_collection(&GetCollectionReq {
-            collection_uuid: collection_uuid,
-        })
-        .await
-    });
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
 
     // TODO -- we may want a general ModalError here instead of just skipping the failure
     let collection_name = match &*collection_future.read() {
@@ -495,14 +491,10 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
         _ => format!("Collection #{}", collection_uuid),
     };
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     let handle_submit = move |_| async move {
-        match delete_collection(&DeleteCollectionReq {
-            collection_uuid: collection_uuid,
-        })
-        .await
-        {
+        match delete_collection(&DeleteCollectionReq { collection_uuid }).await {
             Ok(_) => {
                 status_signal.set("Collection deleted successfully".into());
                 update_signal.set(());
@@ -572,7 +564,7 @@ pub struct AddMediaToCollectionModalProps {
 pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Element {
     let mut update_signal = props.update_signal;
 
-    let collection_search_signal = use_signal(|| String::new());
+    let collection_search_signal = use_signal(String::new);
     let selected_collection = use_signal(|| None::<CollectionUuid>);
 
     let collections_future = use_resource(move || async move {
@@ -594,7 +586,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
         None => None,
     };
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     let media_uuid = props.media_uuid;
 
@@ -691,12 +683,10 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
 
     let collection_uuid = props.collection_uuid;
 
-    let collection_future = use_resource(move || async move {
-        get_collection(&GetCollectionReq {
-            collection_uuid: collection_uuid,
-        })
-        .await
-    });
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
 
     // TODO -- we may want a general ModalError here instead of just skipping the failure
     let collection_name = match &*collection_future.read() {
@@ -704,14 +694,14 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
         _ => format!("Collection #{}", collection_uuid),
     };
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     let media_uuid = props.media_uuid;
 
     let handle_submit = move |_| async move {
         match rm_media_from_collection(&RmMediaFromCollectionReq {
-            collection_uuid: collection_uuid,
-            media_uuid: media_uuid,
+            collection_uuid,
+            media_uuid,
         })
         .await
         {
@@ -774,7 +764,7 @@ pub struct BulkAddToCollectionModalProps {
 pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element {
     let mut update_signal = props.update_signal;
 
-    let collection_search_signal = use_signal(|| String::new());
+    let collection_search_signal = use_signal(String::new);
     let selected_collection = use_signal(|| None::<CollectionUuid>);
 
     let collections_future = use_resource(move || async move {
@@ -796,7 +786,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
         None => None,
     };
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     let media_uuids = props.media_uuids.clone();
 

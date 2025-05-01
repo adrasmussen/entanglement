@@ -46,8 +46,8 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
     let media_uuid = *props.media_uuid.read();
     let mut update_signal = props.update_signal;
 
-    let mut new_comment = use_signal(|| String::new());
-    let mut status_signal = use_signal(|| String::new());
+    let mut new_comment = use_signal(String::new);
+    let mut status_signal = use_signal(String::new);
 
     let comments_future = use_resource(move || {
         async move {
@@ -55,7 +55,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
 
             for comment_uuid in comment_uuids() {
                 match get_comment(&GetCommentReq {
-                    comment_uuid: comment_uuid,
+                    comment_uuid,
                 })
                 .await
                 {
@@ -90,7 +90,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
                     match add_comment(
                             &AddCommentReq {
                                 comment: Comment {
-                                    media_uuid: media_uuid,
+                                    media_uuid,
                                     mtime: 0,
                                     uid: String::from(""),
                                     text: comment_text,

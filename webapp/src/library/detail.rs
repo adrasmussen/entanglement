@@ -71,7 +71,7 @@ struct LibraryInnerProps {
 fn LibraryInner(props: LibraryInnerProps) -> Element {
     let update_signal = props.update_signal;
     let bulk_edit_mode_signal = use_signal(|| false);
-    let selected_media_signal = use_signal(|| HashSet::new());
+    let selected_media_signal = use_signal(HashSet::new);
 
     let library_uuid = props.library_uuid.parse::<LibraryUuid>().show(|_| {
         let message = "The library_uuid could not be parsed".to_string();

@@ -93,14 +93,14 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                                     onmousedown: move |event| {
                                         if zoom_level() > 1.0 {
                                             is_panning.set(true);
-                                            start_pos_x.set(event.client_coordinates().x as f64);
-                                            start_pos_y.set(event.client_coordinates().y as f64);
+                                            start_pos_x.set(event.client_coordinates().x);
+                                            start_pos_y.set(event.client_coordinates().y);
                                         }
                                     },
                                     onmousemove: move |event| {
                                         if is_panning() {
-                                            let current_x = event.client_coordinates().x as f64;
-                                            let current_y = event.client_coordinates().y as f64;
+                                            let current_x = event.client_coordinates().x;
+                                            let current_y = event.client_coordinates().y;
                                             let delta_x = current_x - start_pos_x();
                                             let delta_y = current_y - start_pos_y();
                                             translate_x.set(translate_x() + delta_x / zoom_level());
@@ -247,11 +247,11 @@ pub struct BulkAddTagsModalProps {
 pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
     let mut update_signal = props.update_signal;
 
-    let mut edit_tags = use_signal(|| String::new());
+    let mut edit_tags = use_signal(String::new);
 
     let edit_mode_signal = use_signal(|| TagEditMode::Add);
 
-    let mut status_signal = use_signal(|| String::new());
+    let mut status_signal = use_signal(String::new);
 
     let media_uuids = props.media_uuids.clone();
 
@@ -288,20 +288,20 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
 
                 let new_tags: HashSet<String> = match edit_mode_signal() {
                     TagEditMode::Add => {
-                        if edit_tags.difference(&tags).collect::<Vec<_>>().len() == 0 {
+                        if edit_tags.difference(&tags).collect::<Vec<_>>().is_empty() {
                             success_count.set(success_count() + 1);
                             continue;
                         }
 
-                        tags.union(&edit_tags).map(|v| v.clone()).collect()
+                        tags.union(&edit_tags).cloned().collect()
                     }
                     TagEditMode::Remove => {
-                        if edit_tags.intersection(&tags).collect::<Vec<_>>().len() == 0 {
+                        if edit_tags.intersection(&tags).collect::<Vec<_>>().is_empty() {
                             success_count.set(success_count() + 1);
                             continue;
                         }
 
-                        tags.difference(&edit_tags).map(|v| v.clone()).collect()
+                        tags.difference(&edit_tags).cloned().collect()
                     }
                 };
 

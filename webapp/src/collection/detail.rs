@@ -73,7 +73,7 @@ struct CollectionInnerProps {
 fn CollectionInner(props: CollectionInnerProps) -> Element {
     let update_signal = props.update_signal;
     let bulk_edit_mode_signal = use_signal(|| false);
-    let selected_media_signal = use_signal(|| HashSet::new());
+    let selected_media_signal = use_signal(HashSet::new);
 
     let collection_uuid = props.collection_uuid.parse::<CollectionUuid>().show(|_| {
         let message = "The collection_uuid could not be parsed".to_string();

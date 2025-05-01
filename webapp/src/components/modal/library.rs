@@ -18,7 +18,7 @@ pub struct StartTaskModalProps {
 pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
     let library_uuid = props.library_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
+    let mut status_message = use_signal(String::new);
     let mut selected_task = use_signal(|| TaskType::ScanLibrary);
     let handle_submit = move |_| async move {
         status_message.set("Starting task...".into());
@@ -182,7 +182,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
     let library_uuid = props.library_uuid;
 
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
+    let mut status_message = use_signal(String::new);
 
     let task_future =
         use_resource(move || async move { show_tasks(&ShowTasksReq { library_uuid }).await });
@@ -244,7 +244,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                     onclick: move |_| async move {
                         match stop_task(
                                 &StopTaskReq {
-                                    library_uuid: library_uuid,
+                                    library_uuid,
                                 },
                             )
                             .await
@@ -294,7 +294,7 @@ pub fn TaskHistoryModal(props: TaskHistoryModalProps) -> Element {
     let task_history_future =
         use_resource(move || async move { show_tasks(&ShowTasksReq { library_uuid }).await });
 
-    let status_signal = use_signal(|| String::new());
+    let status_signal = use_signal(String::new);
 
     let footer = rsx! {
         span { class: "status-message", "{status_signal}" }

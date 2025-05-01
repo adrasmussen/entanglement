@@ -4,7 +4,7 @@ use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-pub fn set_local_storage<T>(key: &str, value: T) -> ()
+pub fn set_local_storage<T>(key: &str, value: T)
 where
     T: Serialize,
 {
@@ -32,10 +32,7 @@ where
 {
     let key = format!("entanglement_{}", key);
 
-    match LocalStorage::get(key.clone()) {
-        Ok(val) => val,
-        Err(_) => T::default(),
-    }
+    LocalStorage::get(key.clone()).unwrap_or_default()
 }
 
 pub fn _try_and_forget_local_storage<T>(key: &str) -> T
@@ -44,7 +41,7 @@ where
 {
     match LocalStorage::get(format!("entanglement_{}", key)) {
         Ok(val) => {
-            set_local_storage(&key, T::default());
+            set_local_storage(key, T::default());
             val
         }
         Err(_) => T::default(),

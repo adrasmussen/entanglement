@@ -27,7 +27,7 @@ mod search;
 //
 // rather than having each page have its own modal signal logic, we define a global
 // signal so that moving between pages via modal works
-pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(|| Vec::new());
+pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(Vec::new);
 
 // Modal
 //
@@ -44,7 +44,7 @@ pub enum Modal {
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
     BulkAddToCollection(HashSet<MediaUuid>),
-    BulkEditTagsModal(HashSet<MediaUuid>),
+    BulkEditTags(HashSet<MediaUuid>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
     TaskHistory(LibraryUuid),
@@ -109,7 +109,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     BulkAddToCollectionModal { update_signal, media_uuids: media_uuids.clone() }
                 }
             }
-            Modal::BulkEditTagsModal(ref media_uuids) => {
+            Modal::BulkEditTags(ref media_uuids) => {
                 rsx! {
                     BulkEditTagsModal { update_signal, media_uuids: media_uuids.clone() }
                 }
@@ -146,18 +146,13 @@ pub struct ModalProps {
     footer: Option<Element>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub enum ModalSize {
     Small,
+    #[default]
     Medium,
     Large,
     Full,
-}
-
-impl Default for ModalSize {
-    fn default() -> Self {
-        ModalSize::Medium
-    }
 }
 
 #[component]

@@ -79,7 +79,7 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
                         BulkEdit {
                             bulk_edit_mode_signal,
                             selected_media_signal,
-                            button_target: Modal::BulkEditTagsModal(selected_media_signal().clone()),
+                            button_target: Modal::BulkEditTags(selected_media_signal().clone()),
                             button_text: "Edit Tags for Selected",
                             hidden_text: "Enable Bulk Edit Mode to edit tags to large groups of media.",
                         }
@@ -116,7 +116,7 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
 
     rsx! {
         button {
-            class: if &*tab_signal.read() == &target { "tab-button active" } else { "tab-button" },
+            class: if *tab_signal.read() == target { "tab-button active" } else { "tab-button" },
             style: "
                                 padding: var(--space-2) var(--space-4);
                                 background: none;
@@ -129,7 +129,7 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
                                 margin-right: var(--space-2);
                                 "
                 .to_string()
-                + if &*tab_signal.read() == &target {
+                + if *tab_signal.read() == target {
                     "color: var(--primary); border-bottom-color: var(--primary);"
                 } else {
                     ""

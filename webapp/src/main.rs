@@ -68,7 +68,7 @@ pub fn App() -> Element {
     rsx! {
         style { "{common::style::MODERN_STYLES}" }
         style { "{common::style::HOME_STYLES}" }
-        Router::<Route> { config: move || RouterConfig::default() }
+        Router::<Route> { config: RouterConfig::default }
     }
 }
 

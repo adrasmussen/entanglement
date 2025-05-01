@@ -20,7 +20,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
     let comment_uuid = props.comment_uuid;
     let media_uuid = props.media_uuid;
     let mut update_signal = props.update_signal;
-    let mut status_message = use_signal(|| String::new());
+    let mut status_message = use_signal(String::new);
 
     let footer = rsx! {
         span { class: "status-message", "{status_message}" }
@@ -39,7 +39,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
                 onclick: move |_| async move {
                     match delete_comment(
                             &DeleteCommentReq {
-                                comment_uuid: comment_uuid,
+                                comment_uuid,
                             },
                         )
                         .await

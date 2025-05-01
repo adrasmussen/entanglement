@@ -20,7 +20,7 @@ pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_mode_signal = use_signal(|| false);
-    let mut selected_media_signal = use_signal(|| HashSet::new());
+    let mut selected_media_signal = use_signal(HashSet::new);
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 

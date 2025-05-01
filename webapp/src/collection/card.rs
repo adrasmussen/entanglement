@@ -67,7 +67,7 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
     // Fetch collection data
     let collection = use_resource(move || async move {
         get_collection(&GetCollectionReq {
-            collection_uuid: collection_uuid,
+            collection_uuid,
         })
         .await
     });
