@@ -45,7 +45,7 @@ pub async fn scan_library(
         .send(
             DbMsg::GetLibrary {
                 resp: tx,
-                library_uuid: library_uuid,
+                library_uuid,
             }
             .into(),
         )
@@ -57,8 +57,8 @@ pub async fn scan_library(
 
     let context = Arc::new(ScanContext {
         config: config.clone(),
-        library_uuid: library_uuid,
-        db_svc_sender: db_svc_sender,
+        library_uuid,
+        db_svc_sender,
         file_count: AtomicI64::new(0),
         warnings: AtomicI64::new(0),
         chashes: DashSet::new(),
@@ -73,7 +73,7 @@ pub async fn scan_library(
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
-    let scan_threads = config.task.scan_threads.clone();
+    let scan_threads = config.task.scan_threads;
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
@@ -149,7 +149,7 @@ pub async fn scan_library(
         .send(
             DbMsg::UpdateLibrary {
                 resp: tx,
-                library_uuid: library_uuid,
+                library_uuid,
                 update: LibraryUpdate {
                     count: Some(file_count),
                 },

@@ -5,7 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
 use crate::{config::ESConfig, db::DbBackend};
@@ -21,11 +21,16 @@ use api::{
 
 pub struct MariaDBBackend {
     pool: Pool,
-    media_mutex: Mutex<()>,
-    comment_mutex: Mutex<()>,
-    library_mutex: Mutex<()>,
-    contents_mutex: Mutex<()>,
-    collection_mutex: Mutex<()>,
+    locks: TableLocks,
+}
+
+#[derive(Default)]
+struct TableLocks {
+    media: RwLock<()>,
+    comment: RwLock<()>,
+    library: RwLock<()>,
+    contents: RwLock<()>,
+    collection: RwLock<()>,
 }
 
 #[async_trait]
@@ -41,22 +46,24 @@ impl DbBackend for MariaDBBackend {
 
         Ok(Self {
             pool: Pool::new(url.as_str()),
-            media_mutex: Mutex::new(()),
-            comment_mutex: Mutex::new(()),
-            library_mutex: Mutex::new(()),
-            contents_mutex: Mutex::new(()),
-            collection_mutex: Mutex::new(()),
+            locks: TableLocks::default(),
         })
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> Result<HashSet<String>> {
-        debug!({ media_uuid = media_uuid }, "finding media access groups");
+        debug!("finding media access groups");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
 
         // for a given media_uuid, find all gids that match either:
         //  * if the media is not hidden, any collection that contains the media
         //  * the library that contains that media
         let result = r"
+            /* media_access_groups {uuid} */
             SELECT
                 gid
             FROM
@@ -83,22 +90,23 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<String>(row))
+            .map(from_row_opt::<String>)
             .collect::<Result<HashSet<_>, FromRowError>>()?;
 
-        debug!({media_uuid = media_uuid, groups = ?data}, "found groups");
+        debug!({ groups = ?data }, "found groups");
 
         Ok(data)
     }
 
     // media queries
-    #[instrument(skip_all)]
+    #[instrument(skip(self, media))]
     async fn add_media(&self, media: Media) -> Result<MediaUuid> {
         debug!({ media_path = media.path }, "adding media");
 
-        let _ = self.media_mutex.lock().await;
+        let _mw = self.locks.media.write().await;
+        let _lw = self.locks.library.write().await;
 
-        let mut result = r"
+        let query = r"
             INSERT INTO media (media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type)
             SELECT
                 UUID_SHORT(),
@@ -122,29 +130,31 @@ impl DbBackend for MariaDBBackend {
                     library_uuid = :library_uuid
                     AND path = :path
             )
-            RETURNING media_uuid"
-        .with(params! {
-            "library_uuid" => media.library_uuid,
-            "path" => media.path.clone(),
-            "size" => media.size,
-            "chash" => media.chash,
-            "phash" => media.phash,
-            "mtime" => Local::now().timestamp(),
-            "hidden" => media.hidden,
-            "date" => media.date,
-            "note" => media.note,
-            "tags" => fold_set(media.tags)?,
-            "media_type" => match media.metadata {
-                MediaMetadata::Image => "Image",
-                MediaMetadata::Video => "Video",
-                MediaMetadata::VideoSlice => "VideoSlice",
-                MediaMetadata::Audio => "Audio"
-            },
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
+            RETURNING media_uuid";
+
+        let mut result = query
+            .with(params! {
+                "library_uuid" => media.library_uuid,
+                "path" => media.path.clone(),
+                "size" => media.size,
+                "chash" => media.chash,
+                "phash" => media.phash,
+                "mtime" => Local::now().timestamp(),
+                "hidden" => media.hidden,
+                "date" => media.date,
+                "note" => media.note,
+                "tags" => fold_set(media.tags)?,
+                "media_type" => match media.metadata {
+                    MediaMetadata::Image => "Image",
+                    MediaMetadata::Video => "Video",
+                    MediaMetadata::VideoSlice => "VideoSlice",
+                    MediaMetadata::Audio => "Audio"
+                },
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
         let row = result
             .pop()
@@ -152,17 +162,21 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<MediaUuid>(row)?;
 
-        debug!({media_path = media.path, media_uuid = data}, "added media");
+        debug!({ media_path = media.path, media_uuid = data }, "added media");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
     ) -> Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
-        debug!({ media_uuid = media_uuid }, "getting media details");
+        debug!("getting media details");
+
+        let _mr = self.locks.media.read().await;
+        let _yr = self.locks.comment.read().await;
+        let _xr = self.locks.contents.read().await;
 
         let mut media_result = r"
             SELECT library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
@@ -203,7 +217,7 @@ impl DbBackend for MariaDBBackend {
 
         let collection_data = collection_result
             .into_iter()
-            .map(|row| from_row_opt::<CollectionUuid>(row))
+            .map(from_row_opt::<CollectionUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
 
         let comment_result = r"
@@ -218,10 +232,10 @@ impl DbBackend for MariaDBBackend {
 
         let comment_data = comment_result
             .into_iter()
-            .map(|row| from_row_opt::<CommentUuid>(row))
+            .map(from_row_opt::<CommentUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
 
-        debug!({ media_uuid = media_uuid }, "found media details");
+        debug!("found media details");
 
         Ok(Some((
             Media {
@@ -252,9 +266,11 @@ impl DbBackend for MariaDBBackend {
         )))
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>> {
-        debug!({ media_path = path }, "searching for media by path");
+        debug!("searching for media by path");
+
+        let _mr = self.locks.media.read().await;
 
         let mut result = r"
             SELECT media_uuid FROM media WHERE path = :path"
@@ -278,16 +294,15 @@ impl DbBackend for MariaDBBackend {
         Ok(Some(data))
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_media_uuid_by_chash(
         &self,
         library_uuid: LibraryUuid,
         chash: String,
     ) -> Result<Option<MediaUuid>> {
-        debug!(
-            { media_chash = chash },
-            "searching for media by content hash"
-        );
+        debug!("searching for media by content hash");
+
+        let _mr = self.locks.media.read().await;
 
         let mut result = r"
             SELECT media_uuid FROM media WHERE library_uuid = :library_uuid AND chash = :chash"
@@ -312,9 +327,13 @@ impl DbBackend for MariaDBBackend {
         Ok(Some(data))
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, update))]
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()> {
-        debug!({ media_uuid = media_uuid }, "updating media details");
+        debug!("updating media details");
+
+        let _mw = self.locks.media.write().await;
+
+        let mut modified = false;
 
         if let Some(val) = update.hidden {
             r"
@@ -325,6 +344,8 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
         if let Some(val) = update.date {
@@ -336,6 +357,8 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
         if let Some(val) = update.note {
@@ -347,6 +370,8 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
         if let Some(val) = update.tags {
@@ -358,25 +383,31 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
-        r"
-        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "mtime" => Local::now().timestamp(),
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
+        if modified {
+            r"
+            UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+                .with(params! {
+                    "mtime" => Local::now().timestamp(),
+                    "media_uuid" => media_uuid,
+                })
+                .run(self.pool.get_conn().await?)
+                .await?;
+        }
 
-        debug!({ media_uuid = media_uuid }, "updated media details");
+        debug!({ modified = modified }, "updated media details");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn replace_media_path(&self, media_uuid: MediaUuid, path: String) -> Result<()> {
-        debug!({media_uuid = media_uuid, path = path}, "replacing media path");
+        debug!("replacing media path");
+
+        let _mw = self.locks.media.write().await;
 
         r"
         UPDATE media SET path = :path, mtime = :mtime WHERE media_uuid = :media_uuid"
@@ -388,18 +419,23 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!("updated media path");
+        debug!("replaced media path");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn search_media(
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
-        debug!({gid = ?gid, filter = ?filter}, "searching for media");
+        debug!("searching for media");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
 
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
@@ -407,7 +443,7 @@ impl DbBackend for MariaDBBackend {
         //  * is in a library owned by a group containing the uid
         //  * if the media is not hidden, is in an collection owned
         //    by a group containing the uid
-        let mut query  = r"
+        let mut query = r"
             SELECT
                 media.media_uuid
             FROM
@@ -456,15 +492,15 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
+            .map(from_row_opt::<MediaUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
 
-        debug!("found media");
+        debug!({ count = data.len() }, "found media");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn similar_media(
         &self,
         gid: HashSet<String>,
@@ -475,6 +511,13 @@ impl DbBackend for MariaDBBackend {
         //  * is in a library owned by a group containing the uid
         //  * if the media is not hidden, is in an collection owned
         //    by a group containing the uid
+        debug!("searching for similar media");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
+
         let result = r"
             SELECT
                 media.media_uuid
@@ -523,18 +566,20 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
+            .map(from_row_opt::<MediaUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found similar media");
 
         Ok(data)
     }
 
     // collection queries
-    #[instrument(skip_all)]
+    #[instrument(skip(self, collection))]
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid> {
         debug!({ collection_name = collection.name }, "adding collection");
 
-        let _ = self.collection_mutex.lock().await;
+        let _cw = self.locks.collection.write().await;
 
         let mut result = r"
             INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags, cover)
@@ -577,17 +622,16 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<CollectionUuid>(row)?;
 
-        debug!({collection_name = collection.name, collection_uuid = data}, "added collection");
+        debug!({ collection_name = collection.name, collection_uuid = data }, "added collection");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_collection(&self, collection_uuid: CollectionUuid) -> Result<Option<Collection>> {
-        debug!(
-            { collection_uuid = collection_uuid },
-            "getting collection details"
-        );
+        debug!("getting collection details");
+
+        let _cr = self.locks.collection.read().await;
 
         let mut result = r"
             SELECT uid, gid, mtime, name, note, tags, cover FROM collections WHERE collection_uuid = :collection_uuid"
@@ -614,10 +658,7 @@ impl DbBackend for MariaDBBackend {
             Option<MediaUuid>,
         )>(row)?;
 
-        debug!(
-            { collection_uuid = collection_uuid },
-            "found collection details"
-        );
+        debug!("found collection details");
 
         Ok(Some(Collection {
             uid: data.0,
@@ -630,11 +671,12 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
+    #[instrument(skip(self))]
     async fn delete_collection(&self, collection_uuid: CollectionUuid) -> Result<()> {
-        debug!(
-            { collection_uuid = collection_uuid },
-            "deleting media from collection"
-        );
+        debug!("deleting media from collection");
+
+        let _xw = self.locks.contents.write().await;
+        let _cw = self.locks.collection.write().await;
 
         r"
             DELETE FROM collection_contents WHERE collection_uuid = :collection_uuid"
@@ -644,7 +686,7 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!({ collection_uuid = collection_uuid }, "deleting collection");
+        debug!("deleting collection");
 
         r"
             DELETE FROM collections WHERE collection_uuid = :collection_uuid"
@@ -654,18 +696,22 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!({ collection_uuid = collection_uuid }, "deleted collection");
+        debug!("deleted collection");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, update))]
     async fn update_collection(
         &self,
         collection_uuid: CollectionUuid,
         update: CollectionUpdate,
     ) -> Result<()> {
-        debug!({ collection_uuid = collection_uuid }, "updating collection");
+        debug!("updating collection");
+
+        let _cw = self.locks.collection.write().await;
+
+        let mut modified = false;
 
         if let Some(val) = update.name {
             r"
@@ -676,6 +722,8 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
         if let Some(val) = update.note {
@@ -687,42 +735,49 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
         if let Some(val) = update.tags {
             r"
-        UPDATE collections SET tags = :tags WHERE collection_uuid = :collection_uuid"
+            UPDATE collections SET tags = :tags WHERE collection_uuid = :collection_uuid"
                 .with(params! {
                     "tags" => fold_set(val.clone())?,
                     "collection_uuid" => collection_uuid,
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
-        r"
-        UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
-            .with(params! {
-                "mtime" => Local::now().timestamp(),
-                "collection_uuid" => collection_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
+        if modified {
+            r"
+            UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
+                .with(params! {
+                    "mtime" => Local::now().timestamp(),
+                    "collection_uuid" => collection_uuid,
+                })
+                .run(self.pool.get_conn().await?)
+                .await?;
+        }
 
-        debug!({ collection_uuid = collection_uuid }, "updated collection");
+        debug!({ modified = modified }, "updated collection");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn add_media_to_collection(
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     ) -> Result<()> {
-        debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "adding media to collection");
+        debug!("adding media to collection");
 
-        let _ = self.contents_mutex.lock().await;
+        let _mw = self.locks.media.write().await;
+        let _cw = self.locks.collection.write().await;
 
         let mut result = r"
             INSERT INTO collection_contents (media_uuid, collection_uuid)
@@ -762,18 +817,30 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "added media to collection");
+        r"
+        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "mtime" => Local::now().timestamp(),
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        debug!("added media to collection");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn rm_media_from_collection(
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     ) -> Result<()> {
-        debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "removing media to collection");
+        debug!("removing media from collection");
+
+        let _mw = self.locks.media.write().await;
+        let _cw = self.locks.collection.write().await;
 
         r"
         DELETE FROM collection_contents WHERE (media_uuid = :media_uuid AND collection_uuid = :collection_uuid)"
@@ -794,17 +861,30 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!({media_uuid = media_uuid, collection_uuid = collection_uuid}, "removed media from collection");
+        r"
+        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "mtime" => Local::now().timestamp(),
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        debug!("removed media from collection");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
     ) -> Result<Vec<CollectionUuid>> {
+        debug!("searching for collections");
+
+        let _cr = self.locks.collection.read().await;
+
         let (sql, filter) =
             filter.format_mariadb("collections.name, collections.note, collections.tags");
 
@@ -832,19 +912,27 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<CollectionUuid>(row))
+            .map(from_row_opt::<CollectionUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found collections");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
+        debug!("searching media in collection");
+
+        let _mr = self.locks.media.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
+
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
@@ -886,21 +974,23 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
+            .map(from_row_opt::<MediaUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found media in collection");
 
         Ok(data)
     }
 
     // library queries
-    #[instrument(skip_all)]
+    #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         // since we require that libraries have unique paths, it might seem like we want
         // to use that as the primary key.  but those strings might be arbitrarily complex,
         // so instead using an i64 as a handle is much simpler
         debug!({ library_path = library.path }, "adding library");
 
-        let _ = self.library_mutex.lock().await;
+        let _lw = self.locks.library.write().await;
 
         let mut result = r"
             INSERT INTO libraries (library_uuid, path, gid, mtime, count)
@@ -936,14 +1026,16 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<LibraryUuid>(row)?;
 
-        debug!({library_path = library.path, library_uuid = data}, "adding library");
+        debug!({ library_path = library.path, library_uuid = data }, "adding library");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_library(&self, library_uuid: LibraryUuid) -> Result<Option<Library>> {
-        debug!({ library_uuid = library_uuid }, "getting library details");
+        debug!("getting library details");
+
+        let _lr = self.locks.library.read().await;
 
         let mut result = r"
             SELECT path, uid, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
@@ -962,7 +1054,7 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<(String, String, String, i64, i64)>(row)?;
 
-        debug!({ library_uuid = library_uuid }, "found library details");
+        debug!("found library details");
 
         Ok(Some(Library {
             path: data.0,
@@ -973,33 +1065,43 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, update))]
     async fn update_library(&self, library_uuid: LibraryUuid, update: LibraryUpdate) -> Result<()> {
-        debug!({ library_uuid = library_uuid }, "updating library");
+        debug!("updating library");
+
+        let _lw = self.locks.library.write().await;
+
+        let mut modified = false;
 
         if let Some(val) = update.count {
             r"
             UPDATE libraries SET mtime = :mtime, count = :count WHERE library_uuid = :library_uuid"
                 .with(params! {
                     "mtime" => Local::now().timestamp(),
-                    "count" => val.clone(),
+                    "count" => val,
                     "library_uuid" => library_uuid,
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            modified = true;
         }
 
-        debug!({ library_uuid = library_uuid }, "updated library");
+        debug!({ modified = modified }, "updated library");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
         filter: String,
     ) -> Result<Vec<LibraryUuid>> {
+        debug!("searching libraries");
+
+        let _lr = self.locks.library.read().await;
+
         let result = r"
             SELECT
                 library_uuid
@@ -1018,13 +1120,15 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<LibraryUuid>(row))
+            .map(from_row_opt::<LibraryUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found libraries");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
@@ -1032,6 +1136,11 @@ impl DbBackend for MariaDBBackend {
         hidden: bool,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
+        debug!("searching media in library");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+
         let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid, filter, hidden state and library_uuid, find all media in that collection
@@ -1071,18 +1180,21 @@ impl DbBackend for MariaDBBackend {
 
         let data = result
             .into_iter()
-            .map(|row| from_row_opt::<MediaUuid>(row))
+            .map(from_row_opt::<MediaUuid>)
             .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found media in library");
 
         Ok(data)
     }
 
     // comment queries
-    #[instrument(skip_all)]
+    #[instrument(skip(self, comment))]
     async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
         debug!({ media_uuid = comment.media_uuid }, "adding comment");
 
-        let _ = self.comment_mutex.lock().await;
+        let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
 
         let mut result = r"
             INSERT INTO comments (comment_uuid, media_uuid, mtime, uid, text)
@@ -1090,7 +1202,7 @@ impl DbBackend for MariaDBBackend {
             RETURNING comment_uuid"
             .with(params! {
                 "media_uuid" => comment.media_uuid,
-                "mtime" => comment.mtime,
+                "mtime" => Local::now().timestamp(),
                 "uid" => comment.uid,
                 "text" => comment.text,
             })
@@ -1105,14 +1217,25 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<CommentUuid>(row)?;
 
+        r"
+        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "mtime" => Local::now().timestamp(),
+                "media_uuid" => comment.media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
         debug!({media_uuid = comment.media_uuid, comment_uuid = data}, "added comment");
 
         Ok(data)
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
-        debug!({ comment_uuid = comment_uuid }, "getting comment details");
+        debug!("getting comment details");
+
+        let _yr = self.locks.comment.read().await;
 
         let mut result = r"
             SELECT media_uuid, mtime, uid, text FROM comments WHERE comment_uuid = :comment_uuid"
@@ -1131,7 +1254,7 @@ impl DbBackend for MariaDBBackend {
 
         let data = from_row_opt::<(MediaUuid, i64, String, String)>(row)?;
 
-        debug!({ comment_uuid = comment_uuid }, "found comment details");
+        debug!("found comment details");
 
         Ok(Some(Comment {
             media_uuid: data.0,
@@ -1141,9 +1264,14 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
-    #[instrument(skip_all)]
+    // TODO -- find a simple way to get the media_uuid so that we can bump the timestamp
+
+    #[instrument(skip(self))]
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
-        debug!({ comment_uuid = comment_uuid }, "deleting comment");
+        debug!("deleting comment");
+
+        // let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
 
         r"
         DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
@@ -1153,14 +1281,26 @@ impl DbBackend for MariaDBBackend {
             .run(self.pool.get_conn().await?)
             .await?;
 
-        debug!({ comment_uuid = comment_uuid }, "deleted comment");
+        // r"
+        // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+        //     .with(params! {
+        //         "mtime" => Local::now().timestamp(),
+        //         "media_uuid" => comment.media_uuid,
+        //     })
+        //     .run(self.pool.get_conn().await?)
+        //     .await?;
+
+        debug!("deleted comment");
 
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, text))]
     async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
-        debug!({ comment_uuid = comment_uuid }, "updating comment");
+        debug!("updating comment");
+
+        // let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
 
         if let Some(val) = text {
             r"
@@ -1171,9 +1311,18 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
+
+            // r"
+            // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+            // .with(params! {
+            //     "mtime" => Local::now().timestamp(),
+            //     "media_uuid" => comment.media_uuid,
+            // })
+            // .run(self.pool.get_conn().await?)
+            // .await?;
         }
 
-        debug!({ comment_uuid = comment_uuid }, "updated comment");
+        debug!("updated comment");
 
         Ok(())
     }

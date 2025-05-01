@@ -4,7 +4,7 @@ use crate::{endpoint, media::MediaUuid, search::SearchFilter};
 
 // structs and types
 
-pub type LibraryUuid = i64;
+pub type LibraryUuid = u64;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {

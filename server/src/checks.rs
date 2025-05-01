@@ -4,12 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use anyhow;
+use anyhow::Result;
 use rand::random;
 
 use common::config::ESConfig;
 
-pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
+pub fn create_temp_file(dir: &PathBuf) -> Result<()> {
     // needed to be completely unambiguous which directory we are checking
     if !dir.is_absolute() {
         return Err(anyhow::Error::msg(
@@ -17,7 +17,7 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
         ));
     }
 
-    if !(&canonicalize(&dir)? == dir) {
+    if &canonicalize(dir)? != dir {
         return Err(anyhow::Error::msg(
             "must pass canonical path to create_temp_file",
         ));
@@ -42,7 +42,7 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
     // mock data to make sure that we can read any file we create
     let data = random::<i64>().to_ne_bytes();
 
-    write(&filename, &data)?;
+    write(&filename, data)?;
 
     if read(&filename)? != data {
         return Err(anyhow::Error::msg(format!(
@@ -55,7 +55,7 @@ pub fn create_temp_file(dir: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn subdir_exists(config: &Arc<ESConfig>, subdir: &str) -> anyhow::Result<()> {
+pub fn subdir_exists(config: &Arc<ESConfig>, subdir: &str) -> Result<()> {
     let subdir = PathBuf::from(subdir);
 
     if subdir.is_absolute() {

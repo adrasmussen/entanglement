@@ -3,7 +3,6 @@ use std::{future::Future, sync::Arc};
 use anyhow::Result;
 use async_trait::async_trait;
 use dashmap::DashMap;
-use tokio;
 
 use common::config::ESConfig;
 
@@ -21,15 +20,15 @@ pub enum ServiceType {
 //
 // without higher-kinded types, we use the normal enum-of-enums
 // to enable general safe message passing between services
-pub type ESMSender = tokio::sync::mpsc::Sender<ESM>;
-pub type ESMReceiver = tokio::sync::mpsc::Receiver<ESM>;
+pub type EsmSender = tokio::sync::mpsc::Sender<Esm>;
+pub type EsmReceiver = tokio::sync::mpsc::Receiver<Esm>;
 
 // message responses are carried back via oneshot channels.  this
 // type eliminates quite a bit of boilerplate in the responder logic.
-pub type ESMResp<T> = tokio::sync::oneshot::Sender<Result<T>>;
+pub type EsmResp<T> = tokio::sync::oneshot::Sender<Result<T>>;
 
 #[derive(Debug)]
-pub enum ESM {
+pub enum Esm {
     Auth(crate::auth::msg::AuthMsg),
     Db(crate::db::msg::DbMsg),
     _Http(crate::http::msg::HttpMsg),
@@ -45,26 +44,26 @@ pub enum ESM {
 // however, many services avoid the hash table lookup by cloning the sender, so care
 // needs to be taken if this struct becomes dynamic in some fashion.
 #[derive(Clone, Debug)]
-pub struct ESMRegistry(Arc<DashMap<ServiceType, ESMSender>>);
+pub struct ESMRegistry(Arc<DashMap<ServiceType, EsmSender>>);
 
 impl ESMRegistry {
     pub fn new() -> Self {
         ESMRegistry(Arc::new(DashMap::new()))
     }
 
-    pub fn insert(&self, k: ServiceType, v: ESMSender) -> Result<()> {
+    pub fn insert(&self, k: ServiceType, v: EsmSender) -> Result<()> {
         match self.0.clone().insert(k.clone(), v) {
-            None => return Ok(()),
+            None => Ok(()),
             Some(w) => {
                 self.0.clone().insert(k, w);
-                return Err(anyhow::Error::msg(
+                Err(anyhow::Error::msg(
                     "internal error: a sender was added twice to the registry",
-                ));
+                ))
             }
         }
     }
 
-    pub fn get(&self, k: &ServiceType) -> Result<ESMSender> {
+    pub fn get(&self, k: &ServiceType) -> Result<EsmSender> {
         Ok(self
             .0
             .get(k)
@@ -103,7 +102,7 @@ pub trait ESInner: Sized + Send + Sync + 'static {
 
     fn registry(&self) -> ESMRegistry;
 
-    async fn message_handler(&self, esm: ESM) -> Result<()>;
+    async fn message_handler(&self, esm: Esm) -> Result<()>;
 
     // rather than have the inner service trait functions (i.e., the rpc calls) respond directly,
     // we define this helper function for use in the message_handler loop
@@ -113,7 +112,7 @@ pub trait ESInner: Sized + Send + Sync + 'static {
     //
     // TODO -- replace type_name with tracing logic, which almost certainly requires T: Debug at
     // least; it may be worth it to have T: Display instead and write an impl for the whole enum
-    async fn respond<T, Fut>(&self, resp: ESMResp<T>, fut: Fut) -> Result<()>
+    async fn respond<T, Fut>(&self, resp: EsmResp<T>, fut: Fut) -> Result<()>
     where
         T: Send + Sync,
         Fut: Future<Output = Result<T>> + Send,

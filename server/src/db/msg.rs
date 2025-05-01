@@ -8,45 +8,46 @@ use crate::service::*;
 pub enum DbMsg {
     // auth messages
     MediaAccessGroups {
-        resp: ESMResp<HashSet<String>>,
+        resp: EsmResp<HashSet<String>>,
         media_uuid: MediaUuid,
     },
 
     // media messages
     AddMedia {
-        resp: ESMResp<MediaUuid>,
+        resp: EsmResp<MediaUuid>,
         media: Media,
     },
     GetMedia {
-        resp: ESMResp<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>,
+        #[allow(clippy::type_complexity)]
+        resp: EsmResp<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>,
         media_uuid: MediaUuid,
     },
     GetMediaUuidByPath {
-        resp: ESMResp<Option<MediaUuid>>,
+        resp: EsmResp<Option<MediaUuid>>,
         path: String,
     },
     GetMediaUuidByCHash {
-        resp: ESMResp<Option<MediaUuid>>,
+        resp: EsmResp<Option<MediaUuid>>,
         library_uuid: LibraryUuid,
         chash: String,
     },
     UpdateMedia {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         media_uuid: MediaUuid,
         update: MediaUpdate,
     },
     ReplaceMediaPath {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         media_uuid: MediaUuid,
         path: String,
     },
     SearchMedia {
-        resp: ESMResp<Vec<MediaUuid>>,
+        resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         filter: SearchFilter,
     },
     SimilarMedia {
-        resp: ESMResp<Vec<MediaUuid>>,
+        resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         media_uuid: MediaUuid,
         distance: i64,
@@ -54,84 +55,84 @@ pub enum DbMsg {
 
     // comment messages
     AddComment {
-        resp: ESMResp<CommentUuid>,
+        resp: EsmResp<CommentUuid>,
         comment: Comment,
     },
     GetComment {
-        resp: ESMResp<Option<Comment>>,
+        resp: EsmResp<Option<Comment>>,
         comment_uuid: CommentUuid,
     },
     DeleteComment {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         comment_uuid: CommentUuid,
     },
     UpdateComment {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         comment_uuid: CommentUuid,
         text: Option<String>,
     },
 
     // collection messages
     AddCollection {
-        resp: ESMResp<CollectionUuid>,
+        resp: EsmResp<CollectionUuid>,
         collection: Collection,
     },
     GetCollection {
-        resp: ESMResp<Option<Collection>>,
+        resp: EsmResp<Option<Collection>>,
         collection_uuid: CollectionUuid,
     },
     DeleteCollection {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         collection_uuid: CollectionUuid,
     },
     UpdateCollection {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         collection_uuid: CollectionUuid,
         update: CollectionUpdate,
     },
     AddMediaToCollection {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     },
     RmMediaFromCollection {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     },
     SearchCollections {
-        resp: ESMResp<Vec<CollectionUuid>>,
+        resp: EsmResp<Vec<CollectionUuid>>,
         gid: HashSet<String>,
         filter: SearchFilter,
     },
     SearchMediaInCollection {
-        resp: ESMResp<Vec<MediaUuid>>,
+        resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: SearchFilter,
     },
 
     // library messages
-    AddLibrary {
-        resp: ESMResp<LibraryUuid>,
+    _AddLibrary {
+        resp: EsmResp<LibraryUuid>,
         library: Library,
     },
     GetLibrary {
-        resp: ESMResp<Option<Library>>,
+        resp: EsmResp<Option<Library>>,
         library_uuid: LibraryUuid,
     },
     UpdateLibrary {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         library_uuid: LibraryUuid,
         update: LibraryUpdate,
     },
     SearchLibraries {
-        resp: ESMResp<Vec<LibraryUuid>>,
+        resp: EsmResp<Vec<LibraryUuid>>,
         gid: HashSet<String>,
         filter: String,
     },
     SearchMediaInLibrary {
-        resp: ESMResp<Vec<MediaUuid>>,
+        resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: bool,
@@ -139,8 +140,8 @@ pub enum DbMsg {
     },
 }
 
-impl From<DbMsg> for ESM {
+impl From<DbMsg> for Esm {
     fn from(value: DbMsg) -> Self {
-        ESM::Db(value)
+        Esm::Db(value)
     }
 }

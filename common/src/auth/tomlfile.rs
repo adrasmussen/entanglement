@@ -49,13 +49,11 @@ impl AuthnBackend for TomlAuthnFile {
     where
         Self: Sized,
     {
-        let filename = PathBuf::from(
-            config
-                .tomlfile
-                .clone()
-                .expect("tomlfile.filename not present")
-                .filename,
-        );
+        let filename = config
+            .tomlfile
+            .clone()
+            .expect("tomlfile.filename not present")
+            .filename;
 
         Ok(TomlAuthnFile { filename })
     }
@@ -77,12 +75,7 @@ impl AuthnBackend for TomlAuthnFile {
     async fn is_valid_user(&self, uid: String) -> Result<bool> {
         let users = self.parse().await?;
 
-        let res = match users.get(&uid) {
-            None => false,
-            Some(_) => true,
-        };
-
-        Ok(res)
+        Ok(users.contains_key(&uid))
     }
 }
 
@@ -124,13 +117,11 @@ impl AuthzBackend for TomlAuthzFile {
     where
         Self: Sized,
     {
-        let filename = PathBuf::from(
-            config
-                .tomlfile
-                .clone()
-                .expect("tomlfile.filename not present")
-                .filename,
-        );
+        let filename = config
+            .tomlfile
+            .clone()
+            .expect("tomlfile.filename not present")
+            .filename;
 
         Ok(TomlAuthzFile { filename })
     }

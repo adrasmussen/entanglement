@@ -23,7 +23,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 AuthMsg::ClearAccessCache {
                     resp: tx,
-                    media_uuid: media_uuid,
+                    media_uuid,
                 }
                 .into(),
             )
@@ -60,7 +60,7 @@ pub trait AuthCheck: ESInner + Debug {
                 AuthMsg::IsGroupMember {
                     resp: tx,
                     uid: uid.clone(),
-                    gid: gid,
+                    gid,
                 }
                 .into(),
             )
@@ -79,7 +79,7 @@ pub trait AuthCheck: ESInner + Debug {
                 AuthMsg::CanAccessMedia {
                     resp: tx,
                     uid: uid.clone(),
-                    media_uuid: media_uuid.clone(),
+                    media_uuid: *media_uuid,
                 }
                 .into(),
             )
@@ -98,7 +98,7 @@ pub trait AuthCheck: ESInner + Debug {
                 AuthMsg::OwnsMedia {
                     resp: tx,
                     uid: uid.clone(),
-                    media_uuid: media_uuid.clone(),
+                    media_uuid: *media_uuid,
                 }
                 .into(),
             )
@@ -116,7 +116,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 DbMsg::GetComment {
                     resp: tx,
-                    comment_uuid: comment_uuid.clone(),
+                    comment_uuid: *comment_uuid,
                 }
                 .into(),
             )
@@ -138,7 +138,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 DbMsg::GetComment {
                     resp: tx,
-                    comment_uuid: comment_uuid.clone(),
+                    comment_uuid: *comment_uuid,
                 }
                 .into(),
             )
@@ -148,7 +148,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
 
-        Ok(uid.to_owned() == comment.uid)
+        Ok(uid == &comment.uid)
     }
 
     #[instrument]
@@ -164,7 +164,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 DbMsg::GetCollection {
                     resp: tx,
-                    collection_uuid: collection_uuid.clone(),
+                    collection_uuid: *collection_uuid,
                 }
                 .into(),
             )
@@ -174,7 +174,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        self.is_group_member(&uid, HashSet::from([collection.gid]))
+        self.is_group_member(uid, HashSet::from([collection.gid]))
             .await
     }
 
@@ -191,7 +191,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 DbMsg::GetCollection {
                     resp: tx,
-                    collection_uuid: collection_uuid.clone(),
+                    collection_uuid: *collection_uuid,
                 }
                 .into(),
             )
@@ -201,7 +201,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        Ok(uid.to_owned() == collection.uid)
+        Ok(uid == &collection.uid)
     }
 
     #[instrument]
@@ -213,7 +213,7 @@ pub trait AuthCheck: ESInner + Debug {
             .send(
                 DbMsg::GetLibrary {
                     resp: tx,
-                    library_uuid: library_uuid.clone(),
+                    library_uuid: *library_uuid,
                 }
                 .into(),
             )
@@ -223,7 +223,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
 
-        self.is_group_member(&uid, HashSet::from([library.gid]))
+        self.is_group_member(uid, HashSet::from([library.gid]))
             .await
     }
 }

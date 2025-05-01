@@ -33,6 +33,12 @@ pub struct AwaitCache<K: Clone + Debug + Eq + Hash, V: Clone + Debug> {
     items: DashMap<K, Arc<AsyncCell<Option<V>>>>,
 }
 
+impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> Default for AwaitCache<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
     pub fn new() -> Self {
         AwaitCache {
@@ -68,7 +74,7 @@ impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
                     error!("error during cell initialization");
                     cell.set(None);
                     self.remove(&key);
-                    return Err(anyhow::Error::from(err));
+                    return Err(err);
                 }
             };
 
@@ -76,7 +82,9 @@ impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
 
             val
         } else {
-            cell.get().await.ok_or_else(|| anyhow::Error::msg("cell initializing thread failed"))?
+            cell.get()
+                .await
+                .ok_or_else(|| anyhow::Error::msg("cell initializing thread failed"))?
         };
 
         Ok(val)

@@ -9,7 +9,7 @@ use tracing::{debug, error, info, instrument};
 
 use crate::{
     http::auth::CurrentUser,
-    service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
+    service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
 };
 use api::library::LibraryUuid;
 use common::config::ESConfig;
@@ -44,7 +44,7 @@ pub async fn bypass_auth(mut req: Request, next: Next) -> Result<Response, Statu
 #[allow(dead_code)]
 pub struct EchoService {
     config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
+    receiver: Arc<Mutex<EsmReceiver>>,
     msg_handle: AsyncCell<JoinHandle<Result<()>>>,
 }
 
@@ -53,7 +53,7 @@ impl EntanglementService for EchoService {
     type Inner = EchoInner;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Esm>(1024);
 
         registry
             .insert(ServiceType::Echo, tx)
@@ -87,9 +87,7 @@ impl EntanglementService for EchoService {
                     });
                 }
 
-                Err(anyhow::Error::msg(format!(
-                    "http_service esm channel disconnected"
-                )))
+                Err(anyhow::Error::msg("http_service esm channel disconnected"))
             }
         };
 
@@ -117,7 +115,7 @@ impl ESInner for EchoInner {
     }
 
     #[instrument(skip_all)]
-    async fn message_handler(&self, esm: ESM) -> Result<()> {
+    async fn message_handler(&self, esm: Esm) -> Result<()> {
         info!("message: {esm:#?}");
         Ok(())
     }

@@ -262,7 +262,7 @@ fn parse_ranges(state: Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(
 
     // this avoids a collect() and a heap allocation of a Vec, but it's probably not a
     // relevant cost compared to the rest of the system
-    if let Some(_) = match_iter.next() {
+    if match_iter.next().is_some() {
         return Err(anyhow::Error::msg("multiple ranges unsupported"));
     }
 

@@ -16,7 +16,7 @@ use tracing::{debug, error, info, instrument, span, Instrument, Level};
 use crate::{
     db::msg::DbMsg,
     debug::sleep_task,
-    service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
+    service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
     task::{msg::TaskMsg, scan::scan_library, ESTaskService},
 };
 use api::{
@@ -32,7 +32,7 @@ use common::config::ESConfig;
 // their logs directly to the database.
 pub struct TaskService {
     config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
+    receiver: Arc<Mutex<EsmReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<Result<()>>>,
 }
 
@@ -41,7 +41,7 @@ impl EntanglementService for TaskService {
     type Inner = TaskRunner;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Esm>(1024);
 
         registry
             .insert(ServiceType::Task, tx)
@@ -77,9 +77,7 @@ impl EntanglementService for TaskService {
                     });
                 }
 
-                Err(anyhow::Error::msg(format!(
-                    "task service esm channel disconnected"
-                )))
+                Err(anyhow::Error::msg("task service esm channel disconnected"))
             }
         };
 
@@ -122,9 +120,9 @@ impl ESInner for TaskRunner {
         self.registry.clone()
     }
 
-    async fn message_handler(&self, esm: ESM) -> Result<()> {
+    async fn message_handler(&self, esm: Esm) -> Result<()> {
         match esm {
-            ESM::Task(message) => match message {
+            Esm::Task(message) => match message {
                 TaskMsg::StartTask {
                     resp,
                     library_uuid,
@@ -193,7 +191,7 @@ impl ESTaskService for TaskRunner {
             .send(
                 DbMsg::GetLibrary {
                     resp: db_tx,
-                    library_uuid: library_uuid,
+                    library_uuid,
                 }
                 .into(),
             )
@@ -220,19 +218,18 @@ impl ESTaskService for TaskRunner {
         // thread attempting to start a task, this is reasonable
         let mut running_task = rt_entry.write().await;
 
-        match *running_task {
-            Some(_) => return Err(anyhow::Error::msg("task already running")),
-            None => {}
+        if running_task.is_some() {
+            return Err(anyhow::Error::msg("task already running"));
         }
 
         let start = Local::now().timestamp();
 
         let task = Task {
             task_type: task_type.clone(),
-            uid: uid,
+            uid,
             status: TaskStatus::Running,
             warnings: None,
-            start: start,
+            start,
             end: None,
         };
 
@@ -324,8 +321,8 @@ impl ESTaskService for TaskRunner {
                     .send(
                         TaskMsg::CompleteTask {
                             resp: tx,
-                            library_uuid: library_uuid,
-                            status: status,
+                            library_uuid,
+                            status,
                             warnings,
                             end: Local::now().timestamp(),
                         }
@@ -353,7 +350,7 @@ impl ESTaskService for TaskRunner {
         // may have already completed and sent the message to complete_task().  thus, even if we
         // immediately take() the running task, it was still TaskStatus::Running for a short time.
         *running_task = Some(RunningTask {
-            task: task,
+            task,
             cancel: abort_tx,
             _handle: handle,
         });
@@ -463,8 +460,8 @@ impl ESTaskService for TaskRunner {
         ring.push(Task {
             task_type: completed_task.task.task_type,
             uid: completed_task.task.uid,
-            status: status,
-            warnings: warnings,
+            status,
+            warnings,
             start: completed_task.task.start,
             end: Some(end),
         });

@@ -9,7 +9,7 @@ use tracing::{debug, error, info, instrument};
 use crate::{
     auth::{msg::AuthMsg, ESAuthService},
     db::msg::DbMsg,
-    service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM},
+    service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
 };
 use api::media::MediaUuid;
 use common::{
@@ -34,7 +34,7 @@ use common::{
 // switch to using ldap instead of a fixed file, but the services should roughly stay the same
 pub struct AuthService {
     config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
+    receiver: Arc<Mutex<EsmReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
 
@@ -43,7 +43,7 @@ impl EntanglementService for AuthService {
     type Inner = AuthCache;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Esm>(1024);
 
         registry
             .insert(ServiceType::Auth, tx)
@@ -87,9 +87,7 @@ impl EntanglementService for AuthService {
                     });
                 }
 
-                Err(anyhow::Error::msg(format!(
-                    "auth service esm channel disconnected"
-                )))
+                Err(anyhow::Error::msg("auth service esm channel disconnected"))
             }
         };
 
@@ -127,8 +125,8 @@ impl ESInner for AuthCache {
 
         Ok(AuthCache {
             registry: registry.clone(),
-            authn_provider: authn_provider,
-            authz_provider: authz_provider,
+            authn_provider,
+            authz_provider,
             user_cache: Arc::new(AwaitCache::new()),
             access_cache: Arc::new(AwaitCache::new()),
             user_regex: Regex::new(USER_REGEX)?,
@@ -140,10 +138,10 @@ impl ESInner for AuthCache {
         self.registry.clone()
     }
 
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+    async fn message_handler(&self, esm: Esm) -> anyhow::Result<()> {
         match esm {
-            ESM::Auth(message) => match message {
-                AuthMsg::ClearUserCache { resp, uid } => {
+            Esm::Auth(message) => match message {
+                AuthMsg::_ClearUserCache { resp, uid } => {
                     self.respond(resp, self.clear_user_cache(uid)).await
                 }
                 AuthMsg::ClearAccessCache { resp, media_uuid } => {
@@ -172,10 +170,10 @@ impl ESInner for AuthCache {
                     uid,
                     media_uuid,
                 } => self.respond(resp, self.owns_media(uid, media_uuid)).await,
-                AuthMsg::IsValidUser { resp, uid } => {
+                AuthMsg::_IsValidUser { resp, uid } => {
                     self.respond(resp, self.is_valid_user(uid)).await
                 }
-                AuthMsg::AuthenticateUser {
+                AuthMsg::_AuthenticateUser {
                     resp,
                     uid,
                     password,
@@ -222,7 +220,7 @@ impl AuthCache {
             .send(
                 DbMsg::MediaAccessGroups {
                     resp: tx,
-                    media_uuid: media_uuid,
+                    media_uuid,
                 }
                 .into(),
             )
@@ -310,7 +308,7 @@ impl ESAuthService for AuthCache {
         let access_cache = self.access_cache.clone();
 
         let groups = access_cache
-            .perhaps(media_uuid.clone(), async {
+            .perhaps(media_uuid, async {
                 let fut = timeout(
                     Duration::from_secs(10),
                     self.media_access_groups(media_uuid),
@@ -337,7 +335,7 @@ impl ESAuthService for AuthCache {
             .send(
                 DbMsg::GetMedia {
                     resp: media_tx,
-                    media_uuid: media_uuid.clone(),
+                    media_uuid,
                 }
                 .into(),
             )

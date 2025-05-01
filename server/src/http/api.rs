@@ -6,7 +6,6 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use chrono::Local;
 use tokio::sync::Mutex;
 use tracing::instrument;
 
@@ -153,7 +152,7 @@ pub(super) async fn search_media(
         .send(
             DbMsg::SearchMedia {
                 resp: tx,
-                gid: gid,
+                gid,
                 filter: message.filter,
             }
             .into(),
@@ -185,7 +184,7 @@ pub(super) async fn similar_media(
         .send(
             DbMsg::SimilarMedia {
                 resp: tx,
-                gid: gid,
+                gid,
                 media_uuid: message.media_uuid,
                 distance: message.distance,
             }
@@ -223,8 +222,8 @@ pub(super) async fn add_comment(
                 resp: tx,
                 comment: Comment {
                     media_uuid: message.comment.media_uuid,
-                    mtime: Local::now().timestamp(),
-                    uid: uid,
+                    mtime: 0,
+                    uid,
                     text: message.comment.text,
                 },
             }
@@ -269,11 +268,11 @@ pub(super) async fn get_comment(
         )
         .await?;
 
-    let comment = rx
+    let result = rx
         .await??
         .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
 
-    Ok(Json(GetCommentResp { comment: comment }).into_response())
+    Ok(Json(GetCommentResp { comment: result }).into_response())
 }
 
 #[instrument(skip_all)]
@@ -364,9 +363,9 @@ pub(super) async fn add_collection(
             DbMsg::AddCollection {
                 resp: tx,
                 collection: Collection {
-                    uid: uid,
+                    uid,
                     gid: message.collection.gid,
-                    mtime: Local::now().timestamp(),
+                    mtime: 0,
                     name: message.collection.name,
                     note: message.collection.note,
                     tags: message.collection.tags,
@@ -542,13 +541,13 @@ pub(super) async fn rm_media_from_collection(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !(state.owns_media(&uid, &message.media_uuid).await?
-        && state
-            .can_access_collection(&uid, &message.collection_uuid)
-            .await?)
-        && !state
-            .owns_collection(&uid, &message.collection_uuid)
-            .await?
+    if !(state
+        .owns_collection(&uid, &message.collection_uuid)
+        .await?
+        || state.owns_media(&uid, &message.media_uuid).await?
+            && state
+                .can_access_collection(&uid, &message.collection_uuid)
+                .await?)
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
@@ -596,7 +595,7 @@ pub(super) async fn search_collections(
         .send(
             DbMsg::SearchCollections {
                 resp: tx,
-                gid: gid,
+                gid,
                 filter: message.filter,
             }
             .into(),
@@ -631,7 +630,7 @@ pub(super) async fn search_media_in_collection(
         .send(
             DbMsg::SearchMediaInCollection {
                 resp: tx,
-                gid: gid,
+                gid,
                 collection_uuid: message.collection_uuid,
                 filter: message.filter,
             }
@@ -697,7 +696,7 @@ pub(super) async fn search_libraries(
         .send(
             DbMsg::SearchLibraries {
                 resp: tx,
-                gid: gid,
+                gid,
                 filter: message.filter,
             }
             .into(),
@@ -729,7 +728,7 @@ pub(super) async fn search_media_in_library(
         .send(
             DbMsg::SearchMediaInLibrary {
                 resp: tx,
-                gid: gid,
+                gid,
                 library_uuid: message.library_uuid,
                 hidden: message.hidden,
                 filter: message.filter,
@@ -862,7 +861,7 @@ pub(super) async fn batch_search_and_sort(
                 .send(
                     DbMsg::SearchMedia {
                         resp: tx,
-                        gid: gid,
+                        gid,
                         filter: request.filter,
                     }
                     .into(),
@@ -875,7 +874,7 @@ pub(super) async fn batch_search_and_sort(
                 .send(
                     DbMsg::SearchMediaInCollection {
                         resp: tx,
-                        gid: gid,
+                        gid,
                         collection_uuid: request.collection_uuid,
                         filter: request.filter,
                     }
@@ -889,7 +888,7 @@ pub(super) async fn batch_search_and_sort(
                 .send(
                     DbMsg::SearchMediaInLibrary {
                         resp: tx,
-                        gid: gid,
+                        gid,
                         library_uuid: request.library_uuid,
                         hidden: request.hidden,
                         filter: request.filter,
@@ -912,7 +911,7 @@ pub(super) async fn batch_search_and_sort(
             .send(
                 DbMsg::GetMedia {
                     resp: tx,
-                    media_uuid: media_uuid,
+                    media_uuid,
                 }
                 .into(),
             )
@@ -925,7 +924,7 @@ pub(super) async fn batch_search_and_sort(
         let mut out = out.lock().await;
 
         out.push(SearchResponse {
-            media_uuid: media_uuid,
+            media_uuid,
             media: media_data.0,
             collections: media_data.1,
             comments: media_data.2,

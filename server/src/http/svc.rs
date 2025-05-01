@@ -39,7 +39,7 @@ use crate::{
     auth::check::AuthCheck,
     http::{api::*, auth::proxy_auth, stream::*},
     service::{
-        ESInner, ESMReceiver, ESMRegistry, ESMSender, EntanglementService, ServiceType, ESM,
+        ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
     },
 };
 use api::HTTP_URL_ROOT;
@@ -55,7 +55,7 @@ use common::config::ESConfig;
 
 pub struct HttpService {
     config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
+    receiver: Arc<Mutex<EsmReceiver>>,
     msg_handle: AsyncCell<JoinHandle<Result<()>>>,
     hyper_handle: AsyncCell<JoinHandle<Result<()>>>,
 }
@@ -65,7 +65,7 @@ impl EntanglementService for HttpService {
     type Inner = HttpEndpoint;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Esm>(1024);
 
         registry
             .insert(ServiceType::Http, tx)
@@ -115,9 +115,7 @@ impl EntanglementService for HttpService {
                     });
                 }
 
-                Err(anyhow::Error::msg(format!(
-                    "http service esm channel disconnected"
-                )))
+                Err(anyhow::Error::msg("http service esm channel disconnected"))
             }
         };
 
@@ -135,9 +133,9 @@ impl EntanglementService for HttpService {
 pub struct HttpEndpoint {
     pub(super) config: Arc<ESConfig>,
     pub(super) registry: ESMRegistry,
-    pub(super) auth_svc_sender: ESMSender,
-    pub(super) db_svc_sender: ESMSender,
-    pub(super) task_svc_sender: ESMSender,
+    pub(super) auth_svc_sender: EsmSender,
+    pub(super) db_svc_sender: EsmSender,
+    pub(super) task_svc_sender: EsmSender,
     pub(super) range_regex: Arc<Regex>,
 }
 
@@ -163,10 +161,8 @@ impl ESInner for HttpEndpoint {
     }
 
     // currently there are no useful messages for this service to respond to
-    async fn message_handler(&self, esm: ESM) -> Result<()> {
-        match esm {
-            _ => Err(anyhow::Error::msg("not implemented")),
-        }
+    async fn message_handler(&self, _esm: Esm) -> Result<()> {
+        Err(anyhow::Error::msg("not implemented"))
     }
 }
 
@@ -183,6 +179,7 @@ impl HttpEndpoint {
     //
     // specifically axum::serve() doesn't really play nice with TLS, which we'll want
     // to offer as an option eventually
+    #[allow(clippy::async_yields_async)]
     #[instrument(skip_all)]
     async fn serve_http(self: Arc<Self>, socket: SocketAddr) -> JoinHandle<Result<()>> {
         info!("starting axum/hyper http listener");

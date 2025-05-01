@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{thread::sleep, path::PathBuf, time::Duration};
 
 use clap::Parser;
 use tracing::{info, Level};
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
-        .with_max_level_hint(Level::INFO);
+        .with_max_level_hint(Level::DEBUG);
 
     let fmt_layer = tracing_subscriber::fmt::layer();
 
@@ -78,5 +78,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("startup complete!");
 
-    loop {}
+    loop {
+        sleep(Duration::from_secs(u64::MAX));
+    }
 }

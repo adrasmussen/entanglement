@@ -3,17 +3,17 @@ use std::sync::Arc;
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
-use tokio::{task::spawn, sync::Mutex};
+use tokio::{sync::Mutex, task::spawn};
 use tracing::{debug, error, info, instrument};
 
 use crate::db::msg::DbMsg;
-use crate::service::{ESInner, ESMReceiver, ESMRegistry, EntanglementService, ServiceType, ESM};
+use crate::service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType};
 use common::config::ESConfig;
 use common::db::DbBackend;
 
 pub struct DbService<B: DbBackend> {
     config: Arc<ESConfig>,
-    receiver: Arc<Mutex<ESMReceiver>>,
+    receiver: Arc<Mutex<EsmReceiver>>,
     handle: AsyncCell<tokio::task::JoinHandle<anyhow::Result<()>>>,
     backend: PhantomData<B>,
 }
@@ -23,7 +23,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
     type Inner = DbRunner<B>;
 
     fn create(config: Arc<ESConfig>, registry: &ESMRegistry) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<ESM>(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Esm>(1024);
 
         registry
             .insert(ServiceType::Db, tx)
@@ -60,9 +60,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
                     });
                 }
 
-                Err(anyhow::Error::msg(format!(
-                    "db service esm channel disconnected"
-                )))
+                Err(anyhow::Error::msg("db service esm channel disconnected"))
             }
         };
 
@@ -91,9 +89,9 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
         self.registry.clone()
     }
 
-    async fn message_handler(&self, esm: ESM) -> anyhow::Result<()> {
+    async fn message_handler(&self, esm: Esm) -> anyhow::Result<()> {
         match esm {
-            ESM::Db(message) => match message {
+            Esm::Db(message) => match message {
                 // auth messages
                 DbMsg::MediaAccessGroups { resp, media_uuid } => {
                     self.respond(resp, self.backend.media_access_groups(media_uuid))
@@ -246,7 +244,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 }
 
                 // library messages
-                DbMsg::AddLibrary { resp, library } => {
+                DbMsg::_AddLibrary { resp, library } => {
                     self.respond(resp, self.backend.add_library(library)).await
                 }
                 DbMsg::GetLibrary { resp, library_uuid } => {

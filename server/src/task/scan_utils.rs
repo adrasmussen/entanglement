@@ -22,7 +22,7 @@ use walkdir::DirEntry;
 use crate::{
     db::msg::DbMsg,
     fs::{media_original_path, media_thumbnail_path},
-    service::ESMSender,
+    service::EsmSender,
 };
 use api::{
     library::LibraryUuid,
@@ -56,7 +56,7 @@ pub async fn get_path_and_metadata(
 
 async fn path_exists_in_database(
     context: Arc<ScanContext>,
-    pathstr: &String,
+    pathstr: &str,
 ) -> Result<Option<MediaUuid>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -65,7 +65,7 @@ async fn path_exists_in_database(
         .send(
             DbMsg::GetMediaUuidByPath {
                 resp: tx,
-                path: pathstr.clone(),
+                path: pathstr.to_owned(),
             }
             .into(),
         )
@@ -78,7 +78,7 @@ async fn path_exists_in_database(
 
 async fn hash_exists_in_database(
     context: Arc<ScanContext>,
-    hash: &String,
+    hash: &str,
 ) -> Result<Option<MediaUuid>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -88,7 +88,7 @@ async fn hash_exists_in_database(
             DbMsg::GetMediaUuidByCHash {
                 resp: tx,
                 library_uuid: context.library_uuid,
-                chash: hash.clone(),
+                chash: hash.to_owned(),
             }
             .into(),
         )
@@ -107,7 +107,7 @@ async fn hash_exists_in_database(
 pub struct ScanContext {
     pub config: Arc<ESConfig>,
     pub library_uuid: LibraryUuid,
-    pub db_svc_sender: ESMSender,
+    pub db_svc_sender: EsmSender,
     pub file_count: AtomicI64,
     pub warnings: AtomicI64,
     pub chashes: DashSet<String>,
@@ -172,21 +172,22 @@ impl ScanFile {
         // collectors are somewhat flexible on their inputs.
         let ext = path
             .extension()
-            .map(|f| f.to_str())
-            .flatten()
+            .and_then(|f| f.to_str())
             .map(|s| s.to_lowercase())
             .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
 
         if !KNOWN_EXTENSIONS.contains(&ext.as_str()) {
-            debug!({path = pathstr}, "unknown file extension");
+            debug!({ path = pathstr }, "unknown file extension");
             return Ok(None);
         }
 
         // check if the file exists in the database first, and if so, early return before we do
         // any of the actual computation (hashes, thumbnails, etc)
+        //
+        // TODO -- use a bigger enum to encode "skipped" so that the file count is accurate
         if let Some(media_uuid) = path_exists_in_database(context.clone(), &pathstr).await? {
             debug!(
-                {media_uuid = media_uuid},
+                { media_uuid = media_uuid },
                 "media already exists in database"
             );
             return Ok(None);
@@ -254,7 +255,7 @@ impl ScanFile {
                     .send(
                         DbMsg::GetMedia {
                             resp: tx,
-                            media_uuid: media_uuid,
+                            media_uuid,
                         }
                         .into(),
                     )
@@ -278,7 +279,7 @@ impl ScanFile {
                     .send(
                         DbMsg::ReplaceMediaPath {
                             resp: tx,
-                            media_uuid: media_uuid,
+                            media_uuid,
                             path: self.pathstr.to_owned(),
                         }
                         .into(),
@@ -328,13 +329,7 @@ impl ScanFile {
 
         self.context
             .db_svc_sender
-            .send(
-                DbMsg::AddMedia {
-                    resp: tx,
-                    media: media,
-                }
-                .into(),
-            )
+            .send(DbMsg::AddMedia { resp: tx, media }.into())
             .await?;
 
         let media_uuid = rx.await??;

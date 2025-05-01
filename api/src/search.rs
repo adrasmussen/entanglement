@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt::Debug};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+};
 
 use regex::escape;
 use serde::{Deserialize, Serialize};
@@ -40,7 +43,30 @@ impl Default for SearchFilter {
     }
 }
 
+impl Display for SearchFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SubstringAny { filter } => {
+                write!(f, "SubstringAny{filter:?}")
+            }
+            Self::SubstringAll { filter } => {
+                write!(f, "SubstringAll{filter:?}")
+            }
+            Self::Fulltext { filter } => {
+                write!(f, "FullText{{{filter}}}")
+            }
+            Self::Keyword { filter } => {
+                write!(f, "Keyword{filter:?}")
+            }
+        }
+    }
+}
+
 impl SearchFilter {
+    // mariadb formatting for mysql_async queries
+    //
+    // returns (sql, filter) where 'sql' is a fragment of an sql query
+    // and filter is the named parameter
     pub fn format_mariadb(&self, cols: &str) -> (String, String) {
         match self {
             // match any of the strings using the normal regex logical OR |
@@ -53,7 +79,7 @@ impl SearchFilter {
                 // note that, while this is superficially the same as fold_set(), the pipe here is a
                 // regex operator and thus specific to the query
                 let regex = filter
-                    .into_iter()
+                    .iter()
                     .map(|s| escape(s))
                     .fold(String::from("(?i)"), |a, b| a + &b + "|")
                     .trim_matches('|')
@@ -72,7 +98,7 @@ impl SearchFilter {
                 }
 
                 let regex = filter
-                    .into_iter()
+                    .iter()
                     .map(|s| escape(s))
                     .fold(String::from("(?i)"), |a, b| {
                         a + &format!("(?=.*?\\b{b}\\b)")
@@ -103,7 +129,7 @@ impl SearchFilter {
                     return (String::new(), String::new());
                 }
                 let keywords = filter
-                    .into_iter()
+                    .iter()
                     .fold(String::from(""), |a, b| a + b + ",")
                     .trim_matches(',')
                     .to_string();

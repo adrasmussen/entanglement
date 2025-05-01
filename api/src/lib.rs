@@ -90,6 +90,12 @@ impl WebError {
     }
 }
 
+impl Default for WebError {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Display for WebError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -119,8 +125,8 @@ impl From<anyhow::Error> for WebError {
 macro_rules! endpoint {
     ($name:ident) => {
         paste::paste!{
-            pub async fn [<$name:snake>](req: &[<$name:camel Req>]) -> Result<[<$name:camel Resp>], crate::WebError> {
-                use crate::HTTP_URL_ROOT;
+            pub async fn [<$name:snake>](req: &[<$name:camel Req>]) -> Result<[<$name:camel Resp>], $crate::WebError> {
+                use $crate::HTTP_URL_ROOT;
                 let resp = gloo_net::http::Request::post(format!("/{}/api/{}", HTTP_URL_ROOT, stringify!([<$name:camel>])).as_str())
                     .json(&req.clone())?
                     .send()

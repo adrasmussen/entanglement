@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use tokio::process::Command;
@@ -13,20 +13,20 @@ use api::media::MediaMetadata;
 // video calculations
 
 #[instrument(skip_all)]
-pub async fn process_video(path: &PathBuf, scratchdir: &PathBuf) -> Result<MediaData> {
+pub async fn process_video(path: &PathBuf, scratchdir: &Path) -> Result<MediaData> {
     debug!("starting processing video");
-    let mut img_path = scratchdir.clone();
+    let mut img_path = scratchdir.to_path_buf();
     img_path.push("hash.png");
 
-    create_video_ffmpeg_image(&path, &img_path).await?;
+    create_video_ffmpeg_image(path, &img_path).await?;
 
-    let date = parse_video_metadata_dump(&path).await?;
+    let date = parse_video_metadata_dump(path).await?;
 
     let hash = hash_image(&img_path).await?;
 
     Ok(MediaData {
-        hash: hash,
-        date: date,
+        hash,
+        date,
         metadata: MediaMetadata::Video,
     })
 }
@@ -35,15 +35,15 @@ pub async fn process_video(path: &PathBuf, scratchdir: &PathBuf) -> Result<Media
 pub async fn create_video_thumbnail(
     original_path: &PathBuf,
     thumbnail_path: &PathBuf,
-    scratchdir: &PathBuf,
+    scratchdir: &Path,
 ) -> Result<()> {
     debug!("started creating video thumbnail");
 
     // we could reuse the hash image, but it's bad form to depend on side effects
-    let mut img_path = scratchdir.clone();
+    let mut img_path = scratchdir.to_path_buf();
     img_path.push("thumb.png");
 
-    create_video_ffmpeg_image(&original_path, &img_path).await?;
+    create_video_ffmpeg_image(original_path, &img_path).await?;
     create_image_thumbnail(&img_path, thumbnail_path).await?;
 
     Ok(())

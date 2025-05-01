@@ -4,9 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{endpoint, library::LibraryUuid};
 
-// structs and types
-pub type TaskUuid = i64;
-
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskType {
     ScanLibrary,

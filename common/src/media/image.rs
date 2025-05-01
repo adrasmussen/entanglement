@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use blockhash::blockhash256;
@@ -15,10 +15,10 @@ use api::media::MediaMetadata;
 // means spawn_blocking() wrappers on all of it to avoid jamming the runtime
 
 #[instrument(skip_all)]
-pub async fn hash_image(path: &PathBuf) -> Result<String> {
+pub async fn hash_image(path: &Path) -> Result<String> {
     debug!("calculating hash");
 
-    let path = path.clone();
+    let path = path.to_path_buf();
 
     let hash = spawn_blocking(move || {
         let image = image::open(path)?;
@@ -31,10 +31,10 @@ pub async fn hash_image(path: &PathBuf) -> Result<String> {
 }
 
 #[instrument(skip_all)]
-pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
+pub async fn process_image(path: &Path) -> Result<MediaData> {
     debug!("processing image");
 
-    let path = path.clone();
+    let path = path.to_path_buf();
 
     // exif processing
     //
@@ -64,7 +64,7 @@ pub async fn process_image(path: &PathBuf) -> Result<MediaData> {
     debug!("finshed processing image");
 
     Ok(MediaData {
-        hash: hash,
+        hash,
         date: datetime_original,
         metadata: MediaMetadata::Image,
     })

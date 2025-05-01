@@ -4,7 +4,7 @@ use crate::{endpoint, media::MediaUuid};
 
 // structs and types
 
-pub type CommentUuid = i64;
+pub type CommentUuid = u64;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Comment {

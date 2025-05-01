@@ -6,50 +6,50 @@ use crate::service::*;
 
 #[derive(Debug)]
 pub enum AuthMsg {
-    ClearUserCache {
-        resp: ESMResp<()>,
+    _ClearUserCache {
+        resp: EsmResp<()>,
         uid: Vec<String>,
     },
     ClearAccessCache {
-        resp: ESMResp<()>,
+        resp: EsmResp<()>,
         media_uuid: Vec<MediaUuid>,
     },
     GroupsForUser {
-        resp: ESMResp<HashSet<String>>,
+        resp: EsmResp<HashSet<String>>,
         uid: String,
     },
     UsersInGroup {
-        resp: ESMResp<HashSet<String>>,
+        resp: EsmResp<HashSet<String>>,
         gid: String,
     },
     IsGroupMember {
-        resp: ESMResp<bool>,
+        resp: EsmResp<bool>,
         uid: String,
         gid: HashSet<String>,
     },
     CanAccessMedia {
-        resp: ESMResp<bool>,
+        resp: EsmResp<bool>,
         uid: String,
         media_uuid: MediaUuid,
     },
     OwnsMedia {
-        resp: ESMResp<bool>,
+        resp: EsmResp<bool>,
         uid: String,
         media_uuid: MediaUuid,
     },
-    AuthenticateUser {
-        resp: ESMResp<bool>,
+    _AuthenticateUser {
+        resp: EsmResp<bool>,
         uid: String,
         password: String,
     },
-    IsValidUser {
-        resp: ESMResp<bool>,
+    _IsValidUser {
+        resp: EsmResp<bool>,
         uid: String,
     },
 }
 
-impl From<AuthMsg> for ESM {
+impl From<AuthMsg> for Esm {
     fn from(msg: AuthMsg) -> Self {
-        ESM::Auth(msg)
+        Esm::Auth(msg)
     }
 }

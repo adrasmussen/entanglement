@@ -9,7 +9,7 @@ use crate::{
 
 // structs and types
 
-pub type MediaUuid = i64;
+pub type MediaUuid = u64;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum MediaMetadata {
