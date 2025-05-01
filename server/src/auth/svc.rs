@@ -14,6 +14,7 @@ use crate::{
 use api::media::MediaUuid;
 use common::{
     auth::{
+        ldap::LdapAuthz,
         proxy::ProxyAuth,
         tomlfile::{TomlAuthnFile, TomlAuthzFile},
         AuthnBackend, AuthzBackend,
@@ -120,6 +121,7 @@ impl ESInner for AuthCache {
         };
 
         let authz_provider: Box<dyn AuthzBackend> = match config.authz_backend {
+            common::config::AuthzBackend::Ldap => Box::new(LdapAuthz::new(config.clone())?),
             common::config::AuthzBackend::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
         };
 

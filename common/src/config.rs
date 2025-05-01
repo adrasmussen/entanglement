@@ -17,6 +17,7 @@ pub struct ESConfig {
     pub task: TaskConfig,
 
     // backends
+    pub ldap: Option<LdapConfig>,
     pub mariadb: Option<MariaDbConfig>,
     pub tomlfile: Option<TomlFileConfig>,
     pub proxyheader: Option<ProxyHeaderConfig>,
@@ -24,7 +25,7 @@ pub struct ESConfig {
 
 // authentication config options
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthnBackend {
     // header set by reverse proxy
     ProxyHeader,
@@ -39,10 +40,30 @@ pub struct ProxyHeaderConfig {
 
 // authorization config options
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthzBackend {
+    // standard ldap3 auth
+    Ldap,
     // a toml file with group memberships
     TomlFile,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LdapConfig {
+    // url in normal ldap form ldap://host:port
+    pub url: String,
+    // attribute for uids, i.e. uid
+    pub uid_attr: String,
+    // attribute for group names, i.e. cn
+    pub gid_attr: String,
+    // ldap search base for groups
+    pub group_base: String,
+    // filter used to find users in base, i.e. (&(objectClass=posixGroup)),
+    // which will be combined with the user attr
+    pub group_filter: String,
+    // attribute for group membership, i.e. memberUid
+    pub group_member_attr: String,
+
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
