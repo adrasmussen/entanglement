@@ -52,6 +52,10 @@ pub enum AuthzBackend {
 pub struct LdapConfig {
     // url in normal ldap form ldap://host:port
     pub url: String,
+    // pem-encoded tls cert and key to communicate with ldap server
+    pub key: PathBuf,
+    pub cert: PathBuf,
+    pub ca_cert: PathBuf,
     // attribute for uids, i.e. uid
     pub uid_attr: String,
     // attribute for group names, i.e. cn

@@ -1,8 +1,19 @@
-use std::{collections::HashSet, fmt::Display, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use ldap3::{LdapConnAsync, Scope, SearchEntry};
+use ldap3::{LdapConnAsync, LdapConnSettings, Scope, SearchEntry};
+use rustls::{
+    Certificate,
+    ClientConfig,
+    PrivateKey,
+    RootCertStore, // pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+};
+use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer, pem::PemObject};
 use tracing::{debug, error, instrument, warn};
 
 use crate::{
@@ -10,9 +21,9 @@ use crate::{
     config::{ESConfig, LdapConfig},
 };
 
-#[derive(Debug)]
 pub struct LdapAuthz {
     config: LdapConfig,
+    settings: LdapConnSettings,
 }
 
 #[async_trait]
@@ -20,7 +31,38 @@ impl AuthzBackend for LdapAuthz {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         let config = config.ldap.clone().expect("ldap config not found");
 
-        Ok(LdapAuthz { config })
+        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(&config.key)?;
+
+        let cert: Vec<CertificateDer> =
+            CertificateDer::pem_file_iter(&config.cert)?.collect::<Result<Vec<_>, _>>()?;
+        let ca_cert: Vec<CertificateDer> =
+            CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
+
+        // legacy hacks for older rustls needed by ldap
+        let key = PrivateKey(key.secret_pkcs8_der().to_vec());
+        let cert = cert.iter().map(|cert| Certificate(cert.to_vec())).collect();
+        let ca_cert: Vec<Certificate> = ca_cert
+            .iter()
+            .map(|cert| Certificate(cert.to_vec()))
+            .collect();
+
+        let mut ca_root_store = RootCertStore::empty();
+        for c in ca_cert {
+            ca_root_store.add(&c)?
+        }
+
+        let tls_config = ClientConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()?
+            .with_root_certificates(ca_root_store)
+            .with_client_auth_cert(cert, key)?;
+
+        let settings = LdapConnSettings::new()
+            .set_config(Arc::new(tls_config))
+            .set_starttls(true);
+
+        Ok(LdapAuthz { config, settings })
     }
 
     #[instrument(skip(self))]
@@ -29,7 +71,8 @@ impl AuthzBackend for LdapAuthz {
 
         let mut groups = HashSet::<String>::new();
 
-        let (conn, mut ldap) = LdapConnAsync::new(&self.config.url).await?;
+        let (conn, mut ldap) =
+            LdapConnAsync::with_settings(self.settings.clone(), &self.config.url).await?;
 
         ldap3::drive!(conn);
 
@@ -118,6 +161,14 @@ impl AuthzBackend for LdapAuthz {
         debug!({users = ?users}, "found users in ldap");
 
         Ok(users)
+    }
+}
+
+impl Debug for LdapAuthz {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LdapAuthz")
+            .field("config", &self.config)
+            .finish()
     }
 }
 

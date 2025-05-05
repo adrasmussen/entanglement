@@ -16,14 +16,17 @@ gloo-net = { workspace =  true }
 hex = { workspace =  true }
 image = { workspace =  true }
 kamadak-exif = { workspace =  true }
-ldap3 = { workspace =  true, features = ["tokio-rustls", "x509-parser"] }
+ldap3 = { workspace =  true }
 mysql_async = { workspace =  true }
 paste = { workspace =  true }
 regex = { workspace =  true }
+rustls = { workspace =  true }
+rustls-pemfile = { workspace =  true }
+rustls-pki-types = { workspace = true }
 saphyr = { workspace =  true }
 sha2 = { workspace =  true }
-serde = { workspace =  true, features = ["derive"] }
+serde = { workspace =  true }
 serde_json = { workspace =  true }
 toml = { workspace =  true }
-tokio = { workspace =  true, features = ["full"] }
+tokio = { workspace =  true }
 tracing = { workspace =  true }
