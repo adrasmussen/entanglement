@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{common::storage::set_local_storage, gallery::GALLERY_COLLECTION_KEY, Route};
+use crate::{Route, common::storage::set_local_storage, gallery::GALLERY_COLLECTION_KEY};
 use api::{collection::CollectionUuid, media::*, thumbnail_link};
 
 // TODO -- deduplicate the error handling in the the callsites by making a MediaGrid
@@ -90,12 +90,13 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         if media.note.is_empty() {
                             "No description"
                         } else {
-                            {media.note.clone().lines().next().unwrap_or("No description")}
+                            {
+                                media.note.clone().lines().next().unwrap_or("No description").to_owned()
+                            }
                         }
                     }
                 }
             }
-
         }
     }
 }

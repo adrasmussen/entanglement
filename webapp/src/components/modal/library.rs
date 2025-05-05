@@ -242,13 +242,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                 button {
                     class: "btn btn-danger",
                     onclick: move |_| async move {
-                        match stop_task(
-                                &StopTaskReq {
-                                    library_uuid,
-                                },
-                            )
-                            .await
-                        {
+                        match stop_task(&StopTaskReq { library_uuid }).await {
                             Ok(_) => {
                                 status_message.set("Task stopped".into());
                                 update_signal.set(());

@@ -37,13 +37,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
             button {
                 class: "btn btn-danger",
                 onclick: move |_| async move {
-                    match delete_comment(
-                            &DeleteCommentReq {
-                                comment_uuid,
-                            },
-                        )
-                        .await
-                    {
+                    match delete_comment(&DeleteCommentReq { comment_uuid }).await {
                         Ok(_) => {
                             status_message.set("Comment deleted".into());
                             update_signal.set(());
