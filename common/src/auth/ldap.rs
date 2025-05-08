@@ -76,6 +76,8 @@ impl AuthzBackend for LdapAuthz {
 
         ldap3::drive!(conn);
 
+        ldap.sasl_external_bind().await?;
+
         // query the ldap server for all group entries whose memeber attribute contains the uid in question
         let (res_entries, _res) = ldap
             .search(
@@ -127,9 +129,12 @@ impl AuthzBackend for LdapAuthz {
 
         let mut users = HashSet::<String>::new();
 
-        let (conn, mut ldap) = LdapConnAsync::new(&self.config.url).await?;
+        let (conn, mut ldap) =
+            LdapConnAsync::with_settings(self.settings.clone(), &self.config.url).await?;
 
         ldap3::drive!(conn);
+
+        ldap.sasl_external_bind().await?;
 
         // query the ldap server for all group entries whose memeber attribute contains the uid in question
         let (res_entries, _res) = ldap
