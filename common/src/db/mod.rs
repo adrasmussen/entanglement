@@ -123,7 +123,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         uuid: LibraryUuid,
-        hidden: bool,
+        hidden: Option<bool>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>>;
 }

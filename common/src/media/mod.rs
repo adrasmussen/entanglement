@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use hex::encode;
@@ -9,6 +9,8 @@ use tokio::{
 };
 
 use api::media::MediaMetadata;
+use image::create_image_thumbnail;
+use video::create_video_thumbnail;
 
 pub mod image;
 pub mod video;
@@ -35,4 +37,23 @@ pub async fn content_hash(path: &PathBuf) -> Result<String> {
     }
 
     Ok(encode(hasher.finalize()))
+}
+
+pub async fn create_thumbnail(path: &PathBuf, thumbnail_path: &PathBuf, scratch_dir: &Path, metadata: &MediaMetadata) -> Result<()> {
+    match metadata {
+        MediaMetadata::Image => {
+            Box::pin(create_image_thumbnail(path, thumbnail_path)).await?
+        }
+        MediaMetadata::Video => {
+            Box::pin(create_video_thumbnail(
+                path,
+                thumbnail_path,
+                scratch_dir,
+            ))
+            .await?
+        }
+        _ => return Err(anyhow::Error::msg("no thumbnail method found")),
+    };
+
+    Ok(())
 }

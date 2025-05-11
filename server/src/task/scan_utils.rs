@@ -3,8 +3,8 @@ use std::{
     fs::Metadata,
     path::PathBuf,
     sync::{
-        atomic::{AtomicI64, Ordering},
         Arc,
+        atomic::{AtomicI64, Ordering},
     },
     time::Duration,
 };
@@ -16,7 +16,7 @@ use tokio::{
     fs::{canonicalize, create_dir_all, metadata, remove_file, symlink, try_exists},
     time::timeout,
 };
-use tracing::{debug, instrument, span, warn, Level};
+use tracing::{Level, debug, instrument, span, warn};
 use walkdir::DirEntry;
 
 use crate::{
@@ -31,10 +31,7 @@ use api::{
 use common::{
     config::ESConfig,
     media::{
-        content_hash,
-        image::{create_image_thumbnail, process_image},
-        video::{create_video_thumbnail, process_video},
-        MediaData,
+        MediaData, content_hash, create_thumbnail, image::process_image, video::process_video,
     },
 };
 
@@ -368,20 +365,13 @@ impl ScanFile {
             return Ok(());
         }
 
-        match media_metadata {
-            MediaMetadata::Image => {
-                Box::pin(create_image_thumbnail(&self.path, &thumbnail_path)).await?
-            }
-            MediaMetadata::Video => {
-                Box::pin(create_video_thumbnail(
-                    &self.path,
-                    &thumbnail_path,
-                    &self.scratch_dir,
-                ))
-                .await?
-            }
-            _ => return Err(anyhow::Error::msg("no thumbnail method found")),
-        };
+        create_thumbnail(
+            &self.path,
+            &thumbnail_path,
+            &self.scratch_dir,
+            &media_metadata,
+        )
+        .await?;
 
         Ok(())
     }

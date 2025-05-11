@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
-use mysql_async::{from_row_opt, prelude::*, FromRowError, Pool, Row};
+use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
@@ -1133,7 +1133,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
-        hidden: bool,
+        hidden: Option<bool>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching media in library");
@@ -1141,7 +1141,13 @@ impl DbBackend for MariaDBBackend {
         let _mr = self.locks.media.read().await;
         let _lr = self.locks.library.read().await;
 
-        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+        let (filter_sql, filter) =
+            filter.format_mariadb("media.path, media.date, media.note, media.tags");
+
+        let (hidden_sql, hidden) = match hidden {
+            Some(v) => (String::from("media.hidden = :hidden"), v),
+            None => (String::from("true = :hidden"), true),
+        };
 
         // for a given uid, filter, hidden state and library_uuid, find all media in that collection
         // provided that the library is owned by a group containing the uid
@@ -1161,10 +1167,12 @@ impl DbBackend for MariaDBBackend {
                 ) AS t1
                 INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                media.hidden = :hidden"
-            .to_owned();
+            "
+        .to_owned();
 
-        query.push_str(&sql);
+        query.push_str(&hidden_sql);
+
+        query.push_str(&filter_sql);
 
         let result = query
             .with(params! {

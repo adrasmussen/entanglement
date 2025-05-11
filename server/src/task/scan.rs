@@ -9,6 +9,7 @@ use dashmap::DashSet;
 use tokio::{
     fs::{create_dir_all, remove_dir_all},
     task::JoinSet,
+    sync::oneshot::channel,
 };
 use tracing::{debug, error, instrument, span, warn, Instrument, Level};
 use walkdir::WalkDir;
@@ -39,7 +40,7 @@ pub async fn scan_library(
 
     let db_svc_sender = registry.get(&ServiceType::Db)?;
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (tx, rx) = channel();
 
     db_svc_sender
         .send(
@@ -142,7 +143,7 @@ pub async fn scan_library(
     let warnings = context.warnings.load(Ordering::Relaxed);
 
     // send the updated count to the library
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (tx, rx) = channel();
 
     context
         .db_svc_sender

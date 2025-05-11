@@ -135,7 +135,7 @@ pub enum DbMsg {
         resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
-        hidden: bool,
+        hidden: Option<bool>,
         filter: SearchFilter,
     },
 }

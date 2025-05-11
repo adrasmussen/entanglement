@@ -103,7 +103,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         batch_search_and_sort(&BatchSearchAndSortReq {
             req: SearchRequest::Library(SearchMediaInLibraryReq {
                 library_uuid,
-                hidden,
+                hidden: Some(hidden),
                 filter: SearchFilter::SubstringAny { filter },
             }),
             sort: SortMethod::Date,

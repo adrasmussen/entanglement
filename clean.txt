@@ -1,0 +1,16 @@
+first verify that all symlinks exist in db, dangling or not
+-> since they are created after adding to db and are unique, any spurious can be removed concurrently
+-> creating symlink is an atomic operation
+
+then:
+dangling symlinks are fixed on next re-scan OR clean
+missing symlinks are created by cleaner job
+-> both are library-specific
+
+
+all db entries have a correct symlink
+
+all db entries have a file
+
+any files newer than media.mtime should be regenerated
+-> if size changes, mark video slices as invalid
