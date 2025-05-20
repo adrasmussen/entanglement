@@ -21,7 +21,7 @@ use walkdir::DirEntry;
 
 use crate::{
     db::msg::DbMsg,
-    fs::{media_original_path, media_thumbnail_path},
+    fs::{media_link_path, media_thumbnail_path},
     service::EsmSender,
 };
 use api::{
@@ -350,7 +350,7 @@ impl ScanFile {
         debug!("creating symlinks and thumbnails");
 
         // symlink
-        let symlink_path = media_original_path(self.context.config.clone(), media_uuid);
+        let symlink_path = media_link_path(self.context.config.clone(), media_uuid);
 
         let _ = remove_file(&symlink_path).await;
 

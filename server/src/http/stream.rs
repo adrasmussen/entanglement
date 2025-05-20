@@ -24,7 +24,7 @@ use crate::{
     auth::check::AuthCheck,
     http::{auth::CurrentUser, svc::HttpEndpoint, AppError},
 };
-use api::{media::MediaUuid, ORIGINAL_PATH};
+use api::{media::MediaUuid, LINK_PATH};
 
 // media stream/download
 //
@@ -127,7 +127,7 @@ pub(super) async fn stream_media(
                 .config
                 .fs
                 .media_srvdir
-                .join(ORIGINAL_PATH)
+                .join(LINK_PATH)
                 .join(media_uuid),
         )
         .await?,

@@ -1,9 +1,6 @@
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use api::THUMBNAIL_PATH;
-
-use api::{media::MediaUuid, ORIGINAL_PATH};
+use api::{media::MediaUuid, LINK_PATH, THUMBNAIL_PATH};
 use common::config::ESConfig;
 
 // legacy file service
@@ -13,11 +10,11 @@ use common::config::ESConfig;
 //
 // since it is likely that there will be more server filesystem
 // specific tasks, we leave the module in its own folder
-pub fn media_original_path(config: Arc<ESConfig>, media_uuid: MediaUuid) -> PathBuf {
+pub fn media_link_path(config: Arc<ESConfig>, media_uuid: MediaUuid) -> PathBuf {
     config
         .fs
         .media_srvdir
-        .join(ORIGINAL_PATH)
+        .join(LINK_PATH)
         .join(media_uuid.to_string())
 }
 

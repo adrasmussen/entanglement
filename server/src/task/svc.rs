@@ -9,15 +9,15 @@ use futures::Future;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use tokio::{
     sync::{Mutex, RwLock},
-    task::{spawn, JoinHandle},
+    task::{JoinHandle, spawn},
 };
-use tracing::{debug, error, info, instrument, span, Instrument, Level};
+use tracing::{Instrument, Level, debug, error, info, instrument, span};
 
 use crate::{
     db::msg::DbMsg,
     debug::sleep_task,
     service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
-    task::{msg::TaskMsg, scan::scan_library, ESTaskService},
+    task::{ESTaskService, clean::clean_library, msg::TaskMsg, scan::scan_library},
 };
 use api::{
     library::LibraryUuid,
@@ -256,14 +256,16 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
+        //
+        // TODO -- cache scrub, recalculate media
+        let config = self.config.clone();
+        let registry = self.registry.clone();
+
         let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> = match task_type {
-            TaskType::ScanLibrary => Box::pin(scan_library(
-                self.config.clone(),
-                self.registry.clone(),
-                library_uuid,
-            )),
+            TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
+            TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
             TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
-            _ => return Err(anyhow::Error::msg("unsupported task")),
+            // _ => return Err(anyhow::Error::msg("unsupported task")),
         };
 
         info!({ start = start }, "starting task");

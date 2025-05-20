@@ -1,5 +1,6 @@
 use std::{
     collections::HashSet,
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicI64, Ordering},
@@ -7,37 +8,35 @@ use std::{
 };
 
 use anyhow::Result;
-use dashmap::DashSet;
 
 use tokio::{
-    fs::{create_dir_all, metadata, remove_dir_all, try_exists},
+    fs::{create_dir_all, metadata, remove_dir_all, remove_file, symlink, try_exists},
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
-use walkdir::WalkDir;
+use tracing::{debug, instrument, warn};
 
 use crate::{
-    db::msg::DbMsg, fs::media_thumbnail_path, service::{ESMRegistry, ServiceType}
+    db::msg::DbMsg,
+    fs::{media_link_path, media_thumbnail_path},
+    service::{ESMRegistry, EsmSender, ServiceType},
 };
 use api::{
     library::{LibraryUpdate, LibraryUuid},
-    media::MediaUuid,
+    media::{MediaUpdate, MediaUuid},
     search::SearchFilter,
 };
-use common::config::ESConfig;
+use common::{config::ESConfig, media::create_thumbnail};
 
-// restore missing symlinks for media that exist
-//
-// regenerate thumbnails based on mtime
-//
-// remove symlinks/db entries for media that no
-// longer exists
-//
-// add "CLEANER:duplicate" tag for anything that
-// matches very closely --> move to dedup task?
+#[derive(Debug)]
+pub struct CleanContext {
+    pub config: Arc<ESConfig>,
+    pub db_svc_sender: EsmSender,
+    pub scratch_base: PathBuf,
+}
+
 #[instrument(skip(config, registry))]
-pub async fn clean(
+pub async fn clean_library(
     config: Arc<ESConfig>,
     registry: ESMRegistry,
     library_uuid: LibraryUuid,
@@ -79,7 +78,19 @@ pub async fn clean(
 
     let media_in_library = rx.await??;
 
+    let context = Arc::new(CleanContext {
+        config: config.clone(),
+        db_svc_sender: db_svc_sender.clone(),
+        scratch_base: config
+            .task
+            .scan_scratch
+            .clone()
+            .join(library_uuid.to_string()),
+    });
+
     let warnings = Arc::new(AtomicI64::new(0));
+
+    create_dir_all(&context.scratch_base).await?;
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
@@ -94,11 +105,11 @@ pub async fn clean(
         }
 
         tasks.spawn({
-            let config = config.clone();
+            let context = context.clone();
             let warnings = warnings.clone();
 
             async move {
-                match clean_media(config, media_uuid).await {
+                match clean_media(context, media_uuid).await {
                     Ok(()) => {}
                     Err(err) => {
                         warn!("clean error: {err:?}");
@@ -110,6 +121,8 @@ pub async fn clean(
     }
 
     tasks.join_all().await;
+
+    remove_dir_all(&context.scratch_base).await?;
 
     let warnings = warnings.load(Ordering::Relaxed);
 
@@ -136,19 +149,133 @@ pub async fn clean(
     Ok(warnings)
 }
 
-#[instrument]
-async fn clean_media(config: Arc<ESConfig>, media_uuid: MediaUuid) -> Result<()> {
-    // thumbnails
+#[instrument(skip(context))]
+async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Result<()> {
+    let config = context.config.clone();
+    let db_svc_sender = context.db_svc_sender.clone();
 
-    let link_metadata = metadata(media_thumbnail_path(config.clone(), media_uuid)).await;
+    let (tx, rx) = tokio::sync::oneshot::channel();
 
-    // if we first ensure that all of the symlinks are good (i.e. clean out the link dir)
-    // for anything that doesn't exist
-    if !try_exists(media_thumbnail_path(config, media_uuid)).await? {
+    db_svc_sender
+        .send(
+            DbMsg::GetMedia {
+                resp: tx,
+                media_uuid,
+            }
+            .into(),
+        )
+        .await?;
 
+    let media = rx
+        .await??
+        .ok_or_else(|| {
+            anyhow::Error::msg("internal error: failed to get_media after searching library")
+        })?
+        .0;
+
+    let path = PathBuf::from(media.path);
+
+    // original media validation
+    //
+    // while we could have the cleaner job delete any db entries for media that has vanished,
+    // it would lead to moved media being deleted if the scan wasn't called first.  thus, we
+    // tag it and have a separate task to clean those entries out.
+    debug!("original media validation");
+
+    if !try_exists(&path).await? {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        let mut tags = media.tags.clone();
+
+        tags.insert("TBD_DELETEME".to_owned());
+
+        db_svc_sender
+            .send(
+                DbMsg::UpdateMedia {
+                    resp: tx,
+                    media_uuid,
+                    update: MediaUpdate {
+                        hidden: None,
+                        date: None,
+                        note: None,
+                        tags: Some(tags),
+                    },
+                }
+                .into(),
+            )
+            .await?;
+
+        rx.await??;
+
+        return Err(anyhow::Error::msg("missing media"));
     }
 
+    let path_metadata = metadata(&path).await?;
 
+    // symlink validation and cleanup
+    //
+    // the symlink folder is effective a cache for the media path column, and this
+    // ensures that the links into the given library are all accurrate
+    //
+    // there is a separate task (that can run concurrently) that removes unknown
+    // symlinks, since no library will attempt to modify them via this task
+    let link_path = media_link_path(config.clone(), media_uuid);
+
+    let mut relink = false;
+
+    // early return handles the case where we cannot verify if the link exists
+    if try_exists(&link_path).await? {
+        let link_metadata = metadata(&link_path).await?;
+
+        if !link_metadata.is_symlink()
+            || link_path.canonicalize()? != media_link_path(config.clone(), media_uuid)
+        {
+            relink = true;
+        }
+    } else {
+        relink = true;
+    }
+
+    if relink {
+        match remove_file(&link_path).await {
+            Ok(()) => {}
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {}
+                _ => return Err(anyhow::Error::from(err)),
+            },
+        }
+
+        symlink(&path, &link_path).await?;
+    }
+
+    // thumbnail validation and cleanup
+    //
+    // we need to replace the thumbnails if they don't exist or the media changes
+    let thumbnail_path = media_thumbnail_path(config.clone(), media_uuid);
+
+    let mut regen = false;
+
+    if try_exists(&thumbnail_path).await? {
+        let thumnail_metadata = metadata(&thumbnail_path).await?;
+
+        if path_metadata.modified()? > thumnail_metadata.modified()? {
+            regen = true;
+        }
+    } else {
+        regen = true;
+    }
+
+    if regen {
+        remove_file(&thumbnail_path).await?;
+
+        let scratch_dir = context.scratch_base.join(media_uuid.to_string());
+
+        create_dir_all(&scratch_dir).await?;
+
+        create_thumbnail(&path, &thumbnail_path, &scratch_dir, &media.metadata).await?;
+
+        remove_dir_all(scratch_dir).await?;
+    }
 
     Ok(())
 }

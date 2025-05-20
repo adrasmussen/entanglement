@@ -16,7 +16,7 @@ pub mod task;
 // these paths are used to control where under the media_srvdir the server will create
 // symlinks, thumbnails, and so on.  since the /media route on the http server points
 // to the media_srvdir directory, these also control the urls used for downloading.
-pub const ORIGINAL_PATH: &str = "originals";
+pub const LINK_PATH: &str = "originals";
 pub const THUMBNAIL_PATH: &str = "thumbnails";
 pub const SLICE_PATH: &str = "slices";
 
@@ -143,7 +143,7 @@ macro_rules! endpoint {
 }
 
 pub fn full_link(media_uuid: media::MediaUuid) -> String {
-    format!("/{HTTP_URL_ROOT}/media/{ORIGINAL_PATH}/{media_uuid}")
+    format!("/{HTTP_URL_ROOT}/media/{LINK_PATH}/{media_uuid}")
 }
 
 pub fn thumbnail_link(media_uuid: media::MediaUuid) -> String {

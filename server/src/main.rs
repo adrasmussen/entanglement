@@ -17,7 +17,7 @@ mod service;
 mod task;
 mod debug;
 
-use api::{ORIGINAL_PATH, SLICE_PATH, THUMBNAIL_PATH};
+use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::{config::read_config, db::MariaDBBackend};
 use service::{ESMRegistry, EntanglementService};
 
@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     checks::create_temp_file(&config.fs.media_srcdir).expect_err("media_srcdir is writeable");
     checks::create_temp_file(&config.fs.media_srvdir).expect("media_srvdir is not writeable");
 
-    checks::subdir_exists(&config, ORIGINAL_PATH)
+    checks::subdir_exists(&config, LINK_PATH)
         .expect("could not create thumbnail path in media_srvdir");
     checks::subdir_exists(&config, THUMBNAIL_PATH)
         .expect("could not create thumbnail path in media_srvdir");
