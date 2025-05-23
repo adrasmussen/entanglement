@@ -36,7 +36,6 @@ use tower_http::{
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    auth::check::AuthCheck,
     http::{api::*, auth::proxy_auth, stream::*},
     service::{
         ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
@@ -364,5 +363,3 @@ impl HttpEndpoint {
         handle
     }
 }
-
-impl AuthCheck for HttpEndpoint {}

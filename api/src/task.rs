@@ -9,8 +9,12 @@ pub enum TaskType {
     ScanLibrary,
     CleanLibrary,
     RunScripts,
+    CacheScrub,
     //VerifyMime,
     //AsyncTranscode,
+    //CacheScrub,
+    //RecalculateHashes,
+    //GuessDate
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

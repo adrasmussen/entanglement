@@ -7,10 +7,11 @@ use api::{
     task::{Task, TaskStatus, TaskType, TaskUid},
 };
 
-pub mod clean;
+mod clean;
 pub mod msg;
-pub mod scan;
-pub mod scan_utils;
+mod scan;
+mod scan_utils;
+mod scrub;
 pub mod svc;
 
 // pub mod dedup;

@@ -8,15 +8,19 @@ use dashmap::{DashMap, Entry};
 use futures::Future;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use tokio::{
+    select,
     sync::{Mutex, RwLock},
     task::{JoinHandle, spawn},
 };
-use tracing::{Instrument, Level, debug, error, info, instrument, span};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     db::msg::DbMsg,
     debug::sleep_task,
-    service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
+    service::{
+        ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
+    },
     task::{ESTaskService, clean::clean_library, msg::TaskMsg, scan::scan_library},
 };
 use api::{
@@ -101,7 +105,7 @@ pub struct TaskRunner {
 #[derive(Debug)]
 struct RunningTask {
     task: Task,
-    cancel: tokio::sync::mpsc::Sender<()>,
+    cancel: CancellationToken,
     _handle: JoinHandle<()>,
 }
 
@@ -233,23 +237,10 @@ impl ESTaskService for TaskRunner {
             end: None,
         };
 
-        debug!({task = ?task}, "created new task struct");
-
-        // to abort the task, we can't simply drop the handle -- we need to explicitly call abort()
-        // on either it or the associated abort handle.  thus, we create this channel and package it
-        // as part of the tracked state to connect with the twice-separated running task future
-        //
-        // this an mpsc channel instead of oneshot so that we can clone the sender out of the struct
-        // easily (no extra Option<> layer or similar)
-        let (abort_tx, mut abort_rx) = tokio::sync::mpsc::channel::<()>(64);
-
-        let sender = self.registry().get(&ServiceType::Task)?;
-
         // task futures
         //
         // each task is a Future<Output=Result<T>> that is spawned into the executor by a separate
-        // "watcher" future which uses the select! macro to await either the future or a cancellation
-        // signal carried by the above channel
+        // "watcher" future which uses the select! macro to await either the future or a cancel token.
         //
         // currently, T = i64, the number of non-fatal errors encountered by the task.  in the future,
         // it could be a Box<dyn TaskReport> or similar
@@ -265,96 +256,21 @@ impl ESTaskService for TaskRunner {
             TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
             TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
             TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
-            // _ => return Err(anyhow::Error::msg("unsupported task")),
+            _ => return Err(anyhow::Error::msg("unsupported task")),
         };
 
         info!({ start = start }, "starting task");
 
-        // watcher thread
-        //
-        // this is a wrapper future around the actual task, which lets us use tokio::select!
-        // to either await its completion or cancel, and send a message either way
-        let watcher_future = async move {
-            debug!("task watcher starting");
-
-            let task_handle = spawn(task_future);
-
-            // we have to create an abort handle because select! takes ownership of the future
-            // associated with the join handle
-            let abort_handle = task_handle.abort_handle();
-
-            debug!("task watcher waiting");
-
-            let (status, warnings) = tokio::select! {
-                _ = abort_rx.recv() => {
-                    info!("aborting task");
-                    abort_handle.abort();
-                    (TaskStatus::Aborted, None)
-                }
-
-                res = task_handle => {
-                    match res {
-                        Ok(Ok(warnings)) => {
-                            info!("task succeeded");
-                            (TaskStatus::Success, Some(warnings))},
-                        Ok(Err(err)) => {
-                            error!("task failed: {err}");
-                            (TaskStatus::Failure, None)
-                        },
-                        Err(_) => (TaskStatus::Unknown, None),
-                    }
-
-                }
-
-            };
-
-            // ensure that the write lock is expeditiously freed in stop_task(), as the CompleteTask
-            // will be need the lock to take() the current task
-            abort_rx.close();
-
-            // since the watcher future should not be able to fail, we collect all of the various
-            // failure modes associated with sending the completion message and print their errors
-            let (tx, rx) = tokio::sync::oneshot::channel();
-
-            // this blocks on the write lock for the running task, since we need it to take() the
-            // running task from the Option and put it into the ringbuffer
-            match async {
-                sender
-                    .send(
-                        TaskMsg::CompleteTask {
-                            resp: tx,
-                            library_uuid,
-                            status,
-                            warnings,
-                            end: Local::now().timestamp(),
-                        }
-                        .into(),
-                    )
-                    .await?;
-
-                rx.await??;
-
-                Result::<()>::Ok(())
-            }
-            .await
-            {
-                Ok(_) => {}
-                Err(err) => error!("failed to send/receive completion message: {err}"),
-            }
-        }
-        .instrument(span!(Level::INFO, "task_watcher", start = start));
-
-        // strictly speaking, we're not using this handle for anything and dropping it does not
-        // abort the future.  however, it's possible we will need it later for shutdown logic
-        let handle = spawn(watcher_future);
+        // spawn the future inside of the infalliable watcher and send the result back via ESM
+        let (_handle, cancel) = watch_task(start, library_uuid, db_svc_sender, task_future);
 
         // we still have the write lock on the currently running task, but in principle the task
         // may have already completed and sent the message to complete_task().  thus, even if we
         // immediately take() the running task, it was still TaskStatus::Running for a short time.
         *running_task = Some(RunningTask {
             task,
-            cancel: abort_tx,
-            _handle: handle,
+            cancel,
+            _handle,
         });
 
         Ok(())
@@ -366,23 +282,24 @@ impl ESTaskService for TaskRunner {
             anyhow::Error::msg(format!("library {library_uuid} has no running task"))
         })?;
 
-        // the cancel channel requires a mutable borrow, so we need the write() lock
-        //
-        // if the task completes after we grab this lock, then it will close the abort_rx receiver with
-        // the watcher_future and the message will fail to send.  however, we are just trying to send
-        // a message, not modify the task status/ring buffer, and so the completion message should go
-        // as normal and the resulting Error is spurious.
-        let mut running_task = rt_entry.write().await;
+        // even if we send a stop task message immediately after starting a task, we will wait
+        // until it is successfully running and set into the dashmap before freeing the lock
+        let running_task = rt_entry.read().await;
 
-        let running_task = running_task.as_mut().ok_or_else(|| {
-            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
-        })?;
+        let running_task = match running_task.as_ref() {
+            Some(task) => task,
+            None => {
+                return Err(anyhow::Error::msg(format!(
+                    "library {library_uuid} has no running task"
+                )));
+            }
+        };
 
         info!({ start = running_task.task.start }, "stopping task");
 
-        running_task.cancel.send(()).await.map_err(|err| {
-            error!({library_uuid = library_uuid, task_type = %running_task.task.task_type, start = running_task.task.start}, "failed to send cancellation message to task");
-            anyhow::Error::msg(format!("failed to send cancellation message to task: {err}"))})
+        running_task.cancel.cancel();
+
+        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -475,4 +392,90 @@ impl ESTaskService for TaskRunner {
 
         Ok(())
     }
+}
+
+// task watcher
+//
+// this function ensures that our falliable tasks can be cancelled, and that
+// the results are all correctly accounted for when sending the completion
+// message back to the task service.
+#[instrument(skip(task_future, sender))]
+fn watch_task(
+    start: i64,
+    library_uuid: LibraryUuid,
+    sender: EsmSender,
+    task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>>,
+) -> (JoinHandle<()>, CancellationToken) {
+    let cancel = CancellationToken::new();
+
+    let handle = {
+        let cancel = cancel.clone();
+
+        let task = async move {
+            debug!("starting");
+
+            let task_handle = spawn(task_future);
+
+            let abort_handle = task_handle.abort_handle();
+
+            debug!("waiting");
+
+            let (status, warnings) = select! {
+                _ = cancel.cancelled() => {
+                    info!("aborting task");
+                    abort_handle.abort();
+                    (TaskStatus::Aborted, None)
+                }
+
+                res = task_handle => {
+                    match res {
+                        Ok(Ok(warnings)) => {
+                            info!("task succeeded");
+                            (TaskStatus::Success, Some(warnings))},
+                        Ok(Err(err)) => {
+                            error!("task failed: {err}");
+                            (TaskStatus::Failure, None)
+                        },
+                        Err(_) => (TaskStatus::Unknown, None),
+                    }
+
+                }
+
+            };
+
+            // since the watcher future should not be able to fail, we collect all of the various
+            // failure modes associated with sending the completion message and print their errors
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            // this blocks on the write lock for the running task, since we need it to take() the
+            // running task from the Option and put it into the ringbuffer
+            match async {
+                sender
+                    .send(
+                        TaskMsg::CompleteTask {
+                            resp: tx,
+                            library_uuid,
+                            status,
+                            warnings,
+                            end: Local::now().timestamp(),
+                        }
+                        .into(),
+                    )
+                    .await?;
+
+                rx.await??;
+
+                Result::<()>::Ok(())
+            }
+            .await
+            {
+                Ok(_) => {}
+                Err(err) => error!("failed to send/receive completion message: {err}"),
+            }
+        };
+
+        spawn(task)
+    };
+
+    (handle, cancel)
 }

@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-use std::fmt::Debug;
+use std::{collections::HashSet, fmt::Debug};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -10,11 +9,18 @@ use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ServiceType};
 use api::{
     collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid,
+    task::TaskType,
 };
+
+// common auth routines
+//
+// while the extra layer of indirection via the registry() function creates some delays, it allows
+// us to write these universal authentication routines that can be used by any service
+impl<T: Debug + ESInner> AuthCheck for T {}
 
 #[async_trait]
 pub trait AuthCheck: ESInner + Debug {
-    #[instrument]
+    #[instrument(skip(self))]
     async fn clear_access_cache(&self, media_uuid: Vec<MediaUuid>) -> Result<()> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -32,7 +38,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn groups_for_user(&self, uid: &String) -> Result<HashSet<String>> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -50,7 +56,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn is_group_member(&self, uid: &String, gid: HashSet<String>) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -69,7 +75,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn can_access_media(&self, uid: &String, media_uuid: &MediaUuid) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -88,7 +94,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn owns_media(&self, uid: &String, media_uuid: &MediaUuid) -> Result<bool> {
         let auth_svc_sender = self.registry().get(&ServiceType::Auth)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -107,7 +113,7 @@ pub trait AuthCheck: ESInner + Debug {
         rx.await?
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn can_access_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -129,7 +135,7 @@ pub trait AuthCheck: ESInner + Debug {
         self.can_access_media(uid, &comment.media_uuid).await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn owns_comment(&self, uid: &String, comment_uuid: &CommentUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -151,7 +157,7 @@ pub trait AuthCheck: ESInner + Debug {
         Ok(uid == &comment.uid)
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn can_access_collection(
         &self,
         uid: &String,
@@ -178,7 +184,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn owns_collection(
         &self,
         uid: &String,
@@ -204,7 +210,7 @@ pub trait AuthCheck: ESInner + Debug {
         Ok(uid == &collection.uid)
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     async fn owns_library(&self, uid: &String, library_uuid: &LibraryUuid) -> Result<bool> {
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -225,5 +231,22 @@ pub trait AuthCheck: ESInner + Debug {
 
         self.is_group_member(uid, HashSet::from([library.gid]))
             .await
+    }
+
+    #[instrument(skip(self))]
+    async fn can_run_task(
+        &self,
+        uid: &String,
+        library_uuid: &LibraryUuid,
+        task: &TaskType,
+    ) -> Result<bool> {
+        if !(self.owns_library(uid, library_uuid).await?) {
+            return Ok(false);
+        }
+
+        match task {
+            TaskType::ScanLibrary | TaskType::CleanLibrary | TaskType::RunScripts => Ok(true),
+            _ => return Ok(false),
+        }
     }
 }
