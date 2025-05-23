@@ -13,7 +13,7 @@ use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
     db::msg::DbMsg,
     http::{auth::CurrentUser, svc::HttpEndpoint, AppError},
-    task::msg::TaskMsg,
+    task::{TaskLibrary, msg::TaskMsg},
 };
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
 
@@ -762,7 +762,7 @@ pub(super) async fn start_task(
         .send(
             TaskMsg::StartTask {
                 resp: tx,
-                library_uuid: message.library_uuid,
+                library: TaskLibrary::User {library_uuid: message.library_uuid},
                 task_type: message.task_type,
                 uid: TaskUid::User { uid },
             }
@@ -795,7 +795,7 @@ pub(super) async fn stop_task(
         .send(
             TaskMsg::StopTask {
                 resp: tx,
-                library_uuid: message.library_uuid,
+                library: TaskLibrary::User {library_uuid: message.library_uuid},
             }
             .into(),
         )
@@ -826,7 +826,7 @@ pub(super) async fn show_tasks(
         .send(
             TaskMsg::ShowTasks {
                 resp: tx,
-                library_uuid: message.library_uuid,
+                library: TaskLibrary::User {library_uuid: message.library_uuid},
             }
             .into(),
         )

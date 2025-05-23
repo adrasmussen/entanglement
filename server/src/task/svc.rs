@@ -21,12 +21,12 @@ use crate::{
     service::{
         ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
     },
-    task::{ESTaskService, clean::clean_library, msg::TaskMsg, scan::scan_library},
+    task::{
+        ESTaskService, TaskLibrary, clean::clean_library, msg::TaskMsg, scan::scan_library,
+        scrub::cache_scrub,
+    },
 };
-use api::{
-    library::LibraryUuid,
-    task::{Task, TaskStatus, TaskType, TaskUid},
-};
+use api::task::{Task, TaskStatus, TaskType, TaskUid};
 use common::config::ESConfig;
 
 // task service
@@ -98,8 +98,8 @@ pub struct TaskRunner {
     registry: ESMRegistry,
     // has an extra layer of abstraction (Option<_>) so that we can hold the lock
     // until the task successfully starts without blocking the DashMap
-    running_tasks: DashMap<LibraryUuid, Arc<RwLock<Option<RunningTask>>>>,
-    task_history: DashMap<LibraryUuid, Arc<RwLock<AllocRingBuffer<Task>>>>,
+    running_tasks: DashMap<TaskLibrary, Arc<RwLock<Option<RunningTask>>>>,
+    task_history: DashMap<TaskLibrary, Arc<RwLock<AllocRingBuffer<Task>>>>,
 }
 
 #[derive(Debug)]
@@ -129,31 +129,28 @@ impl ESInner for TaskRunner {
             Esm::Task(message) => match message {
                 TaskMsg::StartTask {
                     resp,
-                    library_uuid,
+                    library,
                     task_type,
                     uid,
                 } => {
-                    self.respond(resp, self.start_task(library_uuid, task_type, uid))
+                    self.respond(resp, self.start_task(library, task_type, uid))
                         .await
                 }
-                TaskMsg::StopTask { resp, library_uuid } => {
-                    self.respond(resp, self.stop_task(library_uuid)).await
+                TaskMsg::StopTask { resp, library } => {
+                    self.respond(resp, self.stop_task(library)).await
                 }
-                TaskMsg::ShowTasks { resp, library_uuid } => {
-                    self.respond(resp, self.show_tasks(library_uuid)).await
+                TaskMsg::ShowTasks { resp, library } => {
+                    self.respond(resp, self.show_tasks(library)).await
                 }
                 TaskMsg::CompleteTask {
                     resp,
-                    library_uuid,
+                    library,
                     status,
                     warnings,
                     end,
                 } => {
-                    self.respond(
-                        resp,
-                        self.complete_task(library_uuid, status, warnings, end),
-                    )
-                    .await
+                    self.respond(resp, self.complete_task(library, status, warnings, end))
+                        .await
                 }
             },
             _ => Err(anyhow::Error::msg("not implemented")),
@@ -180,34 +177,35 @@ impl ESTaskService for TaskRunner {
     #[instrument(skip(self))]
     async fn start_task(
         &self,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
         task_type: TaskType,
         uid: TaskUid,
     ) -> Result<()> {
         debug!("task pre-startup verification");
-
-        // library verification
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
 
-        let (db_tx, db_rx) = tokio::sync::oneshot::channel();
+        // library verification
+        if let TaskLibrary::User { library_uuid } = library {
+            let (db_tx, db_rx) = tokio::sync::oneshot::channel();
 
-        db_svc_sender
-            .send(
-                DbMsg::GetLibrary {
-                    resp: db_tx,
-                    library_uuid,
-                }
-                .into(),
-            )
-            .await?;
+            db_svc_sender
+                .send(
+                    DbMsg::GetLibrary {
+                        resp: db_tx,
+                        library_uuid,
+                    }
+                    .into(),
+                )
+                .await?;
 
-        db_rx.await??;
+            db_rx.await??;
+        }
 
         // create the library's entry in the running task map if it doesn't exist
         //
         // this should be the only place that entries are put into the running DashMap,
         // all other calls should error somehow
-        let rt_entry = match self.running_tasks.entry(library_uuid) {
+        let rt_entry = match self.running_tasks.entry(library) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let v = Arc::new(RwLock::new(None));
@@ -226,17 +224,6 @@ impl ESTaskService for TaskRunner {
             return Err(anyhow::Error::msg("task already running"));
         }
 
-        let start = Local::now().timestamp();
-
-        let task = Task {
-            task_type: task_type.clone(),
-            uid,
-            status: TaskStatus::Running,
-            warnings: None,
-            start,
-            end: None,
-        };
-
         // task futures
         //
         // each task is a Future<Output=Result<T>> that is spawned into the executor by a separate
@@ -249,24 +236,40 @@ impl ESTaskService for TaskRunner {
         // tracing logs, failure could either be catastrophic failure or a single error
         //
         // TODO -- cache scrub, recalculate media
+        let start = Local::now().timestamp();
         let config = self.config.clone();
         let registry = self.registry.clone();
 
-        let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> = match task_type {
-            TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
-            TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
-            TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
-            _ => return Err(anyhow::Error::msg("unsupported task")),
+        let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> = match library {
+            TaskLibrary::User { library_uuid } => match task_type {
+                TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
+                TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
+                TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
+                _ => return Err(anyhow::Error::msg("unsupported task")),
+            },
+            TaskLibrary::System => match task_type {
+                TaskType::CacheScrub => Box::pin(cache_scrub(config, registry)),
+                _ => return Err(anyhow::Error::msg("unsupported task")),
+            },
         };
 
         info!({ start = start }, "starting task");
 
         // spawn the future inside of the infalliable watcher and send the result back via ESM
-        let (_handle, cancel) = watch_task(start, library_uuid, db_svc_sender, task_future);
+        let (_handle, cancel) = watch_task(start, library, db_svc_sender, task_future);
 
         // we still have the write lock on the currently running task, but in principle the task
         // may have already completed and sent the message to complete_task().  thus, even if we
         // immediately take() the running task, it was still TaskStatus::Running for a short time.
+        let task = Task {
+            task_type: task_type.clone(),
+            uid,
+            status: TaskStatus::Running,
+            warnings: None,
+            start,
+            end: None,
+        };
+
         *running_task = Some(RunningTask {
             task,
             cancel,
@@ -277,10 +280,11 @@ impl ESTaskService for TaskRunner {
     }
 
     #[instrument(skip(self))]
-    async fn stop_task(&self, library_uuid: LibraryUuid) -> Result<()> {
-        let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
-            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
-        })?;
+    async fn stop_task(&self, library: TaskLibrary) -> Result<()> {
+        let rt_entry = self
+            .running_tasks
+            .get(&library)
+            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has no running task")))?;
 
         // even if we send a stop task message immediately after starting a task, we will wait
         // until it is successfully running and set into the dashmap before freeing the lock
@@ -290,7 +294,7 @@ impl ESTaskService for TaskRunner {
             Some(task) => task,
             None => {
                 return Err(anyhow::Error::msg(format!(
-                    "library {library_uuid} has no running task"
+                    "library {library} has no running task"
                 )));
             }
         };
@@ -303,12 +307,12 @@ impl ESTaskService for TaskRunner {
     }
 
     #[instrument(skip(self))]
-    async fn show_tasks(&self, library_uuid: LibraryUuid) -> Result<Vec<Task>> {
+    async fn show_tasks(&self, library: TaskLibrary) -> Result<Vec<Task>> {
         debug!("finding tasks");
 
         let mut out = Vec::new();
 
-        match self.running_tasks.get(&library_uuid) {
+        match self.running_tasks.get(&library) {
             None => {}
             Some(entry) => match entry.read().await.as_ref() {
                 None => {}
@@ -316,7 +320,7 @@ impl ESTaskService for TaskRunner {
             },
         };
 
-        match self.task_history.get(&library_uuid) {
+        match self.task_history.get(&library) {
             None => {}
             Some(entry) => {
                 let ring = entry.read().await;
@@ -333,15 +337,16 @@ impl ESTaskService for TaskRunner {
     #[instrument(skip(self))]
     async fn complete_task(
         &self,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
         status: TaskStatus,
         warnings: Option<i64>,
         end: i64,
     ) -> Result<()> {
         // check if the task exists
-        let rt_entry = self.running_tasks.get(&library_uuid).ok_or_else(|| {
-            anyhow::Error::msg(format!("library {library_uuid} has no running task"))
-        })?;
+        let rt_entry = self
+            .running_tasks
+            .get(&library)
+            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has no running task")))?;
 
         // hold the option lock just long enough to take() the running task
         let completed_task = {
@@ -349,7 +354,7 @@ impl ESTaskService for TaskRunner {
 
             // this should be the only place that tasks leave the running DashMap
             let completed_task = running_task.take().ok_or_else(|| {
-                anyhow::Error::msg(format!("library {library_uuid} has no running task"))
+                anyhow::Error::msg(format!("library {library} has no running task"))
             })?;
 
             debug!(
@@ -364,7 +369,7 @@ impl ESTaskService for TaskRunner {
         //
         // this should be the only place that entries are put into the history DashMap,
         // all other calls should error somehow
-        let ring_entry = match self.task_history.entry(library_uuid) {
+        let ring_entry = match self.task_history.entry(library) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
                 let v = Arc::new(RwLock::new(AllocRingBuffer::new(64)));
@@ -402,7 +407,7 @@ impl ESTaskService for TaskRunner {
 #[instrument(skip(task_future, sender))]
 fn watch_task(
     start: i64,
-    library_uuid: LibraryUuid,
+    library: TaskLibrary,
     sender: EsmSender,
     task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>>,
 ) -> (JoinHandle<()>, CancellationToken) {
@@ -454,7 +459,7 @@ fn watch_task(
                     .send(
                         TaskMsg::CompleteTask {
                             resp: tx,
-                            library_uuid,
+                            library,
                             status,
                             warnings,
                             end: Local::now().timestamp(),

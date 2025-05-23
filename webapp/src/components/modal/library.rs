@@ -128,6 +128,7 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
                                 li { "Automated tagging may be performed." }
                             }
                         },
+                        _ => rsx! {}
                     }
                     p { style: "margin-top: var(--space-3); font-style: italic; color: var(--text-tertiary);",
                         "Note: Tasks run in the background and you can continue using the application while they run.  For logs, contact the admins."

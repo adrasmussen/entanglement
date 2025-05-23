@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{endpoint, library::LibraryUuid};
 
+// structs and types
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskType {
     ScanLibrary,
@@ -12,7 +14,6 @@ pub enum TaskType {
     CacheScrub,
     //VerifyMime,
     //AsyncTranscode,
-    //CacheScrub,
     //RecalculateHashes,
     //GuessDate
 }

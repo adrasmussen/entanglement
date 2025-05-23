@@ -1,25 +1,25 @@
-use crate::service::{EsmResp, Esm};
+use crate::{task::TaskLibrary, service::{EsmResp, Esm}};
 use api::{library::LibraryUuid, task::*};
 
 #[derive(Debug)]
 pub enum TaskMsg {
     StartTask {
         resp: EsmResp<()>,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
         task_type: TaskType,
         uid: TaskUid,
     },
     StopTask {
         resp: EsmResp<()>,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
     },
     ShowTasks {
         resp: EsmResp<Vec<Task>>,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
     },
     CompleteTask {
         resp: EsmResp<()>,
-        library_uuid: LibraryUuid,
+        library: TaskLibrary,
         status: TaskStatus,
         warnings: Option<i64>,
         end: i64,
