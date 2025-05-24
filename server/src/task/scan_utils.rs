@@ -111,6 +111,15 @@ pub struct ScanContext {
     pub scratch_base: PathBuf,
 }
 
+impl Drop for ScanContext {
+    fn drop(&mut self) {
+        if std::fs::remove_dir_all(&self.scratch_base).is_err() {
+            let _ = span!(Level::INFO, "scan_context_drop").entered();
+            warn!("failed to clean up scratch base directory");
+        }
+    }
+}
+
 // per-file scan context
 //
 // this struct holds all of the relevant metadata for scanning an individual file, as well
@@ -138,7 +147,7 @@ pub struct ScanFile {
 impl Drop for ScanFile {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_dir).is_err() {
-            let _ = span!(Level::INFO, "file_scan_drop", path = ?self.path).entered();
+            let _ = span!(Level::INFO, "scan_file_drop", path = ?self.path).entered();
             warn!("failed to clean up scratch directory");
             self.context.warnings.fetch_add(1, Ordering::Relaxed);
         }

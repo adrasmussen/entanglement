@@ -13,7 +13,7 @@ use tokio::{
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument, warn, span, Level};
 
 use crate::{
     db::msg::DbMsg,
@@ -32,6 +32,15 @@ pub struct CleanContext {
     pub config: Arc<ESConfig>,
     pub db_svc_sender: EsmSender,
     pub scratch_base: PathBuf,
+}
+
+impl Drop for CleanContext {
+    fn drop(&mut self) {
+        if std::fs::remove_dir_all(&self.scratch_base).is_err() {
+            let _ = span!(Level::INFO, "clean_context_drop").entered();
+            warn!("failed to clean up scratch base directory");
+        }
+    }
 }
 
 #[instrument(skip(config, registry))]

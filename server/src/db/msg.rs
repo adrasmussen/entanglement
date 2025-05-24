@@ -22,6 +22,9 @@ pub enum DbMsg {
         resp: EsmResp<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>,
         media_uuid: MediaUuid,
     },
+    GetMediaUuids {
+        resp: EsmResp<Vec<MediaUuid>>,
+    },
     GetMediaUuidByPath {
         resp: EsmResp<Option<MediaUuid>>,
         path: String,

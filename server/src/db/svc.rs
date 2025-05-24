@@ -105,6 +105,9 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 DbMsg::GetMedia { resp, media_uuid } => {
                     self.respond(resp, self.backend.get_media(media_uuid)).await
                 }
+                DbMsg::GetMediaUuids { resp } => {
+                    self.respond(resp, self.backend.get_media_uuids()).await
+                }
                 DbMsg::GetMediaUuidByPath { resp, path } => {
                     self.respond(resp, self.backend.get_media_uuid_by_path(path))
                         .await

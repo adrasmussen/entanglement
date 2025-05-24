@@ -267,6 +267,29 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip(self))]
+    async fn get_media_uuids(&self) -> Result<Vec<MediaUuid>> {
+        debug!("getting all media uuids");
+
+        let _mr = self.locks.media.read().await;
+
+        let mut result = r"
+            SELECT media_uuid FROM media"
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let data = result
+            .into_iter()
+            .map(from_row_opt::<MediaUuid>)
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found media");
+
+        Ok(data)
+    }
+
+    #[instrument(skip(self))]
     async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>> {
         debug!("searching for media by path");
 

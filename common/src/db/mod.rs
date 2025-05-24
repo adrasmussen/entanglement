@@ -34,6 +34,8 @@ pub trait DbBackend: Send + Sync + 'static {
         media_uuid: MediaUuid,
     ) -> Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>;
 
+    async fn get_media_uuids(&self) -> Result<Vec<MediaUuid>>;
+
     async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>>;
 
     async fn get_media_uuid_by_chash(

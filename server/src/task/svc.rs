@@ -241,12 +241,15 @@ impl ESTaskService for TaskRunner {
         let registry = self.registry.clone();
 
         let task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>> = match library {
+            // user library tasks
             TaskLibrary::User { library_uuid } => match task_type {
                 TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
                 TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
                 TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
                 _ => return Err(anyhow::Error::msg("unsupported task")),
             },
+
+            // system-wide tasks
             TaskLibrary::System => match task_type {
                 TaskType::CacheScrub => Box::pin(cache_scrub(config, registry)),
                 _ => return Err(anyhow::Error::msg("unsupported task")),
