@@ -22,11 +22,11 @@ use crate::{
         ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
     },
     task::{
-        ESTaskService, TaskLibrary, clean::clean_library, msg::TaskMsg, scan::scan_library,
+        ESTaskService, clean::clean_library, msg::TaskMsg, scan::scan_library,
         scrub::cache_scrub,
     },
 };
-use api::task::{Task, TaskStatus, TaskType, TaskUid};
+use api::task::{Task, TaskStatus, TaskType, TaskUid, TaskLibrary};
 use common::config::ESConfig;
 
 // task service

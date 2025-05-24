@@ -272,7 +272,7 @@ impl DbBackend for MariaDBBackend {
 
         let _mr = self.locks.media.read().await;
 
-        let mut result = r"
+        let result = r"
             SELECT media_uuid FROM media"
             .run(self.pool.get_conn().await?)
             .await?

@@ -12,8 +12,8 @@ use tracing::instrument;
 use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
     db::msg::DbMsg,
-    http::{auth::CurrentUser, svc::HttpEndpoint, AppError},
-    task::{TaskLibrary, msg::TaskMsg},
+    http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
+    task::msg::TaskMsg,
 };
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
 
@@ -762,7 +762,9 @@ pub(super) async fn start_task(
         .send(
             TaskMsg::StartTask {
                 resp: tx,
-                library: TaskLibrary::User {library_uuid: message.library_uuid},
+                library: TaskLibrary::User {
+                    library_uuid: message.library_uuid,
+                },
                 task_type: message.task_type,
                 uid: TaskUid::User { uid },
             }
@@ -795,7 +797,9 @@ pub(super) async fn stop_task(
         .send(
             TaskMsg::StopTask {
                 resp: tx,
-                library: TaskLibrary::User {library_uuid: message.library_uuid},
+                library: TaskLibrary::User {
+                    library_uuid: message.library_uuid,
+                },
             }
             .into(),
         )
@@ -815,8 +819,13 @@ pub(super) async fn show_tasks(
     let state = state.clone();
     let uid = current_user.uid.clone();
 
-    if !state.owns_library(&uid, &message.library_uuid).await? {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    match message.library {
+        TaskLibrary::User { library_uuid } => {
+            if !state.owns_library(&uid, &library_uuid).await? {
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+        }
+        TaskLibrary::System => {}
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -826,7 +835,7 @@ pub(super) async fn show_tasks(
         .send(
             TaskMsg::ShowTasks {
                 resp: tx,
-                library: TaskLibrary::User {library_uuid: message.library_uuid},
+                library: message.library,
             }
             .into(),
         )

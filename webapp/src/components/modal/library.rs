@@ -3,7 +3,7 @@ use gloo_timers::callback::Timeout;
 
 use crate::{
     common::local_time,
-    components::modal::{ModalSize, ModernModal, MODAL_STACK},
+    components::modal::{MODAL_STACK, ModalSize, ModernModal},
 };
 
 use api::{library::LibraryUuid, task::*};
@@ -185,8 +185,12 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
     let mut update_signal = props.update_signal;
     let mut status_message = use_signal(String::new);
 
-    let task_future =
-        use_resource(move || async move { show_tasks(&ShowTasksReq { library_uuid }).await });
+    let task_future = use_resource(move || async move {
+        show_tasks(&ShowTasksReq {
+            library: TaskLibrary::User { library_uuid },
+        })
+        .await
+    });
 
     let tasks = &*task_future.read();
 
@@ -286,8 +290,12 @@ pub struct TaskHistoryModalProps {
 pub fn TaskHistoryModal(props: TaskHistoryModalProps) -> Element {
     let library_uuid = props.library_uuid;
 
-    let task_history_future =
-        use_resource(move || async move { show_tasks(&ShowTasksReq { library_uuid }).await });
+    let task_history_future = use_resource(move || async move {
+        show_tasks(&ShowTasksReq {
+            library: TaskLibrary::User { library_uuid },
+        })
+        .await
+    });
 
     let status_signal = use_signal(String::new);
 

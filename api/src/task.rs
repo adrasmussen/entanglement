@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 use crate::{endpoint, library::LibraryUuid};
 
 // structs and types
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum TaskLibrary {
+    User { library_uuid: LibraryUuid },
+    System,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum TaskType {
@@ -73,7 +78,7 @@ endpoint!(ShowTasks);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowTasksReq {
-    pub library_uuid: LibraryUuid,
+    pub library: TaskLibrary,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -82,6 +87,15 @@ pub struct ShowTasksResp {
 }
 
 // display impls so that we can output these cleanly to logs
+impl Display for TaskLibrary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+            Self::User { library_uuid } => write!(f, "{library_uuid}"),
+            Self::System => write!(f, "system"),
+        }
+    }
+}
+
 impl Display for TaskType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")

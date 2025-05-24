@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::local_time,
-    components::modal::{Modal, MODAL_STACK},
+    components::modal::{MODAL_STACK, Modal},
 };
 use api::{library::*, task::*};
 
@@ -53,7 +53,10 @@ fn TaskBarInner(props: TaskBarInnerProps) -> Element {
         let library_uuid = library_uuid();
         update_signal();
 
-        show_tasks(&ShowTasksReq { library_uuid }).await
+        show_tasks(&ShowTasksReq {
+            library: TaskLibrary::User { library_uuid },
+        })
+        .await
     });
 
     let task_data = &*task_future.read();

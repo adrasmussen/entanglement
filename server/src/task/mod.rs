@@ -1,13 +1,8 @@
-use std::fmt::Display;
-
 use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::service::ESInner;
-use api::{
-    library::LibraryUuid,
-    task::{Task, TaskStatus, TaskType, TaskUid},
-};
+use api::task::{Task, TaskLibrary, TaskStatus, TaskType, TaskUid};
 
 mod clean;
 pub mod msg;
@@ -18,21 +13,6 @@ pub mod svc;
 
 // pub mod dedup;
 // pub mod dateparse;
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum TaskLibrary {
-    User { library_uuid: LibraryUuid },
-    System,
-}
-
-impl Display for TaskLibrary {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-            Self::User { library_uuid } => write!(f, "{library_uuid}"),
-            Self::System => write!(f, "system"),
-        }
-    }
-}
 
 #[async_trait]
 pub trait ESTaskService: ESInner {
