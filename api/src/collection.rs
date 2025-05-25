@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint, media::MediaUuid, search::SearchFilter};
+use crate::{http_endpoint, media::MediaUuid, search::SearchFilter};
 
 // structs and types
 
@@ -29,7 +29,7 @@ pub struct CollectionUpdate {
 // messages
 
 // create a new collection
-endpoint!(AddCollection);
+http_endpoint!(AddCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddCollectionReq {
@@ -45,7 +45,7 @@ pub struct AddCollectionResp {
 //
 // note that we fetch the media with
 // a blank filter in another call
-endpoint!(GetCollection);
+http_endpoint!(GetCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetCollectionReq {
@@ -58,7 +58,7 @@ pub struct GetCollectionResp {
 }
 
 // delete an collection
-endpoint!(DeleteCollection);
+http_endpoint!(DeleteCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteCollectionReq {
@@ -69,7 +69,7 @@ pub struct DeleteCollectionReq {
 pub struct DeleteCollectionResp {}
 
 // change collection properties
-endpoint!(UpdateCollection);
+http_endpoint!(UpdateCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateCollectionReq {
@@ -81,7 +81,7 @@ pub struct UpdateCollectionReq {
 pub struct UpdateCollectionResp {}
 
 // add media to an collection
-endpoint!(AddMediaToCollection);
+http_endpoint!(AddMediaToCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddMediaToCollectionReq {
@@ -93,7 +93,7 @@ pub struct AddMediaToCollectionReq {
 pub struct AddMediaToCollectionResp {}
 
 // remove media from an collection
-endpoint!(RmMediaFromCollection);
+http_endpoint!(RmMediaFromCollection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RmMediaFromCollectionReq {
@@ -107,7 +107,7 @@ pub struct RmMediaFromCollectionResp {}
 // search collections
 //
 // defaults to ""
-endpoint!(SearchCollections);
+http_endpoint!(SearchCollections);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
@@ -120,7 +120,7 @@ pub struct SearchCollectionsResp {
 }
 
 // search media inside a particular collection
-endpoint!(SearchMediaInCollection);
+http_endpoint!(SearchMediaInCollection);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionReq {

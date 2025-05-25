@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     collection::{CollectionUuid, SearchMediaInCollectionReq},
     comment::CommentUuid,
-    endpoint,
+    http_endpoint,
     library::SearchMediaInLibraryReq,
     media::{Media, MediaUuid, SearchMediaReq},
     sort::SortMethod,
@@ -166,7 +166,7 @@ pub struct SearchResponse {
     pub comments: Vec<CommentUuid>,
 }
 
-endpoint!(BatchSearchAndSort);
+http_endpoint!(BatchSearchAndSort);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BatchSearchAndSortReq {

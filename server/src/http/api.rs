@@ -850,6 +850,8 @@ pub(super) async fn show_tasks(
 //
 // there are probably a dozen ways to do this better, including moving logic
 // into the database calls, avoiding an expensive copy at the end, and so on
+//
+// TODO -- look into streaming responses and lazy loading in the UI
 #[instrument(skip_all)]
 pub(super) async fn batch_search_and_sort(
     State(state): State<Arc<HttpEndpoint>>,

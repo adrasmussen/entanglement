@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint, library::LibraryUuid};
+use crate::{http_endpoint, library::LibraryUuid};
 
 // structs and types
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -51,7 +51,7 @@ pub struct Task {
 // messages
 
 // start a task on a library
-endpoint!(StartTask);
+http_endpoint!(StartTask);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StartTaskReq {
@@ -63,7 +63,7 @@ pub struct StartTaskReq {
 pub struct StartTaskResp {}
 
 // stop a running task
-endpoint!(StopTask);
+http_endpoint!(StopTask);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct StopTaskReq {
@@ -74,7 +74,7 @@ pub struct StopTaskReq {
 pub struct StopTaskResp {}
 
 // show tasks
-endpoint!(ShowTasks);
+http_endpoint!(ShowTasks);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ShowTasksReq {

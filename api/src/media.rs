@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    collection::CollectionUuid, comment::CommentUuid, endpoint, library::LibraryUuid,
+    collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
     search::SearchFilter,
 };
 
@@ -45,7 +45,7 @@ pub struct MediaUpdate {
 // messages
 
 // fetch the media information for a particular file
-endpoint!(GetMedia);
+http_endpoint!(GetMedia);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetMediaReq {
@@ -60,7 +60,7 @@ pub struct GetMediaResp {
 }
 
 // update the metadata
-endpoint!(UpdateMedia);
+http_endpoint!(UpdateMedia);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateMediaReq {
@@ -75,7 +75,7 @@ pub struct UpdateMediaResp {}
 //
 // note that we can implement a more complicated
 // filter struct later
-endpoint!(SearchMedia);
+http_endpoint!(SearchMedia);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchMediaReq {
@@ -88,7 +88,7 @@ pub struct SearchMediaResp {
 }
 
 // find similar media
-endpoint!(SimilarMedia);
+http_endpoint!(SimilarMedia);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SimilarMediaReq {

@@ -1,6 +1,8 @@
-use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 
 pub mod auth;
 pub mod collection;
@@ -33,6 +35,10 @@ pub const HTTP_URL_ROOT: &str = "entanglement";
 // some databases do not support a column type of set/vec/list, so we need a consistent
 // method to convert String <> HashSet.  fixing the folding scheme/separator means that
 // we can use substring methods in the database to check for elements in the set.
+//
+// for relational dbs, this is obviously an antipattern -- but a tags table and pivot
+// would be a lot of effort for relatively little gain, not to mention making the full
+// text searches much more complicated
 //
 // these methods are also used in the webapp, which adds the awkward requirement that
 // the separator be commonly-found on keyboards.  eventually, better text input methods
@@ -122,7 +128,7 @@ impl From<anyhow::Error> for WebError {
 // create the future directly or by providing a String that is interpreted by the
 // browser (img or a tags)
 #[macro_export]
-macro_rules! endpoint {
+macro_rules! http_endpoint {
     ($name:ident) => {
         paste::paste!{
             pub async fn [<$name:snake>](req: &[<$name:camel Req>]) -> Result<[<$name:camel Resp>], $crate::WebError> {

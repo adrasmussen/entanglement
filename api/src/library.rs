@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint, media::MediaUuid, search::SearchFilter};
+use crate::{http_endpoint, media::MediaUuid, search::SearchFilter};
 
 // structs and types
 
@@ -36,7 +36,7 @@ pub struct LibraryScanJob {
 // messages
 
 // get the details for a particular library
-endpoint!(GetLibrary);
+http_endpoint!(GetLibrary);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetLibraryReq {
@@ -49,7 +49,7 @@ pub struct GetLibraryResp {
 }
 
 // find libraries
-endpoint!(SearchLibraries);
+http_endpoint!(SearchLibraries);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchLibrariesReq {
@@ -62,7 +62,7 @@ pub struct SearchLibrariesResp {
 }
 
 // find media inside of a library
-endpoint!(SearchMediaInLibrary);
+http_endpoint!(SearchMediaInLibrary);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInLibraryReq {

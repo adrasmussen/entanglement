@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{endpoint, media::MediaUuid};
+use crate::{http_endpoint, media::MediaUuid};
 
 // structs and types
 
@@ -21,7 +21,7 @@ pub struct Comment {
 // note that this exposes an awkward abstraction layer violation:
 // the uid and timestamp both are determined by the http service,
 // and so are ignored by this endpoint
-endpoint!(AddComment);
+http_endpoint!(AddComment);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AddCommentReq {
@@ -34,7 +34,7 @@ pub struct AddCommentResp {
 }
 
 // fetch comments for media
-endpoint!(GetComment);
+http_endpoint!(GetComment);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetCommentReq {
@@ -47,7 +47,7 @@ pub struct GetCommentResp {
 }
 
 // delete a comment
-endpoint!(DeleteComment);
+http_endpoint!(DeleteComment);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteCommentReq {
@@ -58,7 +58,7 @@ pub struct DeleteCommentReq {
 pub struct DeleteCommentResp {}
 
 // update a comment
-endpoint!(UpdateComment);
+http_endpoint!(UpdateComment);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateCommentReq {
