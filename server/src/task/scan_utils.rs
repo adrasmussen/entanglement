@@ -114,7 +114,7 @@ pub struct ScanContext {
 impl Drop for ScanContext {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_base).is_err() {
-            let _ = span!(Level::INFO, "scan_context_drop").entered();
+            let _span = span!(Level::INFO, "scan_context_drop").entered();
             warn!("failed to clean up scratch base directory");
         }
     }
@@ -147,7 +147,7 @@ pub struct ScanFile {
 impl Drop for ScanFile {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_dir).is_err() {
-            let _ = span!(Level::INFO, "scan_file_drop", path = ?self.path).entered();
+            let _span = span!(Level::INFO, "scan_file_drop", path = ?self.path).entered();
             warn!("failed to clean up scratch directory");
             self.context.warnings.fetch_add(1, Ordering::Relaxed);
         }

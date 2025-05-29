@@ -1,23 +1,19 @@
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
     Arc,
+    atomic::{AtomicI64, Ordering},
 };
 
 use anyhow::Result;
 use dashmap::DashSet;
 
-use tokio::{
-    fs::{create_dir_all, remove_dir_all},
-    task::JoinSet,
-    sync::oneshot::channel,
-};
-use tracing::{debug, error, instrument, span, warn, Instrument, Level};
+use tokio::{fs::create_dir_all, sync::oneshot::channel, task::JoinSet};
+use tracing::{Instrument, Level, debug, error, instrument, span, warn};
 use walkdir::WalkDir;
 
 use crate::{
     db::msg::DbMsg,
     service::{ESMRegistry, ServiceType},
-    task::scan_utils::{get_path_and_metadata, ScanContext, ScanFile},
+    task::scan_utils::{ScanContext, ScanFile, get_path_and_metadata},
 };
 use api::library::{LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
@@ -137,7 +133,8 @@ pub async fn scan_library(
     // cleanup
     tasks.join_all().await;
 
-    remove_dir_all(&context.scratch_base).await?;
+    // handled via Drop
+    // remove_dir_all(&context.scratch_base).await?;
 
     let file_count = context.file_count.load(Ordering::Relaxed);
     let warnings = context.warnings.load(Ordering::Relaxed);

@@ -37,7 +37,7 @@ pub struct CleanContext {
 impl Drop for CleanContext {
     fn drop(&mut self) {
         if std::fs::remove_dir_all(&self.scratch_base).is_err() {
-            let _ = span!(Level::INFO, "clean_context_drop").entered();
+            let _span = span!(Level::INFO, "clean_context_drop").entered();
             warn!("failed to clean up scratch base directory");
         }
     }
@@ -130,7 +130,8 @@ pub async fn clean_library(
 
     tasks.join_all().await;
 
-    remove_dir_all(&context.scratch_base).await?;
+    // handled via Drop
+    // remove_dir_all(&context.scratch_base).await?;
 
     let warnings = warnings.load(Ordering::Relaxed);
 
@@ -188,6 +189,8 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     // while we could have the cleaner job delete any db entries for media that has vanished,
     // it would lead to moved media being deleted if the scan wasn't called first.  thus, we
     // tag it and have a separate task to clean those entries out.
+    //
+    // TODO -- option to delete automatically (don't forget to update StartTaskModal)
     debug!("original media validation");
 
     if !try_exists(&path).await? {
@@ -215,6 +218,8 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
 
         rx.await??;
 
+        // fail here (generating a warning by the Walkdir-transvering thread) so that
+        // we don't try and subsequently fail any of the later steps
         return Err(anyhow::Error::msg("missing media"));
     }
 

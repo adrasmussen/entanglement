@@ -183,6 +183,7 @@ impl ESTaskService for TaskRunner {
     ) -> Result<()> {
         debug!("task pre-startup verification");
         let db_svc_sender = self.registry().get(&ServiceType::Db)?;
+        let task_svc_sender = self.registry.get(&ServiceType::Task)?;
 
         // library verification
         if let TaskLibrary::User { library_uuid } = library {
@@ -246,20 +247,20 @@ impl ESTaskService for TaskRunner {
                 TaskType::ScanLibrary => Box::pin(scan_library(config, registry, library_uuid)),
                 TaskType::CleanLibrary => Box::pin(clean_library(config, registry, library_uuid)),
                 TaskType::RunScripts => Box::pin(sleep_task(library_uuid)),
-                _ => return Err(anyhow::Error::msg("unsupported task")),
+                _ => return Err(anyhow::Error::msg("unsupported user task")),
             },
 
             // system-wide tasks
             TaskLibrary::System => match task_type {
                 TaskType::CacheScrub => Box::pin(cache_scrub(config, registry)),
-                _ => return Err(anyhow::Error::msg("unsupported task")),
+                _ => return Err(anyhow::Error::msg("unsupported system task")),
             },
         };
 
         info!({ start = start }, "starting task");
 
         // spawn the future inside of the infalliable watcher and send the result back via ESM
-        let (_handle, cancel) = watch_task(start, library, db_svc_sender, task_future);
+        let (_handle, cancel) = watch_task(start, library, task_svc_sender, task_future);
 
         // we still have the write lock on the currently running task, but in principle the task
         // may have already completed and sent the message to complete_task().  thus, even if we
