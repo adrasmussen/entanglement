@@ -32,8 +32,7 @@ use common::config::ESConfig;
 // task service
 //
 // several of the common library operations (scan, clean, run scripts, etc) take too long
-// for a single frontend api call.  instead, they are managed by this service, and send
-// their logs directly to the database.
+// for a single frontend api call.  instead, they are managed by this service.
 pub struct TaskService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<EsmReceiver>>,

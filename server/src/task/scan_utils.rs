@@ -40,7 +40,11 @@ use common::{
 // this module is mostly tooling for running library scans, including convenience functions,
 // a global scan context, and a per-file context that automatically drops any filesystem
 // resources needed to process the incoming media.
-const KNOWN_EXTENSIONS: &[&str] = &["jpg", "png", "tiff", "mp4"];
+#[derive(Clone, Debug)]
+enum MediaType {
+    Image,
+    Video,
+}
 
 pub async fn get_path_and_metadata(
     entry: walkdir::Result<DirEntry>,
@@ -137,7 +141,7 @@ impl Drop for ScanContext {
 pub struct ScanFile {
     context: Arc<ScanContext>,
     path: PathBuf,
-    ext: String,
+    mtype: MediaType,
     pathstr: String,
     metadata: Metadata,
     hash: String,
@@ -155,8 +159,6 @@ impl Drop for ScanFile {
 }
 
 impl ScanFile {
-    // since this struct is designed for the scan task specifically, we can return Ok(None) if we
-    // conclude that there is no actual work to be done for that file
     pub async fn new(
         context: Arc<ScanContext>,
         path: PathBuf,
@@ -182,10 +184,14 @@ impl ScanFile {
             .map(|s| s.to_lowercase())
             .ok_or_else(|| anyhow::Error::msg("failed to extract file extention"))?;
 
-        if !KNOWN_EXTENSIONS.contains(&ext.as_str()) {
-            debug!({ path = pathstr }, "unknown file extension");
-            return Ok(None);
-        }
+        let mtype = match ext.as_str() {
+            "jpg" | "png" | "tiff" => MediaType::Image,
+            "mp4" | "avi" => MediaType::Video,
+            _ => {
+                debug!({ path = pathstr }, "unknown file extension");
+                return Ok(None);
+            }
+        };
 
         // check if the file exists in the database first, and if so, early return before we do
         // any of the actual computation (hashes, thumbnails, etc)
@@ -208,7 +214,7 @@ impl ScanFile {
         Ok(Some(ScanFile {
             context,
             path,
-            ext,
+            mtype,
             pathstr,
             metadata,
             hash,
@@ -223,7 +229,8 @@ impl ScanFile {
     // in the current implementation, the caller handles instrumentation; this keeps the
     // scan and any of its Errors in the same tracing span.
     pub async fn timed_register(&self) -> Result<()> {
-        //let timeout = self.context.config.scan_timeout;
+        // TODO -- add this
+        // let timeout = self.context.config.scan_timeout;
         let register_timeout = Duration::from_secs(300);
 
         timeout(register_timeout, self.register()).await?
@@ -310,10 +317,9 @@ impl ScanFile {
         //
         // note that the extensions are also used by the http service to guess the mime type of
         // the media files; see http/stream.rs for details.
-        let media_data: MediaData = match self.ext.as_str() {
-            "jpg" | "png" | "tiff" => process_image(&self.path).await?,
-            "mp4" => process_video(&self.path, &self.scratch_dir).await?,
-            _ => return Err(anyhow::Error::msg("no metadata collector for extension")),
+        let media_data: MediaData = match self.mtype {
+            MediaType::Image => process_image(&self.path).await?,
+            MediaType::Video => process_video(&self.path, &self.scratch_dir).await?,
         };
 
         // once we have the metadata, we assemble the Media struct and send it to the database
@@ -351,7 +357,7 @@ impl ScanFile {
     // to actually access the media, we use symlinks.  this allows the http server to function like
     // an object store without needing to reorganize the filesystem. see also http/stream.rs.
     //
-    // currently this step consists of two steps, but in principle any postprocessing needed to use
+    // currently this part consists of two steps, but in principle any postprocessing needed to use
     // media should go here as well.  it may be that we split out this function if its internals are
     // useful for the dedup or cleaning tasks.
     #[instrument(skip(self, media_metadata))]
@@ -368,7 +374,7 @@ impl ScanFile {
         // thumbnail
         let thumbnail_path = media_thumbnail_path(self.context.config.clone(), media_uuid);
 
-        // if the thumbnail already exists (because we are re-running create_links() due to moved media), then
+        // if the thumbnail already exists (because we are re-running install() due to moved media), then
         // don't recreate the thmbnail
         if try_exists(&thumbnail_path).await? {
             return Ok(());
