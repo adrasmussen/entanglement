@@ -1,16 +1,21 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use tokio::{sync::Mutex, task::spawn};
 use tracing::{debug, error, info, instrument};
 
-use crate::db::msg::DbMsg;
-use crate::service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType};
-use common::config::ESConfig;
-use common::db::DbBackend;
+use crate::{
+    db::msg::DbMsg,
+    service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
+};
+use common::{config::ESConfig, db::DbBackend};
 
+// database service
+//
+// in the entanglement service model, the logic that can actually respond to requests is the
+// inner struct, which is turn just a translation layer between the internal messages and
+// whatever logic the database driver exposes.
 pub struct DbService<B: DbBackend> {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<EsmReceiver>>,

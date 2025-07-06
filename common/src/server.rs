@@ -2,6 +2,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+// entanglement server configuration subtables
+//
+// mostly to keep parity with the auth/db parts, we split out
+// these structs to help with the readability in config.rs
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FsConfig {
     // read-only source path where media can be located

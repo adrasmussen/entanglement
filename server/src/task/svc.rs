@@ -233,8 +233,6 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        //
-        // TODO -- cache scrub, recalculate media
         let start = Local::now().timestamp();
         let config = self.config.clone();
         let registry = self.registry.clone();

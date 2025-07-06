@@ -13,6 +13,15 @@ pub mod search;
 pub mod sort;
 pub mod task;
 
+// entanglment api
+//
+// due to the dubiously sane decision to use json instead of an intelligent format for
+// the webapp/server communication, we are forced to have some sort of common schema so
+// that the two binary crates can agree on the shape of the data.
+//
+// this crate also defines several constants that connect the filesystem layout to the
+// http requests, as well as the reverse proxy url root
+
 // filesystem/http paths
 //
 // these paths are used to control where under the media_srvdir the server will create

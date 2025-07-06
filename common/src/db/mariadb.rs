@@ -20,6 +20,18 @@ use api::{
     unfold_set,
 };
 
+// mariadb backend
+//
+// it is almost certainly the case that this backend is not laid out correctly,
+// which is almost trivially true because we are using set folding instead of
+// a tag table with a pivot
+//
+// worse, because of the overlapping indices, we have to manually RwLock the
+// tables to prevent massive collision pileup when adding media to the system.
+//
+// on the flip side, the queries are relatively straightforward to reason about
+// and have an easy realization in terms of the api::search::SearchFilter tools.
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MariaDbConfig {
     pub url: String,

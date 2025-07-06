@@ -2,7 +2,6 @@ use std::{fmt::Display, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthnProvider;
 use crate::config::ESConfig;
@@ -10,9 +9,6 @@ use crate::config::ESConfig;
 // http mutual tls/x509 certificate auth
 //
 // see server::http::auth.rs for the middleware that implements the logic
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CertAuthnConfig {}
-
 #[derive(Debug)]
 pub struct CertAuthn {}
 

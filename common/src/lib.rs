@@ -11,6 +11,16 @@ pub mod db;
 pub mod media;
 pub mod server;
 
+// entanglement common library
+//
+// this library exists to hold any logic that is shared between the server and other tools. it
+// cannot be pulled into the webapp without significant feature-flagging and refactoring due to
+// tokio not supporting a wasm build.
+//
+// the intent is that the cli tools should share as much of their code as possible with the
+// server, since they exist to provide access to non-http api endpoints or to verify that some
+// external service (i.e. LDAP) is functioning in an expected way.
+
 // string validation
 //
 // we sanitize the inputs both to avoid awkward issues in the frontend as well as ensure that
