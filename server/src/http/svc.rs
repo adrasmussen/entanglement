@@ -25,7 +25,7 @@ use hyper::{
 use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use regex::Regex;
 use rustls::{
-    RootCertStore, ServerConfig, ServerConnection,
+    RootCertStore, ServerConfig,
     server::{NoClientAuth, WebPkiClientVerifier, danger::ClientCertVerifier},
 };
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
