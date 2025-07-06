@@ -7,28 +7,22 @@ use serde::{Deserialize, Serialize};
 use crate::auth::AuthnProvider;
 use crate::config::ESConfig;
 
-// reverse proxy authentication
+// http mutual tls/x509 certificate auth
 //
 // see server::http::auth.rs for the middleware that implements the logic
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ProxyHeaderConfig {
-    // the header passed down from the proxy, must be all lowercase
-    pub header: String,
-
-    // the subject cn field in the client x509 cert used by the proxy
-    pub proxy_cn: String,
-}
+pub struct CertAuthnConfig {}
 
 #[derive(Debug)]
-pub struct ProxyAuth {}
+pub struct CertAuthn {}
 
 #[async_trait]
-impl AuthnProvider for ProxyAuth {
+impl AuthnProvider for CertAuthn {
     fn new(_config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
-        Ok(ProxyAuth {})
+        Ok(CertAuthn {})
     }
 
     async fn authenticate_user(&self, _uid: String, _password: String) -> Result<bool> {
@@ -40,8 +34,8 @@ impl AuthnProvider for ProxyAuth {
     }
 }
 
-impl Display for ProxyAuth {
+impl Display for CertAuthn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "http reverse proxy header authentication")
+        write!(f, "http x509/mtls authentication")
     }
 }

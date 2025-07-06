@@ -11,12 +11,17 @@ use serde::{Deserialize, Serialize};
 use tokio::fs::read_to_string;
 use toml;
 
-use crate::auth::{AuthnBackend, AuthzBackend};
+use crate::auth::{AuthnProvider, AuthzProvider};
 use crate::config::ESConfig;
 
 // toml file authentication and authorization
 //
 // this is the simplest possible static database of users and groups
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TomlFileConfig {
+    pub filename: PathBuf,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TomlAuthnFile {
     filename: PathBuf,
@@ -44,7 +49,7 @@ impl TomlAuthnFile {
 }
 
 #[async_trait]
-impl AuthnBackend for TomlAuthnFile {
+impl AuthnProvider for TomlAuthnFile {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
@@ -112,7 +117,7 @@ impl TomlAuthzFile {
 }
 
 #[async_trait]
-impl AuthzBackend for TomlAuthzFile {
+impl AuthzProvider for TomlAuthzFile {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,

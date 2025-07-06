@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand, ValueEnum, arg, command};
 
 use common::{
     auth::{
-        AuthnBackend, AuthzBackend,
+        AuthnProvider, AuthzProvider,
         ldap::LdapAuthz,
         tomlfile::{TomlAuthnFile, TomlAuthzFile},
     },
@@ -13,12 +13,12 @@ use common::{
 };
 
 #[derive(Clone, Debug, ValueEnum)]
-enum CliAuthn {
+enum AuthnBackend {
     TomlFile,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
-enum CliAuthz {
+enum AuthzBackend {
     Ldap,
     TomlFile,
 }
@@ -40,7 +40,7 @@ enum Commands {
     Authz {
         /// backend to query
         #[arg(short, long)]
-        backend: CliAuthz,
+        backend: AuthzBackend,
 
         #[command(subcommand)]
         authzcmd: AuthzCommands,
@@ -50,7 +50,7 @@ enum Commands {
     Authn {
         /// backend to query
         #[arg(short, long)]
-        backend: CliAuthn,
+        backend: AuthnBackend,
 
         #[command(subcommand)]
         authncmd: AuthnCommands,
@@ -108,9 +108,9 @@ async fn main() -> Result<()> {
     if let Some(cmd) = &cli.command {
         match cmd {
             Commands::Authz { backend, authzcmd } => {
-                let backend: Box<dyn AuthzBackend> = match backend {
-                    CliAuthz::Ldap => Box::new(LdapAuthz::new(config.clone())?),
-                    CliAuthz::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
+                let backend: Box<dyn AuthzProvider> = match backend {
+                    AuthzBackend::Ldap => Box::new(LdapAuthz::new(config.clone())?),
+                    AuthzBackend::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
                 };
 
                 match authzcmd {
@@ -127,8 +127,8 @@ async fn main() -> Result<()> {
                 }
             }
             Commands::Authn { backend, authncmd } => {
-                let backend: Box<dyn AuthnBackend> = match backend {
-                    CliAuthn::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),
+                let backend: Box<dyn AuthnProvider> = match backend {
+                    AuthnBackend::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),
                 };
 
                 match authncmd {

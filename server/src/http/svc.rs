@@ -9,40 +9,49 @@ use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use axum::{
+    Router,
     extract::Request,
     middleware,
     response::Redirect,
     routing::{get, post},
-    Router,
 };
 use futures::{
+    FutureExt, TryFutureExt,
     stream::{FuturesUnordered, StreamExt},
-    FutureExt,
 };
-use hyper::{body::Incoming, server::conn::http2::Builder, service::service_fn};
+use hyper::{
+    body::Incoming, header::HeaderName, server::conn::http2::Builder, service::service_fn,
+};
 use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use regex::Regex;
+use rustls::{
+    RootCertStore, ServerConfig, ServerConnection,
+    server::{NoClientAuth, WebPkiClientVerifier, danger::ClientCertVerifier},
+};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio::{
     net::TcpListener,
     sync::Mutex,
-    task::{spawn, JoinHandle},
+    task::{JoinHandle, spawn},
     time::timeout,
 };
+use tokio_rustls::TlsAcceptor;
 use tower::Service;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 use tracing::{debug, error, info, instrument, warn};
+use x509_certificate::X509Certificate;
 
 use crate::{
-    http::{api::*, auth::proxy_auth, stream::*},
+    http::{api::*, auth::*, stream::*},
     service::{
         ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, EsmSender, ServiceType,
     },
 };
 use api::HTTP_URL_ROOT;
-use common::config::ESConfig;
+use common::config::{AuthnBackend, ESConfig};
 
 // http service
 //
@@ -259,26 +268,93 @@ impl HttpEndpoint {
         // the app router's own fallback.
         //
         // see also api/lib.rs for endpoint functions that depend on the nesting paths
-        //
-        // TODO -- generalize the auth middleware correctly
-        let router = Router::new()
+        let mut router = Router::new()
             .nest(&format!("/{app_url_root}/app"), app_router)
             .nest(&format!("/{app_url_root}/media"), media_router)
             .nest(&format!("/{app_url_root}/api"), api_router)
             .fallback(move || async move { Redirect::permanent(&format!("/{app_url_root}/app")) })
-            .layer(TraceLayer::new_for_http())
-            .route_layer(middleware::from_fn_with_state(
-                config.proxyheader.clone().unwrap().header,
-                proxy_auth,
-            ));
+            .layer(TraceLayer::new_for_http());
 
-        // everything from here follows the normal hyper/axum on tokio setup
-        let service = service_fn(move |request: Request<Incoming>| router.clone().call(request));
+        // auth middleware
+        if config.authn_backend == AuthnBackend::ProxyHeader {
+            let config = config
+                .proxyheader
+                .clone()
+                .expect("http server configured for proxy header auth but no config found");
 
-        // for the moment, we just panic if the socket is in use
+            let data = ProxyAuthData {
+                header_key: HeaderName::from_lowercase(config.header.to_lowercase().as_bytes())
+                    .expect(""),
+                cn: config.proxy_cn,
+            };
+
+            router = router.route_layer(middleware::from_fn_with_state(data, proxy_auth));
+        }
+
+        if config.authn_backend == AuthnBackend::X509Cert {
+            router = router.route_layer(middleware::from_fn(cert_auth));
+        }
+
+        // tls setup
+        //
+        // basically everything in this section is failable in some way, but since any failure means that the server
+        // is unable to function normally, it is acceptable to just expect() everywhere
+
+        // set up the server key and cert
+        let key: PrivateKeyDer =
+            PemObject::from_pem_file(&config.http.key).expect("http server failed to load key");
+
+        let cert: Vec<CertificateDer> = CertificateDer::pem_file_iter(&config.http.cert)
+            .expect("http server failed to read cert")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("http server failed to load cert");
+
+        // client mtls authentication
+        //
+        // for the authn backends that require mtls, we need to configure a certificate authority store and a verifier
+        // so that we can trust the session data.  however, if we aren't using those authn backends, we don't even
+        // offer the chance for the client to present a certificate
+        let mut client_ca_root_store = RootCertStore::empty();
+
+        let (get_cert, client_cert_verifier): (bool, Arc<dyn ClientCertVerifier>) =
+            if config.authn_backend == AuthnBackend::ProxyHeader
+                || config.authn_backend == AuthnBackend::X509Cert
+            {
+                let client_ca_path = config.http.client_ca_cert.clone().expect(
+                    "http server configured for proxy header auth but no client ca cert specified",
+                );
+
+                let ca_cert: Vec<CertificateDer> = CertificateDer::pem_file_iter(client_ca_path)
+                    .expect("http server failed to read client ca cert")
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("http server failed to load client ca cert");
+
+                for c in ca_cert {
+                    client_ca_root_store
+                        .add(c)
+                        .expect("http server failed to add client ca cert to root store")
+                }
+
+                (
+                    true,
+                    WebPkiClientVerifier::builder(client_ca_root_store.into())
+                        .build()
+                        .expect("http server failed to set up client verifier"),
+                )
+            } else {
+                (false, Arc::new(NoClientAuth {}))
+            };
+
+        let tls_config = ServerConfig::builder()
+            .with_client_cert_verifier(client_cert_verifier)
+            .with_single_cert(cert, key)
+            .expect("http server failed to configure tls");
+
         let listener = TcpListener::bind(socket)
             .await
-            .expect("hyper listener failed to bind tcp socket");
+            .expect("http listener failed to bind tcp socket");
+
+        let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
         // the main http server loop
         //
@@ -300,12 +376,41 @@ impl HttpEndpoint {
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(20));
 
             loop {
+                let router = router.clone();
+
                 tokio::select! {
                     // attempt to accept a new connection
-                    accept_result = listener.accept() => {
+                    accept_result = listener.accept().and_then(|(stream, _remote_addr)| tls_acceptor.accept(stream)) => {
                         match accept_result {
-                            Ok((stream, _)) => {
+                            Ok(stream) => {
+                                // since we are using the connection details as inputs to the auth middleware, we
+                                // take a somewhat more roundabout path towards building the service_fn than the
+                                // basic tokio/hyper/axum configuration
+                                //
+                                // note that we could check the proxy user here if we wanted, but the ClientCn
+                                // extension means that there is one code path
+                                let conn_cn = if get_cert {
+                                    let (_io, server_session) = stream.get_ref();
+
+                                    server_session.peer_certificates().and_then(|certs| {
+                                        certs.first().and_then(|data| {
+                                            X509Certificate::from_der(data)
+                                                .ok()
+                                                .and_then(|cert| cert.subject_common_name())
+                                        })
+                                    })
+                                } else {
+                                    None
+                                };
+
+                                let service = service_fn(move |mut request: Request<Incoming>| {
+                                    if let Some(cn) = &conn_cn {
+                                        request.extensions_mut().insert(ClientCn {cn: cn.clone()});
+                                    }
+                                    router.clone().call(request)});
+
                                 let service = service.clone();
+
                                 let io = TokioIo::new(stream);
 
                                 // the connection future that enforces the timeout, as well
@@ -324,7 +429,7 @@ impl HttpEndpoint {
                                         Ok(Ok(())) => (),
                                         Ok(Err(err)) => {
                                             if format!("{err:?}").contains("KeepAliveTimedOut") {
-                                                debug!({error = ?err}, "http connection timed out")
+                                                debug!({error = ?err}, "http connection timed out (inner)")
                                             } else if format!("{err:?}").contains("Io") {
                                                 debug!({error = ?err}, "io error")
                                             } else {
@@ -332,13 +437,14 @@ impl HttpEndpoint {
                                             }
                                         },
                                         Err(err) => {
-                                            debug!({error = ?err}, "http connection timed out");
+                                            debug!({error = ?err}, "http connection timed out (outer)");
                                         }
                                     }
                                 };
 
                                 // spawn the connection future and collect the join handle
                                 connection_tasks.push(spawn(conn_fut));
+
                             },
                             Err(err) => {
                                 error!({error = ?err}, "error accepting connection");

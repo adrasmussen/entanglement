@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use api::{media::MediaUuid, LINK_PATH, THUMBNAIL_PATH};
+use api::{LINK_PATH, THUMBNAIL_PATH, media::MediaUuid};
 use common::config::ESConfig;
 
 // legacy file service

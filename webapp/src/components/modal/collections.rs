@@ -5,11 +5,11 @@ use gloo_timers::callback::Timeout;
 use tracing::error;
 
 use crate::components::modal::{
-    search::ModalSearchBar, Modal, ModalSize, ModernModal, ProgressBar, MODAL_STACK,
+    MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar, search::ModalSearchBar,
 };
 use api::{
-    auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter, unfold_set,
-    FOLDING_SEPARATOR,
+    FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter,
+    unfold_set,
 };
 
 #[derive(Clone, PartialEq, Props)]

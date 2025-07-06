@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     fmt::{Debug, Display},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -14,12 +15,31 @@ use rustls::{
     RootCertStore, // pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer, pem::PemObject};
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, instrument, warn};
 
-use crate::{
-    auth::AuthzBackend,
-    config::{ESConfig, LdapConfig},
-};
+use crate::{auth::AuthzProvider, config::ESConfig};
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct LdapConfig {
+    // url in normal ldap form ldap://host:port
+    pub url: String,
+    // pem-encoded tls cert and key to communicate with ldap server
+    pub key: PathBuf,
+    pub cert: PathBuf,
+    pub ca_cert: PathBuf,
+    // attribute for uids, i.e. uid
+    pub uid_attr: String,
+    // attribute for group names, i.e. cn
+    pub gid_attr: String,
+    // ldap search base for groups
+    pub group_base: String,
+    // filter used to find users in base, i.e. (&(objectClass=posixGroup)),
+    // which will be combined with the user attr
+    pub group_filter: String,
+    // attribute for group membership, i.e. memberUid
+    pub group_member_attr: String,
+}
 
 pub struct LdapAuthz {
     config: LdapConfig,
@@ -27,7 +47,7 @@ pub struct LdapAuthz {
 }
 
 #[async_trait]
-impl AuthzBackend for LdapAuthz {
+impl AuthzProvider for LdapAuthz {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         let config = config.ldap.clone().expect("ldap config not found");
 

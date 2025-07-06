@@ -65,12 +65,10 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
     let collection_uuid = props.collection_uuid;
 
     // Fetch collection data
-    let collection = use_resource(move || async move {
-        get_collection(&GetCollectionReq {
-            collection_uuid,
-        })
-        .await
-    });
+    let collection =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
 
     let collection_data = &*collection.read();
 
@@ -83,7 +81,7 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
         None => {
             return rsx! {
                 CollectionCardSkeleton {}
-            }
+            };
         }
     };
 

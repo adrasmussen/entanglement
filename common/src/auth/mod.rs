@@ -9,6 +9,7 @@ use async_trait::async_trait;
 
 use crate::config::ESConfig;
 
+pub mod cert;
 pub mod ldap;
 pub mod proxy;
 pub mod tomlfile;
@@ -21,7 +22,7 @@ pub mod tomlfile;
 // TODO -- make all of these functions correctly falliable, and ensure that they have
 // some sort of retry logic built in
 #[async_trait]
-pub trait AuthzBackend: Debug + Display + Send + Sync + 'static {
+pub trait AuthzProvider: Debug + Display + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;
@@ -32,7 +33,7 @@ pub trait AuthzBackend: Debug + Display + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait AuthnBackend: Debug + Display + Send + Sync + 'static {
+pub trait AuthnProvider: Debug + Display + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;

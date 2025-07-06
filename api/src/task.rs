@@ -89,7 +89,7 @@ pub struct ShowTasksResp {
 // display impls so that we can output these cleanly to logs
 impl Display for TaskLibrary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
+        match self {
             Self::User { library_uuid } => write!(f, "{library_uuid}"),
             Self::System => write!(f, "system"),
         }

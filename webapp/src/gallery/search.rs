@@ -11,7 +11,7 @@ use crate::{
 };
 use api::{
     media::*,
-    search::{batch_search_and_sort, BatchSearchAndSortReq, SearchFilter, SearchRequest},
+    search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
     sort::SortMethod,
 };
 

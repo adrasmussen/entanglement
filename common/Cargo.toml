@@ -20,7 +20,7 @@ ldap3 = { workspace =  true }
 mysql_async = { workspace =  true }
 paste = { workspace =  true }
 regex = { workspace =  true }
-rustls = { workspace =  true }
+rustls = "0.21.12"
 rustls-pemfile = { workspace =  true }
 rustls-pki-types = { workspace = true }
 saphyr = { workspace =  true }

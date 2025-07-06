@@ -3,8 +3,8 @@ use dioxus_router::prelude::*;
 use tracing::error;
 
 use crate::{
-    components::modal::{Modal, MODAL_STACK},
     Route,
+    components::modal::{MODAL_STACK, Modal},
 };
 use api::collection::*;
 use api::media::MediaUuid;

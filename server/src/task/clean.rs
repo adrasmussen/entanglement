@@ -13,7 +13,7 @@ use tokio::{
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{debug, instrument, warn, span, Level};
+use tracing::{Level, debug, instrument, span, warn};
 
 use crate::{
     db::msg::DbMsg,

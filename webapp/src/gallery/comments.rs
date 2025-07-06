@@ -54,11 +54,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
             let mut comments = Vec::new();
 
             for comment_uuid in comment_uuids() {
-                match get_comment(&GetCommentReq {
-                    comment_uuid,
-                })
-                .await
-                {
+                match get_comment(&GetCommentReq { comment_uuid }).await {
                     Ok(resp) => comments.push((comment_uuid, resp.comment)),
                     Err(err) => {
                         error!("Failed to fetch comment for {comment_uuid}: {err}")

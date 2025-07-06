@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
 use crate::{
-    collection::{grid::CollectionGrid, COLLECTION_SEARCH_KEY},
+    collection::{COLLECTION_SEARCH_KEY, grid::CollectionGrid},
     common::storage::*,
     components::{
-        modal::{Modal, ModalBox, MODAL_STACK},
+        modal::{MODAL_STACK, Modal, ModalBox},
         search_bar::SearchBar,
     },
 };

@@ -2,40 +2,81 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Request, State},
-    http::{header::AUTHORIZATION, {HeaderName, StatusCode}},
+    http::{
+        header::AUTHORIZATION,
+        {HeaderName, StatusCode},
+    },
     middleware::Next,
     response::Response,
 };
 
 use crate::http::svc::HttpEndpoint;
 
-// user auth information passed in from middleware to the axum extractors
+// user auth information passed in from middleware to the axum extractors,
+// attached to the request via an extension with this type
 #[derive(Clone)]
 pub struct CurrentUser {
     pub uid: String,
 }
 
+// if the client provides a certificate as part of mutual tls, the subject
+// cn field is put into a request extension in this type
+#[derive(Clone)]
+pub struct ClientCn {
+    pub cn: String,
+}
+
+// authentication via reverse proxy
+#[derive(Clone)]
+pub struct ProxyAuthData {
+    pub header_key: HeaderName,
+    pub cn: String,
+}
+
 pub async fn proxy_auth(
-    State(state): State<String>,
+    State(state): State<ProxyAuthData>,
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let proxy_cn = req
+        .extensions()
+        .get::<ClientCn>()
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if proxy_cn.cn != state.cn {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
     // attempt to unpack the auth header, returning None if we cannot convert to a str
-    let auth_header = req
+    let header_val = req
         .headers()
-        .get(
-            HeaderName::from_lowercase(state.to_lowercase().as_bytes())
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
-        )
+        .get(state.header_key)
         .and_then(|header| header.to_str().ok());
 
-    let auth_header = match auth_header {
+    let header_val = match header_val {
         Some(val) => val,
         None => return Err(StatusCode::UNAUTHORIZED),
     };
 
     let user = CurrentUser {
-        uid: auth_header.to_owned(),
+        uid: header_val.to_owned(),
+    };
+
+    // if auth succeeds, pass CurrentUser as a request extension to handlers
+    req.extensions_mut().insert(user);
+
+    // then, continue on in the tower of middleware
+    Ok(next.run(req).await)
+}
+
+pub async fn cert_auth(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+    let user = CurrentUser {
+        uid: req
+            .extensions()
+            .get::<ClientCn>()
+            .ok_or(StatusCode::UNAUTHORIZED)?
+            .cn
+            .clone(),
     };
 
     // if auth succeeds, pass CurrentUser as a request extension to handlers

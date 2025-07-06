@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
-use crate::components::modal::{ModalSize, ModernModal, ProgressBar, MODAL_STACK};
-use api::{full_link, media::*, unfold_set, FOLDING_SEPARATOR};
+use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal, ProgressBar};
+use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct EnhancedMediaModalProps {
@@ -234,6 +234,8 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
         }
     };
 
+    // clippy is confused about lifetimes
+    #[allow(clippy::let_and_return)]
     element
 }
 

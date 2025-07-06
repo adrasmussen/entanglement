@@ -7,20 +7,21 @@ use tokio::{sync::Mutex, task::spawn, time::timeout};
 use tracing::{debug, error, info, instrument};
 
 use crate::{
-    auth::{msg::AuthMsg, ESAuthService},
+    auth::{ESAuthService, msg::AuthMsg},
     db::msg::DbMsg,
     service::{ESInner, ESMRegistry, EntanglementService, Esm, EsmReceiver, ServiceType},
 };
 use api::media::MediaUuid;
 use common::{
+    AwaitCache, GROUP_REGEX, USER_REGEX,
     auth::{
+        AuthnProvider, AuthzProvider,
+        cert::CertAuthn,
         ldap::LdapAuthz,
         proxy::ProxyAuth,
         tomlfile::{TomlAuthnFile, TomlAuthzFile},
-        AuthnBackend, AuthzBackend,
     },
-    config::ESConfig,
-    AwaitCache, GROUP_REGEX, USER_REGEX,
+    config::{AuthnBackend, AuthzBackend, ESConfig},
 };
 
 // auth service
@@ -102,8 +103,8 @@ impl EntanglementService for AuthService {
 #[derive(Debug)]
 pub struct AuthCache {
     registry: ESMRegistry,
-    authn_provider: Box<dyn AuthnBackend>,
-    authz_provider: Box<dyn AuthzBackend>,
+    authn_provider: Box<dyn AuthnProvider>,
+    authz_provider: Box<dyn AuthzProvider>,
     // uid: set(gid)
     user_cache: Arc<AwaitCache<String, HashSet<String>>>,
     // media_uuid: set(gid)
@@ -115,14 +116,15 @@ pub struct AuthCache {
 #[async_trait]
 impl ESInner for AuthCache {
     fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
-        let authn_provider: Box<dyn AuthnBackend> = match config.authn_backend {
-            common::config::AuthnBackend::ProxyHeader => Box::new(ProxyAuth::new(config.clone())?),
-            common::config::AuthnBackend::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),
+        let authn_provider: Box<dyn AuthnProvider> = match config.authn_backend {
+            AuthnBackend::ProxyHeader => Box::new(ProxyAuth::new(config.clone())?),
+            AuthnBackend::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),
+            AuthnBackend::X509Cert => Box::new(CertAuthn::new(config.clone())?),
         };
 
-        let authz_provider: Box<dyn AuthzBackend> = match config.authz_backend {
-            common::config::AuthzBackend::Ldap => Box::new(LdapAuthz::new(config.clone())?),
-            common::config::AuthzBackend::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
+        let authz_provider: Box<dyn AuthzProvider> = match config.authz_backend {
+            AuthzBackend::Ldap => Box::new(LdapAuthz::new(config.clone())?),
+            AuthzBackend::TomlFile => Box::new(TomlAuthzFile::new(config.clone())?),
         };
 
         Ok(AuthCache {

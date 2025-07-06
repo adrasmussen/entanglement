@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::{collection::card::CollectionCard, components::modal::{Modal, MODAL_STACK}};
+use crate::{
+    collection::card::CollectionCard,
+    components::modal::{MODAL_STACK, Modal},
+};
 use api::collection::CollectionUuid;
 
 #[derive(Clone, PartialEq, Props)]

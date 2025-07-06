@@ -8,12 +8,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http::{
-    header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, RANGE},
     HeaderMap, HeaderValue,
+    header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, RANGE},
 };
 use mime_guess::MimeGuess;
 use tokio::{
-    fs::{read_link, File},
+    fs::{File, read_link},
     io::AsyncSeekExt,
 };
 use tokio_stream::StreamExt;
@@ -22,9 +22,9 @@ use tracing::{debug, instrument, warn};
 
 use crate::{
     auth::check::AuthCheck,
-    http::{auth::CurrentUser, svc::HttpEndpoint, AppError},
+    http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
 };
-use api::{media::MediaUuid, LINK_PATH};
+use api::{LINK_PATH, media::MediaUuid};
 
 // media stream/download
 //
@@ -92,7 +92,9 @@ pub(super) async fn stream_media(
             match parse_ranges(state.clone(), val.to_str()?, length) {
                 Ok(v) => v,
                 Err(err) => {
-                    return Ok((StatusCode::RANGE_NOT_SATISFIABLE, format!("{err}")).into_response())
+                    return Ok(
+                        (StatusCode::RANGE_NOT_SATISFIABLE, format!("{err}")).into_response()
+                    );
                 }
             },
         ),

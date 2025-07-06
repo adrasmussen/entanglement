@@ -5,6 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Local;
 use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
 
@@ -18,6 +19,11 @@ use api::{
     search::SearchFilter,
     unfold_set,
 };
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MariaDbConfig {
+    pub url: String,
+}
 
 pub struct MariaDBBackend {
     pool: Pool,

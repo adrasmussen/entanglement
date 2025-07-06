@@ -3,8 +3,17 @@ use std::{path::PathBuf, sync::Arc};
 use serde::{Deserialize, Serialize};
 use tokio;
 use toml;
-use tracing::{debug, instrument, Level};
+use tracing::{Level, debug, instrument};
 
+use crate::{
+    auth::{ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig},
+    db::mariadb::MariaDbConfig,
+    server::{FsConfig, HttpConfig, TaskConfig},
+};
+
+// entanglement configuration
+//
+// this struct contains all of the myriad configuration options used by the server and cli tools
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ESConfig {
     pub authn_backend: AuthnBackend,
@@ -23,22 +32,16 @@ pub struct ESConfig {
     pub proxyheader: Option<ProxyHeaderConfig>,
 }
 
-// authentication config options
-
+// backends
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthnBackend {
     // header set by reverse proxy
     ProxyHeader,
     // a toml file with usernames and passwords
     TomlFile,
+    // subject cn data in certificate
+    X509Cert,
 }
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ProxyHeaderConfig {
-    pub header: String,
-}
-
-// authorization config options
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum AuthzBackend {
@@ -48,84 +51,9 @@ pub enum AuthzBackend {
     TomlFile,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct LdapConfig {
-    // url in normal ldap form ldap://host:port
-    pub url: String,
-    // pem-encoded tls cert and key to communicate with ldap server
-    pub key: PathBuf,
-    pub cert: PathBuf,
-    pub ca_cert: PathBuf,
-    // attribute for uids, i.e. uid
-    pub uid_attr: String,
-    // attribute for group names, i.e. cn
-    pub gid_attr: String,
-    // ldap search base for groups
-    pub group_base: String,
-    // filter used to find users in base, i.e. (&(objectClass=posixGroup)),
-    // which will be combined with the user attr
-    pub group_filter: String,
-    // attribute for group membership, i.e. memberUid
-    pub group_member_attr: String,
-
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TomlFileConfig {
-    pub filename: PathBuf,
-}
-
-// database config options
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DbBackend {
     MariaDB,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MariaDbConfig {
-    pub url: String,
-}
-
-// core service config options
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct FsConfig {
-    // read-only source path where media can be located
-    //
-    // libraries should be subfolders of this path
-    pub media_srcdir: PathBuf,
-
-    // read-write path where symlinks are created, as
-    // well as subfolders for thumbnails and slices
-    pub media_srvdir: PathBuf,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct HttpConfig {
-    // ip and port for http server
-    pub socket: String,
-
-    // http url root, since we should be running behind a
-    // reverse proxy
-    //
-    // currently set at compile time, see api lib.rs
-    //pub url_root: String,
-
-    // location of wasm app
-    pub doc_root: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct TaskConfig {
-    // maximum number of tokio tasks use for running scan jobs,
-    // which should be less than the number of OS threads since
-    // some of the crates have blocking io calls
-    pub scan_threads: usize,
-
-    // temporary folder used by scanner for things like creating
-    // video thumbnails
-    pub scan_scratch: PathBuf,
 }
 
 // in order to extract the config table from a larger document, we need to specify it

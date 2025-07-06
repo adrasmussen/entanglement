@@ -2,13 +2,14 @@ use std::{cmp::Eq, fmt::Debug, future::Future, hash::Hash, sync::Arc};
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::{DashMap, mapref::entry::Entry};
 use tracing::{error, instrument};
 
 pub mod auth;
 pub mod config;
 pub mod db;
 pub mod media;
+pub mod server;
 
 // string validation
 //

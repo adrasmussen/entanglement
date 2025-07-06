@@ -4,19 +4,19 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     collection::MEDIA_SEARCH_KEY,
     common::{local_time, storage::*},
     components::{
         media_card::MediaCard,
-        modal::{Modal, ModalBox, MODAL_STACK},
+        modal::{MODAL_STACK, Modal, ModalBox},
         search_bar::SearchBar,
     },
-    Route,
 };
 use api::{
     collection::*,
     fold_set,
-    search::{batch_search_and_sort, BatchSearchAndSortReq, SearchFilter, SearchRequest},
+    search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
     sort::SortMethod,
 };
 

@@ -82,7 +82,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                         }
                     }
                 }
-            }
+            };
         }
     };
 

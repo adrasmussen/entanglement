@@ -1,7 +1,7 @@
-use std::{thread::sleep, path::PathBuf, time::Duration};
+use std::{path::PathBuf, thread::sleep, time::Duration};
 
 use clap::Parser;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::{
     filter::FilterFn,
     layer::{Layer, SubscriberExt},
@@ -11,11 +11,11 @@ use tracing_subscriber::{
 mod auth;
 mod checks;
 mod db;
+mod debug;
 mod fs;
 mod http;
 mod service;
 mod task;
-mod debug;
 
 use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH};
 use common::{config::read_config, db::MariaDBBackend};

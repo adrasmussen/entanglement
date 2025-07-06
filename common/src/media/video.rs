@@ -5,8 +5,8 @@ use tokio::process::Command;
 use tracing::{debug, instrument};
 
 use crate::media::{
-    image::{create_image_thumbnail, hash_image},
     MediaData,
+    image::{create_image_thumbnail, hash_image},
 };
 use api::media::MediaMetadata;
 

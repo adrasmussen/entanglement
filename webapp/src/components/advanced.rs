@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use dioxus::prelude::*;
 
-use crate::components::modal::{Modal, MODAL_STACK};
+use crate::components::modal::{MODAL_STACK, Modal};
 use api::media::MediaUuid;
 
 #[derive(Clone, PartialEq)]
