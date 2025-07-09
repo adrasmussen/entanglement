@@ -71,7 +71,12 @@ pub async fn read_config(filename: PathBuf) -> Arc<ESConfig> {
         .await
         .expect("failed to read config file");
 
-    let data: TomlConfigFile = toml::from_str(&doc).expect("failed to parse config file");
+    // hamfisted way to prevent sensitive info in the config file
+    // from being printed to logs
+    let data: TomlConfigFile = match toml::from_str(&doc) {
+        Ok(val) => val,
+        Err(err) => panic!("failed to parse config file: {err}")
+    };
 
     debug!("successfully parsed config file");
     Arc::new(data.config)

@@ -1,0 +1,26 @@
+[package]
+name = "entg-http"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+api = { path = "../../api" }
+common = { path = "../../common" }
+
+anyhow = { workspace = true }
+axum = { workspace =  true }
+clap = { workspace = true }
+futures = { workspace =  true }
+futures-util = { workspace =  true }
+hyper = { workspace =  true }
+hyper-rustls = { workspace =  true }
+hyper-util = { workspace =  true }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+rustls-webpki = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace =  true }
+tokio-util = { workspace =  true }
+tower = { workspace =  true }
+tower-http = { workspace =  true }
+x509-certificate = { workspace =  true }

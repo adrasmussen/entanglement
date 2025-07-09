@@ -1,6 +1,6 @@
 [workspace]
 members = [ "api", "common",
-    "server", "tools/auth",
+    "server", "tools/auth", "tools/http",
     "webapp",
 ]
 

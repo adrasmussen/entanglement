@@ -24,9 +24,7 @@ use crate::{auth::AuthzProvider, config::ESConfig};
 pub struct LdapConfig {
     // url in normal ldap form ldap://host:port
     pub url: String,
-    // pem-encoded tls cert and key to communicate with ldap server
-    pub key: PathBuf,
-    pub cert: PathBuf,
+    // cert used to verify server connection
     pub ca_cert: PathBuf,
     // attribute for uids, i.e. uid
     pub uid_attr: String,
@@ -39,6 +37,9 @@ pub struct LdapConfig {
     pub group_filter: String,
     // attribute for group membership, i.e. memberUid
     pub group_member_attr: String,
+    // pem-encoded tls cert and key to communicate with ldap server
+    pub key: Option<PathBuf>,
+    pub cert: Option<PathBuf>,
 }
 
 pub struct LdapAuthz {
@@ -51,10 +52,10 @@ impl AuthzProvider for LdapAuthz {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         let config = config.ldap.clone().expect("ldap config not found");
 
-        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(&config.key)?;
+        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(&config.key.clone().ok_or(anyhow::Error::msg("missing key"))?)?;
 
         let cert: Vec<CertificateDer> =
-            CertificateDer::pem_file_iter(&config.cert)?.collect::<Result<Vec<_>, _>>()?;
+            CertificateDer::pem_file_iter(&config.cert.clone().ok_or(anyhow::Error::msg("missing cert"))?)?.collect::<Result<Vec<_>, _>>()?;
         let ca_cert: Vec<CertificateDer> =
             CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
 
