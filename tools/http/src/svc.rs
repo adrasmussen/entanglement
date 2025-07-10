@@ -11,11 +11,10 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use hyper::{Request, StatusCode, body::Incoming, service::service_fn};
-use hyper_util::{
-    rt::{TokioExecutor, TokioIo},
-    server::conn::auto::Builder,
+use hyper::{
+    Request, StatusCode, body::Incoming, server::conn::http2::Builder, service::service_fn,
 };
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use rustls::{RootCertStore, ServerConfig, server::WebPkiClientVerifier};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio::net::TcpListener;
@@ -86,7 +85,11 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
             println!("proxy header: {header_key}");
             println!("proxy user: {proxy_user}");
 
-            (StatusCode::OK, "entanglement proxy connection check succeeded".to_owned()).into_response()
+            (
+                StatusCode::OK,
+                "entanglement proxy connection check succeeded".to_owned(),
+            )
+                .into_response()
         };
 
         Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
@@ -94,7 +97,11 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
         let service = async move |_headers: HeaderMap, Extension(peer_cn): Extension<String>| {
             println!("user cn: {peer_cn}");
 
-            (StatusCode::OK, "entanglement proxy connection check succeeded".to_owned()).into_response()
+            (
+                StatusCode::OK,
+                "entanglement proxy connection check succeeded".to_owned(),
+            )
+                .into_response()
         };
 
         Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
@@ -132,10 +139,12 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
         .build()
         .expect("http server failed to set up client verifier");
 
-    let tls_config = ServerConfig::builder()
+    let mut tls_config = ServerConfig::builder()
         .with_client_cert_verifier(client_cert_verifier)
         .with_single_cert(cert, key)
         .expect("http server failed to configure tls");
+
+    tls_config.alpn_protocols = vec!["h2".into()];
 
     // set up the socket
     let listener = TcpListener::bind(socket)
@@ -192,6 +201,7 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
                             "cipher suite: {:?}",
                             server_session.negotiated_cipher_suite().map(|c| c.suite())
                         );
+                        println!("alpn protocol: {:?}", server_session.alpn_protocol());
 
                         let service = service_fn(move |mut request: Request<Incoming>| {
                             let peer_cn = peer_cn.clone();

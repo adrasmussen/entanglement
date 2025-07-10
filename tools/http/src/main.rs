@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum, arg, command};
+use clap::{Parser, Subcommand, arg, command};
 
 use common::config::read_config;
 

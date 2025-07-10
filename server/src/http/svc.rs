@@ -345,10 +345,13 @@ impl HttpEndpoint {
                 (false, Arc::new(NoClientAuth {}))
             };
 
-        let tls_config = ServerConfig::builder()
+        let mut tls_config = ServerConfig::builder()
             .with_client_cert_verifier(client_cert_verifier)
             .with_single_cert(cert, key)
             .expect("http server failed to configure tls");
+
+        // enable the http2 over tls protocol, as some proxies will refuse to connect
+        tls_config.alpn_protocols = vec!["h2".into()];
 
         let listener = TcpListener::bind(socket)
             .await
