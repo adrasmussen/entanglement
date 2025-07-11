@@ -118,12 +118,12 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
             CollectionError { message: format!("There was an error fetching the collection metadata: {error}") }
         }
     })? {
-        Some(v) => v,
         None => {
             return rsx! {
                 CollectionDetailSkeleton {}
             }
         }
+        Some(v) => v,
     };
 
     let media_data = &*media_future.read();
@@ -132,12 +132,12 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
             CollectionError { message: format!("There was an error searching media in the collection: {error}") }
         }
     })? {
-        Some(v) => v,
         None => {
             return rsx! {
                 CollectionDetailSkeleton {}
             }
         }
+        Some(v) => v,
     };
 
     let collection = collection_data.collection;

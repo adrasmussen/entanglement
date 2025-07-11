@@ -17,7 +17,7 @@ pub struct MediaCardProps {
     selected_media_signal: Signal<HashSet<MediaUuid>>,
     // Optional props for additional features
     #[props(default)]
-    collection_uuid: Option<i64>,
+    collection_uuid: Option<CollectionUuid>,
 }
 
 #[component]

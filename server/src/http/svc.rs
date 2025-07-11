@@ -431,8 +431,13 @@ impl HttpEndpoint {
                                     match result {
                                         Ok(Ok(())) => (),
                                         Ok(Err(err)) => {
+                                            // this is horrible kludge, but at least apache httpd seems
+                                            // to generate a ton of spurious IO errors which we *might*
+                                            // need to read at some point while debugging
+                                            //
+                                            // unfortunately, hyper's error types are not stable
                                             if format!("{err:?}").contains("KeepAliveTimedOut") {
-                                                debug!({error = ?err}, "http connection timed out (inner)")
+                                                debug!({error = ?err}, "http connection timed out (hyper)")
                                             } else if format!("{err:?}").contains("Io") {
                                                 debug!({error = ?err}, "io error")
                                             } else {
@@ -440,12 +445,12 @@ impl HttpEndpoint {
                                             }
                                         },
                                         Err(err) => {
-                                            debug!({error = ?err}, "http connection timed out (outer)");
+                                            debug!({error = ?err}, "http connection timed out (connection reaper)");
                                         }
                                     }
                                 };
 
-                                // spawn the connection future and collect the join handle
+                                // spawn the connection future and collect the joinhandle
                                 connection_tasks.push(spawn(conn_fut));
 
                             },

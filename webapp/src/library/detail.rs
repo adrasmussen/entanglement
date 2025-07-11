@@ -121,12 +121,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             LibraryError { message: format!("There was an error fetching the library metadata: {error}") }
         }
     })? {
-        Some(v) => v,
         None => {
             return rsx! {
                 LibraryDetailSkeleton {}
             }
         }
+        Some(v) => v,
     };
 
     let media_data = &*media_future.read();
@@ -135,12 +135,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             LibraryError { message: format!("There was an error searching media in the library: {error}") }
         }
     })? {
-        Some(v) => v,
         None => {
             return rsx! {
                 LibraryDetailSkeleton {}
             }
         }
+        Some(v) => v,
     };
 
     // search bar action button

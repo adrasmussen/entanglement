@@ -13,7 +13,7 @@ use tokio::{
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{Level, debug, instrument, span, warn};
+use tracing::{debug, instrument, span, warn, Instrument, Level};
 
 use crate::{
     db::msg::DbMsg,
@@ -124,7 +124,7 @@ pub async fn clean_library(
                         warnings.fetch_add(1, Ordering::Relaxed);
                     }
                 }
-            }
+            }.instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid))
         });
     }
 

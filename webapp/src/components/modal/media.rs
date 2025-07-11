@@ -265,7 +265,7 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
     let handle_submit = move |_| {
         let media_uuids = media_uuids.clone();
         async move {
-            status_signal.set(format!("Adding tags on {} media items...", media_count));
+            status_signal.set(format!("Modifying tags on {} media items...", media_count));
 
             processing_count.set(0);
             success_count.set(0);
@@ -331,7 +331,7 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
             // Update overall status
             if error_count() == 0 {
                 status_signal.set(format!(
-                    "Successfully added tags to {} items",
+                    "Successfully modified tags on {} items",
                     success_count()
                 ));
             } else {

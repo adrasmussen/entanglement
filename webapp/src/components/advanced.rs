@@ -14,6 +14,101 @@ enum TabTarget {
     //BulkRmFromCollection,
 }
 
+// TODO -- have this take a list of tabs so that different search contexts
+// have access to different advanced options (and so that the tabs can
+// hold references to those contexts)
+#[derive(Clone, PartialEq, Props)]
+pub struct AdvancedContainerProps {
+    media_search_signal: Signal<String>,
+    bulk_edit_mode_signal: Signal<bool>,
+    selected_media_signal: Signal<HashSet<MediaUuid>>,
+}
+
+#[component]
+pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
+    let media_search_signal = props.media_search_signal;
+    let bulk_edit_mode_signal = props.bulk_edit_mode_signal;
+    let selected_media_signal = props.selected_media_signal;
+
+    let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::Search);
+
+    rsx! {
+        div {
+            class: "advanced-search-options",
+            style: "
+                margin-top: -16px;
+                margin-bottom: var(--space-6);
+                padding: var(--space-4);
+                background-color: var(--neutral-50);
+                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+                box-shadow: var(--shadow-sm);
+                border-top: 1px solid var(--neutral-200);
+                animation: slide-down 0.2s ease-out;
+            ",
+            h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Options" }
+
+            div {
+                class: "tabs-navigation",
+                style: "display: flex; border-bottom: 1px solid var(--neutral-200); margin-bottom: var(--space-4);",
+                AdvancedTab {
+                    tab_signal,
+                    target: TabTarget::Search,
+                    text: "Search Options",
+                }
+                AdvancedTab {
+                    tab_signal,
+                    target: TabTarget::BulkEditTags,
+                    text: "Bulk Edit Tags",
+                }
+                AdvancedTab {
+                    tab_signal,
+                    target: TabTarget::BulkAddToCollection,
+                    text: "Bulk Add to Collection",
+                }
+            }
+
+            AdvancedContent {
+                tab_signal,
+                media_search_signal,
+                bulk_edit_mode_signal,
+                selected_media_signal,
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct AdvancedTabProps {
+    tab_signal: Signal<TabTarget>,
+    target: TabTarget,
+    text: String,
+}
+
+#[component]
+fn AdvancedTab(props: AdvancedTabProps) -> Element {
+    let mut tab_signal = props.tab_signal;
+    let target = props.target;
+    let text = props.text;
+
+    rsx! {
+        button {
+            class: if *tab_signal.read() == target { "tab-button active" } else { "tab-button" },
+            style: "padding: var(--space-2) var(--space-4); background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer;font-weight: 500; color: var(--text-secondary); transition: all var(--transition-fast) var(--easing-standard); margin-right: var(--space-2);"
+                .to_string()
+                + if *tab_signal.read() == target {
+                    "color: var(--primary); border-bottom-color: var(--primary);"
+                } else {
+                    ""
+                },
+            // the bulk-edit modes want to share context if the tabs change,
+            // but generic tabs may want to reset their specialty signals
+            onclick: move |_| tab_signal.set(target.clone()),
+
+            "{text}"
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Props)]
 struct AdvancedContentProps {
     tab_signal: Signal<TabTarget>,
@@ -81,7 +176,7 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
                             selected_media_signal,
                             button_target: Modal::BulkEditTags(selected_media_signal().clone()),
                             button_text: "Edit Tags for Selected",
-                            hidden_text: "Enable Bulk Edit Mode to edit tags to large groups of media.",
+                            hidden_text: "Enable Bulk Edit Mode to edit tags for large groups of media.",
                         }
                     }
                 }
@@ -101,97 +196,7 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
     }
 }
 
-#[derive(Clone, PartialEq, Props)]
-struct AdvancedTabProps {
-    tab_signal: Signal<TabTarget>,
-    target: TabTarget,
-    text: String,
-}
 
-#[component]
-fn AdvancedTab(props: AdvancedTabProps) -> Element {
-    let mut tab_signal = props.tab_signal;
-    let target = props.target;
-    let text = props.text;
-
-    rsx! {
-        button {
-            class: if *tab_signal.read() == target { "tab-button active" } else { "tab-button" },
-            style: "padding: var(--space-2) var(--space-4); background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer;font-weight: 500; color: var(--text-secondary); transition: all var(--transition-fast) var(--easing-standard); margin-right: var(--space-2);"
-                .to_string()
-                + if *tab_signal.read() == target {
-                    "color: var(--primary); border-bottom-color: var(--primary);"
-                } else {
-                    ""
-                },
-            // the bulk-edit modes want to share context if the tabs change,
-            // but generic tabs may want to reset their specialty signals
-            onclick: move |_| tab_signal.set(target.clone()),
-
-            "{text}"
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Props)]
-pub struct AdvancedContainerProps {
-    media_search_signal: Signal<String>,
-    bulk_edit_mode_signal: Signal<bool>,
-    selected_media_signal: Signal<HashSet<MediaUuid>>,
-}
-
-#[component]
-pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
-    let media_search_signal = props.media_search_signal;
-    let bulk_edit_mode_signal = props.bulk_edit_mode_signal;
-    let selected_media_signal = props.selected_media_signal;
-
-    let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::Search);
-
-    rsx! {
-        div {
-            class: "advanced-search-options",
-            style: "
-                margin-top: -16px;
-                margin-bottom: var(--space-6);
-                padding: var(--space-4);
-                background-color: var(--neutral-50);
-                border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-                box-shadow: var(--shadow-sm);
-                border-top: 1px solid var(--neutral-200);
-                animation: slide-down 0.2s ease-out;
-            ",
-            h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Options" }
-
-            div {
-                class: "tabs-navigation",
-                style: "display: flex; border-bottom: 1px solid var(--neutral-200); margin-bottom: var(--space-4);",
-                AdvancedTab {
-                    tab_signal,
-                    target: TabTarget::Search,
-                    text: "Search Options",
-                }
-                AdvancedTab {
-                    tab_signal,
-                    target: TabTarget::BulkEditTags,
-                    text: "Bulk Edit Tags",
-                }
-                AdvancedTab {
-                    tab_signal,
-                    target: TabTarget::BulkAddToCollection,
-                    text: "Bulk Add to Collection",
-                }
-            }
-
-            AdvancedContent {
-                tab_signal,
-                media_search_signal,
-                bulk_edit_mode_signal,
-                selected_media_signal,
-            }
-        }
-    }
-}
 
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkEditProps {
