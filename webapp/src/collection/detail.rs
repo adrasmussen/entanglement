@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
@@ -72,8 +70,6 @@ struct CollectionInnerProps {
 #[component]
 fn CollectionInner(props: CollectionInnerProps) -> Element {
     let update_signal = props.update_signal;
-    let bulk_edit_mode_signal = use_signal(|| false);
-    let selected_media_signal = use_signal(HashSet::new);
 
     let collection_uuid = props.collection_uuid.parse::<CollectionUuid>().show(|_| {
         let message = "The collection_uuid could not be parsed".to_string();
@@ -294,8 +290,6 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                 media_uuid: media.media_uuid,
                                 media: media.media.clone(),
                                 collections: media.collections.clone(),
-                                bulk_edit_mode_signal,
-                                selected_media_signal,
                             }
                         }
                     }

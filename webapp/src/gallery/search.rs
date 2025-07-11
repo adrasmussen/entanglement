@@ -1,11 +1,9 @@
-use std::collections::HashSet;
-
 use dioxus::prelude::*;
 
 use crate::{
     common::storage::try_local_storage,
     components::{
-        advanced::AdvancedContainer, media_card::MediaCard, modal::ModalBox, search_bar::SearchBar,
+        advanced::{BULK_EDIT, AdvancedContainer}, media_card::MediaCard, modal::ModalBox, search_bar::SearchBar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
@@ -19,8 +17,6 @@ use api::{
 pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
     let mut advanced_expanded = use_signal(|| false);
-    let mut bulk_edit_mode_signal = use_signal(|| false);
-    let mut selected_media_signal = use_signal(HashSet::new);
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
 
@@ -44,8 +40,7 @@ pub fn GallerySearch() -> Element {
             class: "btn btn-secondary",
             onclick: move |_| {
                 if advanced_expanded() {
-                    bulk_edit_mode_signal.set(false);
-                    selected_media_signal.set(HashSet::new());
+                    BULK_EDIT.with_mut(|v| *v = None);
                 }
                 advanced_expanded.set(!advanced_expanded());
             },
@@ -85,11 +80,7 @@ pub fn GallerySearch() -> Element {
                 {
                     if advanced_expanded() {
                         rsx! {
-                            AdvancedContainer {
-                                media_search_signal,
-                                bulk_edit_mode_signal,
-                                selected_media_signal,
-                            }
+                            AdvancedContainer { media_search_signal }
                         }
                     } else {
                         rsx! {}
@@ -113,8 +104,6 @@ pub fn GallerySearch() -> Element {
                                             media_uuid: search_resp.media_uuid,
                                             media: search_resp.media.clone(),
                                             collections: search_resp.collections.clone(),
-                                            bulk_edit_mode_signal,
-                                            selected_media_signal,
                                         }
                                     }
                                 }

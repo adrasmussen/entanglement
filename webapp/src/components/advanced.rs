@@ -5,6 +5,8 @@ use dioxus::prelude::*;
 use crate::components::modal::{MODAL_STACK, Modal};
 use api::media::MediaUuid;
 
+pub static BULK_EDIT: GlobalSignal<Option<HashSet<MediaUuid>>> = Signal::global(|| None);
+
 #[derive(Clone, PartialEq)]
 enum TabTarget {
     Search,
@@ -20,15 +22,11 @@ enum TabTarget {
 #[derive(Clone, PartialEq, Props)]
 pub struct AdvancedContainerProps {
     media_search_signal: Signal<String>,
-    bulk_edit_mode_signal: Signal<bool>,
-    selected_media_signal: Signal<HashSet<MediaUuid>>,
 }
 
 #[component]
 pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
     let media_search_signal = props.media_search_signal;
-    let bulk_edit_mode_signal = props.bulk_edit_mode_signal;
-    let selected_media_signal = props.selected_media_signal;
 
     let tab_signal: Signal<TabTarget> = use_signal(|| TabTarget::Search);
 
@@ -67,12 +65,7 @@ pub fn AdvancedContainer(props: AdvancedContainerProps) -> Element {
                 }
             }
 
-            AdvancedContent {
-                tab_signal,
-                media_search_signal,
-                bulk_edit_mode_signal,
-                selected_media_signal,
-            }
+            AdvancedContent { tab_signal, media_search_signal }
         }
     }
 }
@@ -113,16 +106,12 @@ fn AdvancedTab(props: AdvancedTabProps) -> Element {
 struct AdvancedContentProps {
     tab_signal: Signal<TabTarget>,
     media_search_signal: Signal<String>,
-    bulk_edit_mode_signal: Signal<bool>,
-    selected_media_signal: Signal<HashSet<MediaUuid>>,
 }
 
 #[component]
 fn AdvancedContent(props: AdvancedContentProps) -> Element {
     let tab_signal = props.tab_signal;
     let mut media_search_signal = props.media_search_signal;
-    let bulk_edit_mode_signal = props.bulk_edit_mode_signal;
-    let selected_media_signal = props.selected_media_signal;
 
     rsx! {
         div { class: "tab-content", style: "min-height: 200px;",
@@ -172,9 +161,7 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
                 TabTarget::BulkEditTags => {
                     rsx! {
                         BulkEdit {
-                            bulk_edit_mode_signal,
-                            selected_media_signal,
-                            button_target: Modal::BulkEditTags(selected_media_signal().clone()),
+                            button_target: Modal::BulkEditTags,
                             button_text: "Edit Tags for Selected",
                             hidden_text: "Enable Bulk Edit Mode to edit tags for large groups of media.",
                         }
@@ -183,9 +170,7 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
                 TabTarget::BulkAddToCollection => {
                     rsx! {
                         BulkEdit {
-                            bulk_edit_mode_signal,
-                            selected_media_signal,
-                            button_target: Modal::BulkAddToCollection(selected_media_signal().clone()),
+                            button_target: Modal::BulkAddToCollection,
                             button_text: "Add Selected to Collection",
                             hidden_text: "Enable Bulk Edit Mode to add media to collections in large groups.",
                         }
@@ -196,12 +181,8 @@ fn AdvancedContent(props: AdvancedContentProps) -> Element {
     }
 }
 
-
-
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkEditProps {
-    bulk_edit_mode_signal: Signal<bool>,
-    selected_media_signal: Signal<HashSet<MediaUuid>>,
     button_target: Modal,
     button_text: &'static str,
     hidden_text: &'static str,
@@ -209,9 +190,6 @@ pub struct BulkEditProps {
 
 #[component]
 pub fn BulkEdit(props: BulkEditProps) -> Element {
-    let mut bulk_edit_mode_signal = props.bulk_edit_mode_signal;
-    let mut selected_media_signal = props.selected_media_signal;
-
     rsx! {
         div { class: "bulk-edit-options",
             div {
@@ -219,25 +197,36 @@ pub fn BulkEdit(props: BulkEditProps) -> Element {
                 style: "margin-bottom: var(--space-4);",
                 div { class: "form-group",
                     div { style: "display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);",
-                        button {
-                            class: if bulk_edit_mode_signal() { "btn btn-danger" } else { "btn btn-primary" },
-                            onclick: move |_| {
-                                if bulk_edit_mode_signal() {
-                                    selected_media_signal.set(HashSet::new());
+                        {
+                            match BULK_EDIT() {
+                                None => {
+                                    rsx! {
+                                        button {
+                                            class: "btn btn-primary",
+                                            onclick: move |_| {
+                                                BULK_EDIT.with_mut(|v| *v = Some(HashSet::new()));
+                                            },
+                                            "Enable Bulk Edit Mode"
+                                        }
+                                    }
                                 }
-                                bulk_edit_mode_signal.set(!bulk_edit_mode_signal());
-                            },
-
-                            if bulk_edit_mode_signal() {
-                                "Disable Bulk Edit Mode"
-                            } else {
-                                "Enable Bulk Edit Mode"
+                                Some(_) => {
+                                    rsx! {
+                                        button {
+                                            class: "btn btn-danger",
+                                            onclick: move |_| {
+                                                BULK_EDIT.with_mut(|v| *v = None);
+                                            },
+                                            "Disable Bulk Edit Mode"
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        if bulk_edit_mode_signal() {
+                        if let Some(media_uuids) = BULK_EDIT() {
                             span { style: "color: var(--text-secondary);",
-                                "{selected_media_signal().len()} items selected"
+                                "{media_uuids.len()} items selected"
                             }
                         }
                     }
@@ -245,25 +234,21 @@ pub fn BulkEdit(props: BulkEditProps) -> Element {
             }
         }
 
-        if bulk_edit_mode_signal() {
+        if BULK_EDIT().is_some() {
             div {
                 class: "bulk-actions",
                 style: "display: flex; gap: var(--space-3); margin-top: var(--space-4);",
                 button {
                     class: "btn btn-primary",
-                    disabled: selected_media_signal().is_empty(),
                     onclick: move |_| {
-                        if !selected_media_signal().is_empty() {
-                            MODAL_STACK.with_mut(|v| { v.push(props.button_target.clone()) });
-                        }
+                        MODAL_STACK.with_mut(|v| { v.push(props.button_target.clone()) });
                     },
                     "{props.button_text}"
                 }
                 button {
                     class: "btn btn-secondary",
-                    disabled: selected_media_signal().is_empty(),
                     onclick: move |_| {
-                        selected_media_signal.set(HashSet::new());
+                        BULK_EDIT.with_mut(|v| *v = Some(HashSet::new()));
                     },
                     "Clear Selection"
                 }

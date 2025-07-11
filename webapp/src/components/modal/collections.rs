@@ -4,8 +4,9 @@ use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 use tracing::error;
 
-use crate::components::modal::{
-    MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar, search::ModalSearchBar,
+use crate::components::{
+    advanced::BULK_EDIT,
+    modal::{MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar, search::ModalSearchBar},
 };
 use api::{
     FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter,
@@ -227,13 +228,13 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                             div {
                                                 class: "member-badge",
                                                 style: "
-                                                                                                                                                                display: inline-flex;
-                                                                                                                                                                align-items: center;
-                                                                                                                                                                padding: var(--space-1) var(--space-2);
-                                                                                                                                                                background-color: var(--primary-light);
-                                                                                                                                                                color: white;
-                                                                                                                                                                border-radius: var(--radius-full);
-                                                                                                                                                                font-size: 0.75rem;",
+                                                                                                                                                                                                                                                                            display: inline-flex;
+                                                                                                                                                                                                                                                                            align-items: center;
+                                                                                                                                                                                                                                                                            padding: var(--space-1) var(--space-2);
+                                                                                                                                                                                                                                                                            background-color: var(--primary-light);
+                                                                                                                                                                                                                                                                            color: white;
+                                                                                                                                                                                                                                                                            border-radius: var(--radius-full);
+                                                                                                                                                                                                                                                                            font-size: 0.75rem;",
                                                 "{member}"
                                             }
                                         }
@@ -757,11 +758,18 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkAddToCollectionModalProps {
     update_signal: Signal<()>,
-    media_uuids: HashSet<MediaUuid>,
 }
 
 #[component]
 pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element {
+    let media_uuids = match BULK_EDIT() {
+        None => {
+            MODAL_STACK.with_mut(|v| v.pop());
+            return rsx! {};
+        }
+        Some(v) => v,
+    };
+
     let mut update_signal = props.update_signal;
 
     let collection_search_signal = use_signal(String::new);
@@ -787,8 +795,6 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     };
 
     let mut status_signal = use_signal(String::new);
-
-    let media_uuids = props.media_uuids.clone();
 
     let mut processing_count = use_signal(|| 0);
     let mut success_count = use_signal(|| 0);
@@ -979,13 +985,13 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                     class: if is_selected { "collection-item selected" } else { "collection-item" },
                     style: {
                         let base_style = "
-                                                                                                                                                                                            padding: var(--space-3);
-                                                                                                                                                                                            border-bottom: 1px solid var(--border);
-                                                                                                                                                                                            display: flex;
-                                                                                                                                                                                            align-items: center;
-                                                                                                                                                                                            cursor: pointer;
-                                                                                                                                                                                            transition: background-color var(--transition-fast) var(--easing-standard);
-                                                                                                                                                                                        ";
+                                                                                                                                                                                                                                            padding: var(--space-3);
+                                                                                                                                                                                                                                            border-bottom: 1px solid var(--border);
+                                                                                                                                                                                                                                            display: flex;
+                                                                                                                                                                                                                                            align-items: center;
+                                                                                                                                                                                                                                            cursor: pointer;
+                                                                                                                                                                                                                                            transition: background-color var(--transition-fast) var(--easing-standard);
+                                                                                                                                                                                                                                        ";
                         if is_selected {
                             format!(
                                 "{}background-color: var(--primary-light); color: white;",
@@ -1004,14 +1010,14 @@ fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
                                 let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
                                 format!(
                                     "
-                                                                                                                                                                                                                                                                                    width: 18px;
-                                                                                                                                                                                                                                                                                    height: 18px;
-                                                                                                                                                                                                                                                                                    border-radius: 50%;
-                                                                                                                                                                                                                                                                                    border: 2px solid {};
-                                                                                                                                                                                                                                                                                    display: flex;
-                                                                                                                                                                                                                                                                                    align-items: center;
-                                                                                                                                                                                                                                                                                    justify-content: center;
-                                                                                                                                                                                                                                                                                ",
+                                                                                                                                                                                                                                                                                                                                                            width: 18px;
+                                                                                                                                                                                                                                                                                                                                                            height: 18px;
+                                                                                                                                                                                                                                                                                                                                                            border-radius: 50%;
+                                                                                                                                                                                                                                                                                                                                                            border: 2px solid {};
+                                                                                                                                                                                                                                                                                                                                                            display: flex;
+                                                                                                                                                                                                                                                                                                                                                            align-items: center;
+                                                                                                                                                                                                                                                                                                                                                            justify-content: center;
+                                                                                                                                                                                                                                                                                                                                                        ",
                                     border_color,
                                 )
                             },

@@ -3,7 +3,10 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal, ProgressBar};
+use crate::components::{
+    advanced::BULK_EDIT,
+    modal::{MODAL_STACK, ModalSize, ModernModal, ProgressBar},
+};
 use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
@@ -242,11 +245,18 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkAddTagsModalProps {
     update_signal: Signal<()>,
-    media_uuids: HashSet<MediaUuid>,
 }
 
 #[component]
 pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
+    let media_uuids = match BULK_EDIT() {
+        None => {
+            MODAL_STACK.with_mut(|v| v.pop());
+            return rsx! {};
+        }
+        Some(v) => v,
+    };
+
     let mut update_signal = props.update_signal;
 
     let mut edit_tags = use_signal(String::new);
@@ -254,8 +264,6 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
     let edit_mode_signal = use_signal(|| TagEditMode::Add);
 
     let mut status_signal = use_signal(String::new);
-
-    let media_uuids = props.media_uuids.clone();
 
     let mut processing_count = use_signal(|| 0);
     let mut success_count = use_signal(|| 0);

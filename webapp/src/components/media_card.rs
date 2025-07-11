@@ -1,9 +1,10 @@
-use std::collections::HashSet;
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{Route, common::storage::set_local_storage, gallery::GALLERY_COLLECTION_KEY};
+use crate::{
+    Route, common::storage::set_local_storage, components::advanced::BULK_EDIT,
+    gallery::GALLERY_COLLECTION_KEY,
+};
 use api::{collection::CollectionUuid, media::*, thumbnail_link};
 
 // TODO -- deduplicate the error handling in the the callsites by making a MediaGrid
@@ -13,8 +14,6 @@ pub struct MediaCardProps {
     media_uuid: MediaUuid,
     media: Media,
     collections: Vec<CollectionUuid>,
-    bulk_edit_mode_signal: Signal<bool>,
-    selected_media_signal: Signal<HashSet<MediaUuid>>,
     // Optional props for additional features
     #[props(default)]
     collection_uuid: Option<CollectionUuid>,
@@ -26,20 +25,21 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     let media = props.media;
     //let collections = props.collections;
 
-    let bulk_edit_mode_signal = props.bulk_edit_mode_signal;
-    let mut selected_media_signal = props.selected_media_signal;
+    let is_selected = BULK_EDIT()
+        .map(|s| s.contains(&media_uuid))
+        .unwrap_or(false);
 
-    let is_selected = selected_media_signal().contains(&media_uuid);
-
-    let mut toggle_selection = move |evt: MouseEvent| {
+    let toggle_selection = move |evt: MouseEvent| {
         evt.prevent_default();
         evt.stop_propagation();
 
-        selected_media_signal.with_mut(|set| {
-            if set.contains(&media_uuid) {
-                set.remove(&media_uuid);
-            } else {
-                set.insert(media_uuid);
+        BULK_EDIT.with_mut(|set| {
+            if let Some(set) = set {
+                if set.contains(&media_uuid) {
+                    set.remove(&media_uuid);
+                } else {
+                    set.insert(media_uuid);
+                }
             }
         });
     };
@@ -49,9 +49,9 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     rsx! {
         div {
             class: "media-card",
-            style: if bulk_edit_mode_signal() && is_selected { "position: relative; border: 3px solid var(--primary); transform: scale(0.98);" } else { "position: relative;" },
+            style: if BULK_EDIT().is_some() && is_selected { "position: relative; border: 3px solid var(--primary); transform: scale(0.98);" } else { "position: relative;" },
             // Add selection overlay in bulk edit mode
-            if bulk_edit_mode_signal() {
+            if BULK_EDIT().is_some() {
                 div {
                     style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: pointer;",
                     onclick: toggle_selection,
@@ -69,7 +69,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                     media_uuid: media_uuid.to_string(),
                 },
                 onclick: move |evt: MouseEvent| {
-                    if bulk_edit_mode_signal() {
+                    if BULK_EDIT().is_some() {
                         evt.prevent_default();
                         evt.stop_propagation();
                         toggle_selection(evt);
@@ -90,9 +90,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         if media.note.is_empty() {
                             "No description"
                         } else {
-                            {
-                                media.note.clone().lines().next().unwrap_or("No description").to_owned()
-                            }
+                            {media.note.clone().lines().next().unwrap_or("No description").to_owned()}
                         }
                     }
                 }
