@@ -1,9 +1,14 @@
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 
 use crate::{
     common::storage::try_local_storage,
     components::{
-        advanced::{BULK_EDIT, AdvancedContainer}, media_card::MediaCard, modal::ModalBox, search_bar::SearchBar,
+        advanced::{AdvancedSearchTab, AdvancedTabs, BulkAddToCollectionsTab, BulkEditTagsTab},
+        media_card::MediaCard,
+        modal::ModalBox,
+        search_bar::SearchBar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
@@ -19,6 +24,7 @@ pub fn GallerySearch() -> Element {
     let mut advanced_expanded = use_signal(|| false);
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let mut bulk_edit_signal = use_signal(|| None);
 
     let media_future = use_resource(move || async move {
         let filter = media_search_signal()
@@ -40,7 +46,7 @@ pub fn GallerySearch() -> Element {
             class: "btn btn-secondary",
             onclick: move |_| {
                 if advanced_expanded() {
-                    BULK_EDIT.with_mut(|v| *v = None);
+                    bulk_edit_signal.set(None);
                 }
                 advanced_expanded.set(!advanced_expanded());
             },
@@ -77,14 +83,19 @@ pub fn GallerySearch() -> Element {
                     action_button,
                 }
 
-                {
-                    if advanced_expanded() {
-                        rsx! {
-                            AdvancedContainer { media_search_signal }
-                        }
-                    } else {
-                        rsx! {}
-                    }
+                AdvancedTabs {
+                    show_signal: advanced_expanded,
+                    tabs: HashMap::from([
+                        ("Advanced Search".to_owned(), rsx! {
+                            AdvancedSearchTab { media_search_signal }
+                        }),
+                        ("Bulk Edit Tags".to_owned(), rsx! {
+                            BulkEditTagsTab { bulk_edit_signal }
+                        }),
+                        ("Bulk Add to Collection".to_owned(), rsx! {
+                            BulkAddToCollectionsTab { bulk_edit_signal }
+                        }),
+                    ]),
                 }
             }
 
@@ -104,6 +115,7 @@ pub fn GallerySearch() -> Element {
                                             media_uuid: search_resp.media_uuid,
                                             media: search_resp.media.clone(),
                                             collections: search_resp.collections.clone(),
+                                            bulk_edit_signal,
                                         }
                                     }
                                 }

@@ -87,6 +87,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     // the library media search is the only place where we can specify hidden = true
     let mut show_hidden = use_signal(|| false);
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let bulk_edit_signal = use_signal(|| None);
 
     let media_future = use_resource(move || async move {
         update_signal();
@@ -261,6 +262,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                                 media_uuid: media.media_uuid,
                                 media: media.media.clone(),
                                 collections: media.collections.clone(),
+                                bulk_edit_signal,
                             }
                         }
                     }

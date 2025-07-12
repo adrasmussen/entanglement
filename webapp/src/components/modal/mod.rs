@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 
 use api::{
@@ -41,8 +43,8 @@ pub enum Modal {
     DeleteCollection(CollectionUuid),
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
-    BulkAddToCollection,
-    BulkEditTags,
+    BulkAddToCollection(Option<HashSet<MediaUuid>>),
+    BulkEditTags(Option<HashSet<MediaUuid>>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
     TaskHistory(LibraryUuid),
@@ -102,14 +104,14 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
                     }
                 }
             }
-            Modal::BulkAddToCollection => {
+            Modal::BulkAddToCollection(ref media_uuids) => {
                 rsx! {
-                    BulkAddToCollectionModal { update_signal }
+                    BulkAddToCollectionModal { update_signal, media_uuids: media_uuids.clone() }
                 }
             }
-            Modal::BulkEditTags => {
+            Modal::BulkEditTags(ref media_uuids) => {
                 rsx! {
-                    BulkEditTagsModal { update_signal }
+                    BulkEditTagsModal { update_signal, media_uuids: media_uuids.clone() }
                 }
             }
             Modal::StartTask(library_uuid) => {

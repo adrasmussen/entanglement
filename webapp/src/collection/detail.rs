@@ -88,6 +88,8 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     });
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let bulk_edit_signal = use_signal(|| None);
+
     let media_future = use_resource(move || async move {
         let collection_uuid = collection_uuid();
         let filter = media_search_signal()
@@ -290,6 +292,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                 media_uuid: media.media_uuid,
                                 media: media.media.clone(),
                                 collections: media.collections.clone(),
+                                bulk_edit_signal,
                             }
                         }
                     }

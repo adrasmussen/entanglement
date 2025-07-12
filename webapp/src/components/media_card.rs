@@ -1,10 +1,9 @@
+use std::collections::HashSet;
+
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{
-    Route, common::storage::set_local_storage, components::advanced::BULK_EDIT,
-    gallery::GALLERY_COLLECTION_KEY,
-};
+use crate::{Route, common::storage::set_local_storage, gallery::GALLERY_COLLECTION_KEY};
 use api::{collection::CollectionUuid, media::*, thumbnail_link};
 
 // TODO -- deduplicate the error handling in the the callsites by making a MediaGrid
@@ -17,6 +16,7 @@ pub struct MediaCardProps {
     // Optional props for additional features
     #[props(default)]
     collection_uuid: Option<CollectionUuid>,
+    bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
 }
 
 #[component]
@@ -25,15 +25,17 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     let media = props.media;
     //let collections = props.collections;
 
-    let is_selected = BULK_EDIT()
+    let mut bulk_edit_signal = props.bulk_edit_signal;
+
+    let is_selected = bulk_edit_signal()
         .map(|s| s.contains(&media_uuid))
         .unwrap_or(false);
 
-    let toggle_selection = move |evt: MouseEvent| {
+    let mut toggle_selection = move |evt: MouseEvent| {
         evt.prevent_default();
         evt.stop_propagation();
 
-        BULK_EDIT.with_mut(|set| {
+        bulk_edit_signal.with_mut(|set| {
             if let Some(set) = set {
                 if set.contains(&media_uuid) {
                     set.remove(&media_uuid);
@@ -49,9 +51,9 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     rsx! {
         div {
             class: "media-card",
-            style: if BULK_EDIT().is_some() && is_selected { "position: relative; border: 3px solid var(--primary); transform: scale(0.98);" } else { "position: relative;" },
+            style: if bulk_edit_signal().is_some() && is_selected { "position: relative; border: 3px solid var(--primary); transform: scale(0.98);" } else { "position: relative;" },
             // Add selection overlay in bulk edit mode
-            if BULK_EDIT().is_some() {
+            if bulk_edit_signal().is_some() {
                 div {
                     style: "position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: pointer;",
                     onclick: toggle_selection,
@@ -69,7 +71,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                     media_uuid: media_uuid.to_string(),
                 },
                 onclick: move |evt: MouseEvent| {
-                    if BULK_EDIT().is_some() {
+                    if bulk_edit_signal().is_some() {
                         evt.prevent_default();
                         evt.stop_propagation();
                         toggle_selection(evt);
