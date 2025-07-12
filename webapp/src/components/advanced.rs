@@ -140,15 +140,18 @@ pub fn AdvancedSearchTab(props: AdvancedSearchTabProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkEditTagsTabProps {
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    media_uuids: Memo<Option<HashSet<MediaUuid>>>,
 }
 
 #[component]
 pub fn BulkEditTagsTab(props: BulkEditTagsTabProps) -> Element {
     let bulk_edit_signal = props.bulk_edit_signal;
+    let media_uuids = props.media_uuids;
 
     rsx! {
         BulkEdit {
             bulk_edit_signal,
+            media_uuids,
             modal_target: Modal::BulkEditTags(bulk_edit_signal()),
             button_text: "Edit Tags for Selected",
             hidden_text: "Enable Bulk Edit Mode to edit tags for large groups of media.",
@@ -159,15 +162,18 @@ pub fn BulkEditTagsTab(props: BulkEditTagsTabProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkAddToCollectionsTabProps {
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    media_uuids: Memo<Option<HashSet<MediaUuid>>>,
 }
 
 #[component]
 pub fn BulkAddToCollectionsTab(props: BulkAddToCollectionsTabProps) -> Element {
     let bulk_edit_signal = props.bulk_edit_signal;
+    let media_uuids = props.media_uuids;
 
     rsx! {
         BulkEdit {
             bulk_edit_signal,
+            media_uuids,
             modal_target: Modal::BulkAddToCollection(bulk_edit_signal()),
             button_text: "Add Selected to Collection",
             hidden_text: "Enable Bulk Edit Mode to add media to collections in large groups.",
@@ -178,6 +184,7 @@ pub fn BulkAddToCollectionsTab(props: BulkAddToCollectionsTabProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkEditProps {
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    media_uuids: Memo<Option<HashSet<MediaUuid>>>,
     modal_target: Modal,
     button_text: &'static str,
     hidden_text: &'static str,
@@ -186,6 +193,7 @@ pub struct BulkEditProps {
 #[component]
 pub fn BulkEdit(props: BulkEditProps) -> Element {
     let mut bulk_edit_signal = props.bulk_edit_signal;
+    let media_uuids = props.media_uuids;
 
     rsx! {
         div { class: "bulk-edit-options",
@@ -231,7 +239,7 @@ pub fn BulkEdit(props: BulkEditProps) -> Element {
             }
         }
 
-        if bulk_edit_signal().is_some() {
+        if let Some(bulk_edit_uuids) = bulk_edit_signal() {
             div {
                 class: "bulk-actions",
                 style: "display: flex; gap: var(--space-3); margin-top: var(--space-4);",
@@ -241,6 +249,15 @@ pub fn BulkEdit(props: BulkEditProps) -> Element {
                         MODAL_STACK.with_mut(|v| { v.push(props.modal_target.clone()) });
                     },
                     "{props.button_text}"
+                }
+                button {
+                    class: "btn btn-secondary",
+                    onclick: move |_| {
+                        if let Some(media_uuids) = media_uuids() {
+                        bulk_edit_signal.set(Some(media_uuids.difference(&bulk_edit_uuids).copied().collect()));
+                        }
+                    },
+                    "Invert Selection"
                 }
                 button {
                     class: "btn btn-secondary",

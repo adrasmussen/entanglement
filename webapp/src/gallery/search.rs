@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
 
@@ -39,6 +39,16 @@ pub fn GallerySearch() -> Element {
             sort: SortMethod::Date,
         })
         .await
+    });
+
+    // clunky, but it avoids cloning the reponse
+    let media_uuids = use_memo(move || match &*media_future.read() {
+        Some(Ok(v)) => Some(v
+            .media
+            .iter()
+            .map(|m| m.media_uuid)
+            .collect::<HashSet<MediaUuid>>()),
+        _ => None,
     });
 
     let action_button = rsx! {
@@ -90,10 +100,10 @@ pub fn GallerySearch() -> Element {
                             AdvancedSearchTab { media_search_signal }
                         }),
                         ("Bulk Edit Tags".to_owned(), rsx! {
-                            BulkEditTagsTab { bulk_edit_signal }
+                            BulkEditTagsTab { bulk_edit_signal, media_uuids }
                         }),
                         ("Bulk Add to Collection".to_owned(), rsx! {
-                            BulkAddToCollectionsTab { bulk_edit_signal }
+                            BulkAddToCollectionsTab { bulk_edit_signal, media_uuids }
                         }),
                     ]),
                 }
