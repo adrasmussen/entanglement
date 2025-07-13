@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 use crate::{
     common::storage::try_local_storage,
     components::{
-        advanced::{AdvancedSearchTab, AdvancedTabs, BulkAddToCollectionsTab, BulkEditTagsTab},
+        advanced::{AdvancedSearchTab, AdvancedTabs, BulkEditMode, BulkEditTab},
         media_card::MediaCard,
         modal::ModalBox,
         search_bar::SearchBar,
@@ -43,11 +43,12 @@ pub fn GallerySearch() -> Element {
 
     // clunky, but it avoids cloning the reponse
     let media_uuids = use_memo(move || match &*media_future.read() {
-        Some(Ok(v)) => Some(v
-            .media
-            .iter()
-            .map(|m| m.media_uuid)
-            .collect::<HashSet<MediaUuid>>()),
+        Some(Ok(v)) => Some(
+            v.media
+                .iter()
+                .map(|m| m.media_uuid)
+                .collect::<HashSet<MediaUuid>>(),
+        ),
         _ => None,
     });
 
@@ -99,11 +100,12 @@ pub fn GallerySearch() -> Element {
                         ("Advanced Search".to_owned(), rsx! {
                             AdvancedSearchTab { media_search_signal }
                         }),
-                        ("Bulk Edit Tags".to_owned(), rsx! {
-                            BulkEditTagsTab { bulk_edit_signal, media_uuids }
-                        }),
-                        ("Bulk Add to Collection".to_owned(), rsx! {
-                            BulkAddToCollectionsTab { bulk_edit_signal, media_uuids }
+                        ("Bulk Edit".to_owned(), rsx! {
+                            BulkEditTab {
+                                bulk_edit_signal,
+                                media_uuids,
+                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                            }
                         }),
                     ]),
                 }
