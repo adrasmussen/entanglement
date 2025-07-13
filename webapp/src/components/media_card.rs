@@ -10,13 +10,17 @@ use api::{collection::CollectionUuid, media::*, thumbnail_link};
 // with an error boundary
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaCardProps {
+    // media data fetched from the database
     media_uuid: MediaUuid,
     media: Media,
     collections: Vec<CollectionUuid>,
-    // Optional props for additional features
+    // currently used for ham-fisted indication of which collection sent
+    // the user to the media detail page
     #[props(default)]
     collection_uuid: Option<CollectionUuid>,
+    // signals used by various other components
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    //collection_color_signal: Signal<Option<HashMap<CollectionUuid, Color>>>
 }
 
 #[component]

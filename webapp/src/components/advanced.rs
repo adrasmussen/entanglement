@@ -5,14 +5,15 @@ use dioxus::prelude::*;
 use crate::components::modal::{MODAL_STACK, Modal};
 use api::{WebError, media::MediaUuid};
 
+// TODO -- use show_signal for consistent cleanup... or move to a button?
 #[derive(Clone, PartialEq, Props)]
-pub struct AdvancedTagsProps {
+pub struct AdvancedTabsProps {
     show_signal: Signal<bool>,
     tabs: HashMap<String, Element>,
 }
 
 #[component]
-pub fn AdvancedTabs(props: AdvancedTagsProps) -> Element {
+pub fn AdvancedTabs(props: AdvancedTabsProps) -> Element {
     let show_signal = props.show_signal;
     let tabs = props.tabs;
 
@@ -141,6 +142,8 @@ pub fn AdvancedSearchTab(props: AdvancedSearchTabProps) -> Element {
 pub enum BulkEditMode {
     EditTags,
     AddToCollection,
+    //RmFromCollection,
+    //Hide,
 }
 #[derive(Clone, PartialEq, Props)]
 struct BulkEditButtonProps {
