@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     common::storage::*,
-    components::{modal::ModalBox, search_bar::SearchBar},
+    components::{modal::ModalBox, search::SearchBar},
     library::{LIBRARY_SEARCH_KEY, table::LibraryTable},
 };
 use api::library::*;

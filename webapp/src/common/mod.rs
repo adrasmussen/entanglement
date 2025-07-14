@@ -1,5 +1,6 @@
 pub mod storage;
 pub mod style;
+pub mod colors;
 
 use chrono::{Local, TimeZone};
 

@@ -5,7 +5,7 @@ use crate::{
     common::storage::*,
     components::{
         modal::{MODAL_STACK, Modal, ModalBox},
-        search_bar::SearchBar,
+        search::SearchBar,
     },
 };
 use api::{collection::*, search::SearchFilter};

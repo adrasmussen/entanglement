@@ -1,9 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
+use tracing::error;
+use web_sys::wasm_bindgen::JsCast;
 
-use crate::components::modal::{MODAL_STACK, Modal};
-use api::{WebError, media::MediaUuid};
+use crate::{
+    common::colors::CollectionColor,
+    components::{
+        modal::{MODAL_STACK, Modal},
+        search::CompactSearchBar,
+    },
+};
+use api::{WebError, collection::*, media::MediaUuid, search::*};
 
 // TODO -- use show_signal for consistent cleanup... or move to a button?
 #[derive(Clone, PartialEq, Props)]
@@ -35,16 +43,7 @@ pub fn AdvancedTabs(props: AdvancedTabsProps) -> Element {
     rsx! {
         div {
             class: "advanced-search-options",
-            style: "
-                    margin-top: -16px;
-                    margin-bottom: var(--space-6);
-                    padding: var(--space-4);
-                    background-color: var(--neutral-50);
-                    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-                    box-shadow: var(--shadow-sm);
-                    border-top: 1px solid var(--neutral-200);
-                    animation: slide-down 0.2s ease-out;
-                ",
+            style: "margin-top: -16px; margin-bottom: var(--space-6); padding: var(--space-4); background-color: var(--neutral-50); border-radius: 0 0 var(--radius-lg) var(--radius-lg); box-shadow: var(--shadow-sm); border-top: 1px solid var(--neutral-200); animation: slide-down 0.2s ease-out;",
             h3 { style: "margin-bottom: var(--space-3); font-size: 1rem;", "Advanced Options" }
 
             div {
@@ -261,7 +260,6 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
                 for mode in modes {
                     BulkEditButton { bulk_edit_signal, mode }
                 }
-
             }
             div {
                 class: "bulk-edit-instructions",
@@ -279,6 +277,349 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
                 style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
                 p { style: "margin: 0; color: var(--text-secondary);",
                     "Enable bulk edit mode to modify many media at the same time."
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct CollectionColorTabProps {
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+}
+
+#[component]
+pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
+    let collection_color_signal = props.collection_color_signal;
+    let collection_search_signal = use_signal(String::new);
+
+    // Track which collections are already selected for coloring
+    let selected_collections = use_memo(move || {
+        collection_color_signal()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+
+    let collections_future = use_resource(move || async move {
+        let filter = collection_search_signal()
+            .split_whitespace()
+            .map(|s| s.to_owned())
+            .collect();
+
+        search_collections(&SearchCollectionsReq {
+            filter: SearchFilter::SubstringAny { filter },
+        })
+        .await
+    });
+
+    // Get available collections (excluding already selected ones)
+    let available_collections = match &*collections_future.read() {
+        Some(Ok(response)) => Some(
+            response
+                .collections
+                .iter()
+                .filter(|uuid| !selected_collections().contains(uuid))
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
+        Some(Err(_)) => None,
+        None => None,
+    };
+
+    rsx! {
+        div { class: "collection-color-options",
+            div { class: "form-group",
+                label { class: "form-label", "Collection Colors" }
+                p { style: "margin-bottom: var(--space-4); color: var(--text-secondary); font-size: 0.875rem;",
+                    "Assign colors to collections to highlight media cards. Media belonging to colored collections will display with those colors."
+                }
+            }
+
+            // Currently colored collections
+            ColoredCollectionList { collection_color_signal }
+
+            // Add new collection color section
+            div { class: "add-collection-color",
+                h4 { style: "margin-bottom: var(--space-3); font-size: 1rem; color: var(--text-primary);",
+                    "Add Collection Color"
+                }
+
+                CompactSearchBar {
+                    search_signal: collection_search_signal,
+                    placeholder: "Search collections to add color...",
+                }
+
+                if let Some(collections) = available_collections {
+                    if collections.is_empty() {
+                        div {
+                            class: "empty-state",
+                            style: "padding: var(--space-4); text-align: center; color: var(--text-tertiary); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                            "No more collections available to color. All matching collections are already colored."
+                        }
+                    } else {
+                        div {
+                            class: "available-collections",
+                            style: "max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
+                            for collection_uuid in collections {
+                                AvailableCollectionItem {
+                                    key: "{collection_uuid}",
+                                    collection_uuid,
+                                    collection_color_signal,
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    div { style: "display: flex; flex-direction: column; gap: var(--space-2);",
+                        for _ in 0..3 {
+                            div {
+                                class: "skeleton",
+                                style: "height: 60px; border-radius: var(--radius-md);",
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct ColoredCollectionListProps {
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+}
+
+#[component]
+fn ColoredCollectionList(props: ColoredCollectionListProps) -> Element {
+    let collection_color_signal = props.collection_color_signal;
+
+    if !collection_color_signal().is_empty() {
+        rsx! {
+            div {
+                class: "colored-collections-list",
+                style: "margin-bottom: var(--space-6);",
+                h4 { style: "margin-bottom: var(--space-3); font-size: 1rem; color: var(--text-primary);",
+                    "Colored Collections"
+                }
+                div { style: "display: flex; flex-direction: column; gap: var(--space-3);",
+                    for (collection_uuid , color) in collection_color_signal().iter() {
+                        ColoredCollectionItem {
+                            key: "{collection_uuid}",
+                            collection_uuid: *collection_uuid,
+                            color: *color,
+                            collection_color_signal,
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {}
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct ColoredCollectionItemProps {
+    collection_uuid: CollectionUuid,
+    color: CollectionColor,
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+}
+
+#[component]
+fn ColoredCollectionItem(props: ColoredCollectionItemProps) -> Element {
+    let collection_uuid = props.collection_uuid;
+    let color = props.color;
+    let mut collection_color_signal = props.collection_color_signal;
+
+    // Fetch collection details
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
+
+    let collection = &*collection_future.read();
+
+    match collection {
+        Some(Ok(result)) => {
+            let collection = result.collection.clone();
+            rsx! {
+                div {
+                    class: "colored-collection-item",
+                    style: format!(
+                        "display: flex; align-items: center; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background-color: {};",
+                        color.to_light_css_color(),
+                    ),
+
+                    div {
+                        style: format!(
+                            "width: 24px; height: 24px; border-radius: 50%; background-color: {}; margin-right: var(--space-3); border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);",
+                            color.to_css_color(),
+                        ),
+                    }
+
+                    div { style: "flex: 1; margin-right: var(--space-3);",
+                        div { style: "font-weight: 500; color: var(--text-primary);",
+                            "{collection.name}"
+                        }
+                        div { style: "font-size: 0.875rem; color: var(--text-secondary);",
+                            "Group: {collection.gid}"
+                        }
+                    }
+
+                    select {
+                        class: "form-select",
+                        style: "margin-right: var(--space-2); max-width: 100px;",
+                        value: "{color}",
+                        onchange: move |evt| {
+                            match evt.value().parse::<String>() {
+                                Ok(color) => {
+                                    if CollectionColor::all().contains(&color.clone().into()) {
+                                        collection_color_signal
+                                            .with_mut(|map| {
+                                                map.insert(collection_uuid, color.into());
+                                            });
+                                    }
+                                }
+                                _ => error!("internal error -- invalid color"),
+                            }
+                        },
+                        for available_color in CollectionColor::all() {
+                            option {
+                                value: "{available_color}",
+                                selected: available_color == color,
+                                "{available_color}"
+                            }
+                        }
+                    }
+
+                    button {
+                        class: "btn btn-sm btn-danger",
+                        onclick: move |_| {
+                            collection_color_signal
+                                .with_mut(|map| {
+                                    map.remove(&collection_uuid);
+                                });
+                        },
+                        "Remove"
+                    }
+                }
+            }
+        }
+
+        _ => {
+            error!("failed to get collection while coloring");
+            rsx! {
+                div {
+                    div {
+                        class: "skeleton",
+                        style: "height: 18px; width: 120px; margin-bottom: 4px;",
+                    }
+                    div {
+                        class: "skeleton",
+                        style: "height: 14px; width: 80px;",
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+struct AvailableCollectionItemProps {
+    collection_uuid: CollectionUuid,
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+}
+
+#[component]
+fn AvailableCollectionItem(props: AvailableCollectionItemProps) -> Element {
+    let collection_uuid = props.collection_uuid;
+    let mut collection_color_signal = props.collection_color_signal;
+
+    // Fetch collection details
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
+
+    let collection_data = match &*collection_future.read() {
+        Some(Ok(response)) => Some(response.collection.clone()),
+        _ => None,
+    };
+
+    rsx! {
+        div {
+            class: "available-collection-item",
+            style: "display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
+
+            // Collection info
+            div { style: "flex: 1;",
+                if let Some(collection) = collection_data {
+                    div {
+                        div { style: "font-weight: 500; color: var(--text-primary);",
+                            "{collection.name}"
+                        }
+                        div { style: "font-size: 0.875rem; color: var(--text-secondary);",
+                            "Group: {collection.gid}"
+                            if !collection.note.is_empty() {
+                                " • {collection.note}"
+                            }
+                        }
+                    }
+                } else {
+                    div {
+                        div {
+                            class: "skeleton",
+                            style: "height: 18px; width: 120px; margin-bottom: 4px;",
+                        }
+                        div {
+                            class: "skeleton",
+                            style: "height: 14px; width: 200px;",
+                        }
+                    }
+                }
+            }
+
+            // Color selector and add button
+            div { style: "display: flex; align-items: center; gap: var(--space-2);",
+                select {
+                    class: "form-select",
+                    style: "min-width: 100px;",
+                    id: "color-select-{collection_uuid}",
+                    for available_color in CollectionColor::all() {
+                        option {
+                            value: "{available_color}",
+                            selected: available_color == CollectionColor::Blue, // Default to blue
+                            "{available_color}"
+                        }
+                    }
+                }
+                button {
+                    class: "btn btn-sm btn-primary",
+                    onclick: move |_| {
+                        if let Some(window) = web_sys::window() {
+                            if let Some(document) = window.document() {
+                                if let Some(select) = document
+                                    .get_element_by_id(&format!("color-select-{}", collection_uuid))
+                                {
+                                    if let Some(select) = select.dyn_ref::<web_sys::HtmlSelectElement>()
+                                    {
+                                        let selected_value = select.value();
+                                        for available_color in CollectionColor::all() {
+                                            if available_color.to_string() == selected_value {
+                                                collection_color_signal
+                                                    .with_mut(|map| {
+                                                        map.insert(collection_uuid, available_color);
+                                                    });
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "Add Color"
                 }
             }
         }

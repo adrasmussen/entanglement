@@ -1,9 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::{Route, common::storage::set_local_storage, gallery::GALLERY_COLLECTION_KEY};
+use crate::{
+    Route,
+    common::{colors::CollectionColor, storage::set_local_storage},
+    gallery::GALLERY_COLLECTION_KEY,
+};
 use api::{collection::CollectionUuid, media::*, thumbnail_link};
 
 // TODO -- deduplicate the error handling in the the callsites by making a MediaGrid
@@ -20,16 +24,17 @@ pub struct MediaCardProps {
     collection_uuid: Option<CollectionUuid>,
     // signals used by various other components
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
-    //collection_color_signal: Signal<Option<HashMap<CollectionUuid, Color>>>
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
 }
 
 #[component]
 pub fn MediaCard(props: MediaCardProps) -> Element {
     let media_uuid = props.media_uuid;
     let media = props.media;
-    //let collections = props.collections;
+    let collections = props.collections;
 
     let mut bulk_edit_signal = props.bulk_edit_signal;
+    let collection_color_signal = props.collection_color_signal;
 
     let is_selected = bulk_edit_signal()
         .map(|s| s.contains(&media_uuid))
@@ -97,6 +102,25 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                             "No description"
                         } else {
                             {media.note.clone().lines().next().unwrap_or("No description").to_owned()}
+                        }
+                    }
+
+                    if !collection_color_signal().is_empty() {
+                        div {
+                            class: "collection-indicators",
+                            style: "display: flex; gap: var(--space-1); margin-top: var(--space-1); flex-wrap: wrap;",
+                            for (i , color) in collection_color_signal().iter() {
+                                if collections.contains(i) {
+                                    div {
+                                        key: "{i}",
+                                        style: format!(
+                                            "width: 8px; height: 8px; border-radius: 50%; background-color: {}; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.1);",
+                                            color.to_css_color(),
+                                        ),
+                                        title: "{color}",
+                                    }
+                                }
+                            }
                         }
                     }
                 }

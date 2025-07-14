@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
@@ -8,7 +10,7 @@ use crate::{
     components::{
         media_card::MediaCard,
         modal::{MODAL_STACK, Modal, ModalBox},
-        search_bar::SearchBar,
+        search::SearchBar,
     },
 };
 use api::{
@@ -89,6 +91,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let bulk_edit_signal = use_signal(|| None);
+    let collection_color_signal = use_signal(HashMap::new);
 
     let media_future = use_resource(move || async move {
         let collection_uuid = collection_uuid();
@@ -293,6 +296,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                 media: media.media.clone(),
                                 collections: media.collections.clone(),
                                 bulk_edit_signal,
+                                collection_color_signal,
                             }
                         }
                     }

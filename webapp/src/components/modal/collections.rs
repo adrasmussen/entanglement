@@ -5,7 +5,8 @@ use gloo_timers::callback::Timeout;
 use tracing::error;
 
 use crate::components::{
-    modal::{MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar, search::ModalSearchBar},
+    modal::{MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar},
+    search::CompactSearchBar,
 };
 use api::{
     FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter,
@@ -162,7 +163,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                             r#type: "text",
                             value: "{collection_group}",
                             oninput: move |evt| collection_group.set(evt.value().clone()),
-                            placeholder: "users",
+                            placeholder: "group name",
                             style: "flex: 1;",
                         }
                     }
@@ -184,22 +185,8 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 if has_members {
                     div {
                         class: "group-members-container",
-                        style: "
-                            margin-top: var(--space-3);
-                            margin-bottom: var(--space-3);
-                            padding: var(--space-3);
-                            background-color: var(--neutral-50);
-                            border-radius: var(--radius-md);
-                            border: 1px solid var(--neutral-200);
-                        ",
-                        h4 { style: "
-                                font-size: 0.875rem;
-                                margin-bottom: var(--space-2);
-                                color: var(--text-secondary);
-                                display: flex;
-                                align-items: center;
-                                gap: var(--space-2);
-                            ",
+                        style: " margin-top: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200);",
+                        h4 { style: " font-size: 0.875rem; margin-bottom: var(--space-2); color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2);",
                             svg {
                                 width: "16",
                                 height: "16",
@@ -226,14 +213,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                                         for member in members.iter() {
                                             div {
                                                 class: "member-badge",
-                                                style: "
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    display: inline-flex;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    align-items: center;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    padding: var(--space-1) var(--space-2);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    background-color: var(--primary-light);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    color: white;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    border-radius: var(--radius-full);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    font-size: 0.75rem;",
+                                                style: "display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2); background-color: var(--primary-light); color: white; border-radius: var(--radius-full); font-size: 0.75rem;",
                                                 "{member}"
                                             }
                                         }
@@ -253,17 +233,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 } else if !collection_group().is_empty() {
                     div {
                         class: "group-members-container",
-                        style: "
-                            margin-top: var(--space-3);
-                            margin-bottom: var(--space-3);
-                            padding: var(--space-3);
-                            background-color: var(--neutral-50);
-                            border-radius: var(--radius-md);
-                            border: 1px solid var(--neutral-200);
-                            color: var(--text-tertiary);
-                            text-align: center;
-                            font-style: italic;
-                        ",
+                        style: " margin-top: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200); color: var(--text-tertiary); text-align: center; font-style: italic;",
                         "No members found in this group"
                     }
                 }
@@ -540,12 +510,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
 
                 div {
                     class: "warning-message",
-                    style: "
-                        padding: var(--space-3);
-                        background-color: rgba(239, 68, 68, 0.1);
-                        border-left: 3px solid var(--error);
-                        border-radius: var(--radius-md);
-                        color: var(--text-secondary);",
+                    style: " padding: var(--space-3); background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--error); border-radius: var(--radius-md); color: var(--text-secondary);",
                     "Note: This will only delete the collection. The media files within the collection will remain in your library."
                 }
             }
@@ -644,7 +609,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
         ModernModal { title: "Add to Collection", size: ModalSize::Medium, footer,
             div {
                 p { "Search Collections" }
-                ModalSearchBar {
+                CompactSearchBar {
                     search_signal: collection_search_signal,
                     placeholder: "Enter collection name or description...",
                 }
@@ -757,7 +722,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkAddToCollectionModalProps {
     update_signal: Signal<()>,
-    media_uuids: Option<HashSet<MediaUuid>>
+    media_uuids: Option<HashSet<MediaUuid>>,
 }
 
 #[component]
@@ -918,7 +883,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 }
 
                 p { "Search Collections" }
-                ModalSearchBar {
+                CompactSearchBar {
                     search_signal: collection_search_signal,
                     placeholder: "Enter collection name or description...",
                 }
@@ -944,125 +909,6 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                         },
                         "Create New Collection"
                     }
-                }
-            }
-        }
-    }
-}
-
-// Helper component for collection selection items
-#[derive(Clone, PartialEq, Props)]
-struct CollectionSelectionItemProps {
-    collection_uuid: CollectionUuid,
-    is_selected: bool,
-    on_select: EventHandler<MouseEvent>,
-}
-
-#[component]
-fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
-    let collection_uuid = props.collection_uuid;
-    let is_selected = props.is_selected;
-
-    // Fetch collection details
-    let collection_future =
-        use_resource(
-            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
-        );
-
-    let collection = &*collection_future.read();
-
-    match collection {
-        Some(Ok(result)) => {
-            let collection = result.collection.clone();
-            let description = if collection.note.is_empty() {
-                "No description"
-            } else {
-                &collection.note
-            };
-
-            rsx! {
-                div {
-                    class: if is_selected { "collection-item selected" } else { "collection-item" },
-                    style: {
-                        let base_style = "
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            padding: var(--space-3);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            border-bottom: 1px solid var(--border);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            display: flex;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            align-items: center;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            cursor: pointer;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            transition: background-color var(--transition-fast) var(--easing-standard);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ";
-                        if is_selected {
-                            format!(
-                                "{}background-color: var(--primary-light); color: white;",
-                                base_style,
-                            )
-                        } else {
-                            base_style.to_string()
-                        }
-                    },
-                    onclick: move |evt| props.on_select.call(evt),
-
-                    // Radio button indicator
-                    div { style: "margin-right: var(--space-3);",
-                        div {
-                            style: {
-                                let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
-                                format!(
-                                    "
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            width: 18px;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            height: 18px;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            border-radius: 50%;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            border: 2px solid {};
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            display: flex;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            align-items: center;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            justify-content: center;
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ",
-                                    border_color,
-                                )
-                            },
-                            if is_selected {
-                                div { style: "width: 10px; height: 10px; border-radius: 50%; background-color: white;" }
-                            }
-                        }
-                    }
-
-                    // Collection info
-                    div { style: "flex: 1;",
-                        div { style: "font-weight: 500;", "{collection.name}" }
-                        div {
-                            style: {
-                                if is_selected {
-                                    "font-size: 0.875rem; color: rgba(255, 255, 255, 0.9);"
-                                } else {
-                                    "font-size: 0.875rem; color: var(--text-tertiary);"
-                                }
-                            },
-                            "Group: {collection.gid} • {description}"
-                        }
-                    }
-                }
-            }
-        }
-        Some(Err(_)) => {
-            rsx! {
-                div {
-                    class: "collection-item error",
-                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border); color: var(--error);",
-                    "Error loading collection #{collection_uuid}"
-                }
-            }
-        }
-        None => {
-            rsx! {
-                div {
-                    class: "collection-item loading",
-                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border);",
-                    div {
-                        class: "skeleton",
-                        style: "height: 24px; width: 60%; margin-bottom: 4px;",
-                    }
-                    div { class: "skeleton", style: "height: 16px; width: 80%;" }
                 }
             }
         }
@@ -1115,6 +961,110 @@ fn CollectionSelectionList(props: CollectionSelectionListProps) -> Element {
                             div { class: "skeleton", style: "height: 60px; margin-bottom: 8px;" }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// Helper component for collection selection items
+#[derive(Clone, PartialEq, Props)]
+struct CollectionSelectionItemProps {
+    collection_uuid: CollectionUuid,
+    is_selected: bool,
+    on_select: EventHandler<MouseEvent>,
+}
+
+#[component]
+fn CollectionSelectionItem(props: CollectionSelectionItemProps) -> Element {
+    let collection_uuid = props.collection_uuid;
+    let is_selected = props.is_selected;
+
+    // Fetch collection details
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
+
+    let collection = &*collection_future.read();
+
+    match collection {
+        Some(Ok(result)) => {
+            let collection = result.collection.clone();
+            let description = if collection.note.is_empty() {
+                "No description"
+            } else {
+                &collection.note
+            };
+
+            rsx! {
+                div {
+                    class: if is_selected { "collection-item selected" } else { "collection-item" },
+                    style: {
+                        let base_style = "padding: var(--space-3); border-bottom: 1px solid var(--border); display: flex; align-items: center; cursor: pointer; transition: background-color var(--transition-fast) var(--easing-standard);";
+                        if is_selected {
+                            format!(
+                                "{} background-color: var(--primary-light); color: white;",
+                                base_style,
+                            )
+                        } else {
+                            base_style.to_string()
+                        }
+                    },
+                    onclick: move |evt| props.on_select.call(evt),
+
+                    // Radio button indicator
+                    div { style: "margin-right: var(--space-3);",
+                        div {
+                            style: {
+                                let border_color = if is_selected { "white" } else { "var(--neutral-400)" };
+                                format!(
+                                    "width: 18px; height: 18px; border-radius: 50%; border: 2px solid {}; display: flex; align-items: center; justify-content: center;",
+                                    border_color,
+                                )
+                            },
+                            if is_selected {
+                                div { style: "width: 10px; height: 10px; border-radius: 50%; background-color: white;" }
+                            }
+                        }
+                    }
+
+                    // Collection info
+                    div { style: "flex: 1;",
+                        div { style: "font-weight: 500;", "{collection.name}" }
+                        div {
+                            style: {
+                                if is_selected {
+                                    "font-size: 0.875rem; color: rgba(255, 255, 255, 0.9);"
+                                } else {
+                                    "font-size: 0.875rem; color: var(--text-tertiary);"
+                                }
+                            },
+                            "Group: {collection.gid} • {description}"
+                        }
+                    }
+                }
+            }
+        }
+        Some(Err(_)) => {
+            rsx! {
+                div {
+                    class: "collection-item error",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border); color: var(--error);",
+                    "Error loading collection #{collection_uuid}"
+                }
+            }
+        }
+        None => {
+            rsx! {
+                div {
+                    class: "collection-item loading",
+                    style: "padding: var(--space-3); border-bottom: 1px solid var(--border);",
+                    div {
+                        class: "skeleton",
+                        style: "height: 24px; width: 60%; margin-bottom: 4px;",
+                    }
+                    div { class: "skeleton", style: "height: 16px; width: 80%;" }
                 }
             }
         }

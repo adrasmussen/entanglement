@@ -21,8 +21,6 @@ use library::{StartTaskModal, StopTaskModal, TaskHistoryModal};
 mod media;
 use media::{BulkEditTagsModal, EnhancedMediaModal};
 
-mod search;
-
 // global modal signal
 //
 // rather than having each page have its own modal signal logic, we define a global

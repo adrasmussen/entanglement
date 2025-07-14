@@ -5,10 +5,12 @@ use dioxus::prelude::*;
 use crate::{
     common::storage::try_local_storage,
     components::{
-        advanced::{AdvancedSearchTab, AdvancedTabs, BulkEditMode, BulkEditTab},
+        advanced::{
+            AdvancedSearchTab, AdvancedTabs, BulkEditMode, BulkEditTab, CollectionColorTab,
+        },
         media_card::MediaCard,
         modal::ModalBox,
-        search_bar::SearchBar,
+        search::SearchBar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
@@ -25,6 +27,7 @@ pub fn GallerySearch() -> Element {
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let mut bulk_edit_signal = use_signal(|| None);
+    let mut collection_color_signal = use_signal(HashMap::new);
 
     let media_future = use_resource(move || async move {
         let filter = media_search_signal()
@@ -58,6 +61,7 @@ pub fn GallerySearch() -> Element {
             onclick: move |_| {
                 if advanced_expanded() {
                     bulk_edit_signal.set(None);
+                    collection_color_signal.set(HashMap::new());
                 }
                 advanced_expanded.set(!advanced_expanded());
             },
@@ -107,6 +111,9 @@ pub fn GallerySearch() -> Element {
                                 modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
                             }
                         }),
+                        ("Collection Labels".to_owned(), rsx! {
+                            CollectionColorTab { collection_color_signal }
+                        }),
                     ]),
                 }
             }
@@ -128,6 +135,7 @@ pub fn GallerySearch() -> Element {
                                             media: search_resp.media.clone(),
                                             collections: search_resp.collections.clone(),
                                             bulk_edit_signal,
+                                            collection_color_signal,
                                         }
                                     }
                                 }
