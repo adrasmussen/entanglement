@@ -32,6 +32,6 @@ pub trait ESTaskService: ESInner {
         library: TaskLibrary,
         status: TaskStatus,
         errors: Option<i64>,
-        end: i64,
+        end: u64,
     ) -> Result<()>;
 }

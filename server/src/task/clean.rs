@@ -2,9 +2,8 @@ use std::{
     collections::HashSet,
     path::PathBuf,
     sync::{
-        Arc,
-        atomic::{AtomicI64, Ordering},
-    },
+        atomic::{AtomicI64, Ordering}, Arc
+    }, time::UNIX_EPOCH,
 };
 
 use anyhow::Result;
@@ -135,9 +134,7 @@ pub async fn clean_library(
 
     let warnings = warnings.load(Ordering::Relaxed);
 
-    // update the mtime with this embarassing hack
-    //
-    // TODO -- consider letting empty updates still bump the mtime (on everything)
+    // update the mtime
     let (tx, rx) = channel();
 
     db_svc_sender
@@ -146,7 +143,7 @@ pub async fn clean_library(
                 resp: tx,
                 library_uuid,
                 update: LibraryUpdate {
-                    count: Some(library.count),
+                    count: None,
                 },
             }
             .into(),
@@ -210,6 +207,7 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
                         date: None,
                         note: None,
                         tags: Some(tags),
+                        metadata: None,
                     },
                 }
                 .into(),
@@ -225,10 +223,18 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
 
     let path_metadata = metadata(&path).await?;
 
+    // modified media validation
+    //
+    // if the original media is modified in-place (rotating, rebalancing, etc), then
+    // we need to both recalculate hashes and regenerate the symlink
+    if path_metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() > media.mtime {
+        warn!("missing code path")
+    }
+
     // symlink validation and cleanup
     //
-    // the symlink folder is effective a cache for the media path column, and this
-    // ensures that the links into the given library are all accurrate
+    // the symlink folder is effectively a cache for the media path column, and this
+    // ensures that the links into the given library are all accurate
     //
     // there is a separate task (that can run concurrently) that removes unknown
     // symlinks, since no library will attempt to modify them via this task

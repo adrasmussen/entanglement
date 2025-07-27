@@ -66,7 +66,7 @@ pub async fn process_image(path: &Path) -> Result<MediaData> {
     Ok(MediaData {
         hash,
         date: datetime_original,
-        metadata: MediaMetadata::Image,
+        metadata: MediaMetadata::Image { orientation: 0 },
     })
 }
 

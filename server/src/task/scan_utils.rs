@@ -10,13 +10,12 @@ use std::{
 };
 
 use anyhow::Result;
-use chrono::Local;
 use dashmap::DashSet;
 use tokio::{
     fs::{canonicalize, create_dir_all, metadata, remove_file, symlink, try_exists},
     time::timeout,
 };
-use tracing::{Level, debug, instrument, span, warn};
+use tracing::{Level, debug, error, instrument, span, warn};
 use walkdir::DirEntry;
 
 use crate::{
@@ -33,6 +32,7 @@ use common::{
     media::{
         MediaData, content_hash, create_thumbnail, image::process_image, video::process_video,
     },
+    unix_time,
 };
 
 // scan_utils
@@ -276,6 +276,7 @@ impl ScanFile {
 
                 rx.await??
                     .ok_or_else(|| {
+                        error!("failed to get_media after locating hash");
                         anyhow::Error::msg(
                             "internal error: failed to get_media after locating hash",
                         )
@@ -329,7 +330,7 @@ impl ScanFile {
             size: self.metadata.len(),
             chash: self.hash.clone(),
             phash: media_data.hash,
-            mtime: Local::now().timestamp(),
+            mtime: unix_time(),
             hidden: false,
             date: media_data.date,
             note: "".to_owned(),

@@ -1,4 +1,4 @@
-use std::{cmp::Eq, fmt::Debug, future::Future, hash::Hash, sync::Arc};
+use std::{cmp::Eq, fmt::Debug, future::Future, hash::Hash, sync::Arc, time::{SystemTime, UNIX_EPOCH}};
 
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
@@ -20,6 +20,9 @@ pub mod server;
 // the intent is that the cli tools should share as much of their code as possible with the
 // server, since they exist to provide access to non-http api endpoints or to verify that some
 // external service (i.e. LDAP) is functioning in an expected way.
+pub fn unix_time() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("system time predates unix epoch").as_secs()
+}
 
 // string validation
 //

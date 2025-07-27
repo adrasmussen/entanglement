@@ -13,7 +13,7 @@ use tokio::{
     fs::{remove_dir_all, remove_file},
     sync::oneshot::channel,
 };
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
@@ -79,6 +79,7 @@ async fn remove_path(path: &Path, metadata: &Metadata) -> Result<()> {
     } else if metadata.is_dir() {
         remove_dir_all(path).await?
     } else {
+        error!("{path:?} is neither file nor directory");
         return Err(anyhow::Error::msg(format!(
             "internal error: {path:?} is neither file nor directory"
         )));
@@ -105,6 +106,7 @@ async fn scrub_link(
     let (path, metadata) = get_path_and_metadata(entry).await?;
 
     if !(metadata.is_symlink() && valid_uuid(&path, media_uuids)) {
+        debug!("removing {path:?}");
         remove_path(&path, &metadata).await?;
     }
 
@@ -119,6 +121,7 @@ async fn scrub_thumbnail(
     let (path, metadata) = get_path_and_metadata(entry).await?;
 
     if !(metadata.is_file() && valid_uuid(&path, media_uuids)) {
+        debug!("removing {path:?}");
         remove_path(&path, &metadata).await?;
     }
 

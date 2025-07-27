@@ -3753,7 +3753,6 @@ dependencies = [
  "axum 0.8.4",
  "axum-macros",
  "blockhash",
- "chrono",
  "clap",
  "common",
  "console-subscriber",

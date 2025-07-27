@@ -44,8 +44,8 @@ pub struct Task {
     pub uid: TaskUid,
     pub status: TaskStatus,
     pub warnings: Option<i64>,
-    pub start: i64,
-    pub end: Option<i64>,
+    pub start: u64,
+    pub end: Option<u64>,
 }
 
 // messages

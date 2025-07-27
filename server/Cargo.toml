@@ -13,7 +13,6 @@ async-trait = { workspace =  true }
 axum = { workspace =  true }
 axum-macros = { workspace =  true }
 blockhash = { workspace =  true }
-chrono = { workspace =  true }
 clap = { workspace =  true }
 console-subscriber = { workspace =  true }
 dashmap = { workspace =  true }

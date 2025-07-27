@@ -12,7 +12,7 @@ pub type CollectionUuid = u64;
 pub struct Collection {
     pub uid: String,
     pub gid: String,
-    pub mtime: i64,
+    pub mtime: u64,
     pub name: String,
     pub note: String,
     pub tags: HashSet<String>,

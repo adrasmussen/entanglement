@@ -35,7 +35,7 @@ pub struct SimilarMediaInnerProps {
 #[component]
 pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
     let media_uuid = props.media_uuid;
-    let mut distance_signal = use_signal(|| 64);
+    let mut distance_signal = use_signal(|| 32);
 
     let similar_future = use_resource(move || async move {
         let media_uuid = media_uuid();
@@ -52,38 +52,27 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
 
     let similar_media = match similar_media.clone().transpose().show(|error| {
         rsx! {
-            div { style: "
-                    padding: var(--space-4);
-                    text-align: center;
-                    color: var(--error);
-                ",
+            div { style: "padding: var(--space-4); text-align: center; color: var(--error);",
                 "Error loading similar media: {error}"
             }
         }
     })? {
-        Some(v) => v,
         None => {
             return rsx! {
                 div {
                     class: "similar-media-grid skeleton-grid",
-                    style: "
-                        display: grid;
-                        grid-template-columns: repeat(3, 1fr);
-                        gap: var(--space-2);
-                    ",
+                    style: "display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2);",
 
                     for _ in 0..12 {
                         div {
                             class: "skeleton",
-                            style: "
-                                border-radius: var(--radius-md);
-                                height: 100%;
-                            ",
+                            style: "border-radius: var(--radius-md); height: 100%;",
                         }
                     }
                 }
             };
-        }
+        },
+        Some(v) => v
     };
 
     let filtered_items = similar_media
@@ -95,21 +84,9 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
     rsx! {
         div {
             class: "similar-media-section",
-            style: "
-                margin-top: var(--space-4);
-                padding: var(--space-3);
-                background-color: var(--surface);
-                border-radius: var(--radius-lg);
-                box-shadow: var(--shadow-sm);
-            ",
+            style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);",
 
-            h3 { style: "
-                    font-size: 1.125rem;
-                    margin-bottom: var(--space-3);
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                ",
+            h3 { style: "font-size: 1.125rem; margin-bottom: var(--space-3); display: flex; justify-content: space-between; align-items: center;",
                 span { "Similar Media" }
 
                 // Distance selector for similarity threshold
@@ -118,12 +95,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                         "Threshold:"
                     }
                     select {
-                        style: "
-                            font-size: 0.875rem;
-                            padding: 2px 6px;
-                            border-radius: var(--radius-md);
-                            border: 1px solid var(--border);
-                            background-color: var(--surface);
+                        style: "font-size: 0.875rem; padding: 2px 6px; border-radius: var(--radius-md); border: 1px solid var(--border); background-color: var(--surface);
                         ",
                         value: "{distance_signal()}",
                         onchange: move |evt| {
@@ -131,20 +103,15 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                                 distance_signal.set(val);
                             }
                         },
-                        option { value: "64", "Very Similar" }
-                        option { value: "84", "Similar" }
+                        option { value: "32", "Very Similar" }
+                        option { value: "64", "Similar" }
                         option { value: "106", "Somewhat Similar" }
                         option { value: "128", "Broadly Similar" }
                     }
                 }
             }
             if filtered_items.is_empty() {
-                div { style: "
-                        padding: var(--space-4);
-                        text-align: center;
-                        color: var(--text-tertiary);
-                        font-style: italic;
-                    ",
+                div { style: "padding: var(--space-4); text-align: center; color: var(--text-tertiary); font-style: italic;",
                     "No similar media found. Try adjusting the threshold."
                 }
             } else {
@@ -156,13 +123,10 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                         overflow-y: auto;
                         max-height: 300px; /* Limit height to enforce scrolling */
                         padding-right: var(--space-2);
-                        /* Enable smooth scrolling */
                         scroll-behavior: smooth;
-                        /* Hide scrollbar but keep functionality */
                         scrollbar-width: thin;
                         scrollbar-color: var(--neutral-300) transparent;
 
-                        /* Custom scrollbar styling */
                         &::-webkit-scrollbar {{
                             width: 6px;
                         }}
@@ -177,18 +141,13 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
 
                     div {
                         class: "similar-media-grid",
-                        style: "
-                            display: grid;
-                            grid-template-columns: repeat(3, 1fr);
-                            gap: var(--space-2);
-                            width: 100%;
-                        ",
+                        style: "display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); width: 100%;",
 
-                        for & media_id in filtered_items {
+                        for &media_uuid in filtered_items {
                             Link {
-                                key: "{media_id}",
+                                key: "{media_uuid}",
                                 to: Route::GalleryDetail {
-                                    media_uuid: media_id.to_string(),
+                                    media_uuid: media_uuid.to_string(),
                                 },
                                 div {
                                     class: "similar-media-item",
@@ -206,13 +165,9 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                                         }}
                                     ",
                                     img {
-                                        src: thumbnail_link(media_id),
+                                        src: thumbnail_link(media_uuid),
                                         alt: "Similar media",
-                                        style: "
-                                            width: 100%;
-                                            aspect-ratio: 1;
-                                            object-fit: cover;
-                                        ",
+                                        style: "width: 100%; aspect-ratio: 1; object-fit: cover;",
                                         loading: "lazy",
                                     }
                                 }

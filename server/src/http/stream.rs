@@ -32,6 +32,8 @@ use api::{LINK_PATH, media::MediaUuid};
 //
 // as such, it has to enforce the authorization model, but it also has to include all
 // of the http streaming logic (range, mime, etc) that depends on the filesystem
+const READ_BUF_SIZE: usize = 1024 * 1024;
+
 #[instrument(skip_all)]
 pub(super) async fn stream_media(
     headers: HeaderMap,
@@ -171,11 +173,11 @@ pub(super) async fn stream_media(
         //
         // note the argument to take() is one-indexed; see below for semantics
         Body::from_stream(
-            FramedRead::new(file_handle, BytesCodec::new()).take((end - start).try_into()?),
+            FramedRead::with_capacity(file_handle, BytesCodec::new(), READ_BUF_SIZE).take((end - start).try_into()?),
         )
     } else {
         // for normal reads, just consume the whole file
-        Body::from_stream(FramedRead::new(file_handle, BytesCodec::new()))
+        Body::from_stream(FramedRead::with_capacity(file_handle, BytesCodec::new(), READ_BUF_SIZE))
     };
 
     // http response status code
@@ -229,7 +231,7 @@ fn parse_ranges(state: Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(
             // it is one-indexed.
             //
             // however, both s and e in the "s-e" pattern are zero-indexed, and thus the
-            // maximal value of e is length-1
+            // maximal value of e is length-1.
             //
             // the simplest method is to have (end - start) indicate the total length
             // the stream to the one-indexed take() while ensuring that start() remains

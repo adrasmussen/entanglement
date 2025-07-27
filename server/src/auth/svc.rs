@@ -4,7 +4,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use regex::Regex;
 use tokio::{sync::Mutex, task::spawn, time::timeout};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, span, Instrument, Level};
 
 use crate::{
     auth::{ESAuthService, msg::AuthMsg},
@@ -291,7 +291,7 @@ impl ESAuthService for AuthCache {
                     Ok(Err(err)) => Err(err),
                     Err(err) => Err(anyhow::Error::from(err)),
                 }
-            })
+            }.instrument(span!(Level::INFO, "groups_for_user")))
             .await?;
 
         Ok(groups.clone())
@@ -322,7 +322,7 @@ impl ESAuthService for AuthCache {
                     Ok(Err(err)) => Err(err),
                     Err(err) => Err(anyhow::Error::from(err)),
                 }
-            })
+            }.instrument(span!(Level::INFO, "can_access_media")))
             .await?;
 
         Ok(self.is_group_member(uid, groups).await?)

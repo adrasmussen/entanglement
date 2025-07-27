@@ -22,7 +22,7 @@ pub enum TaskMsg {
         library: TaskLibrary,
         status: TaskStatus,
         warnings: Option<i64>,
-        end: i64,
+        end: u64,
     },
 }
 

@@ -12,26 +12,28 @@ use crate::{
 pub type MediaUuid = u64;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub enum MediaMetadata {
-    Image,
-    Video,
-    VideoSlice,
-    Audio,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Media {
     pub library_uuid: LibraryUuid,
     pub path: String,
     pub size: u64,
     pub chash: String,
     pub phash: String,
-    pub mtime: i64,
+    pub mtime: u64,
     pub hidden: bool,
     pub date: String,
     pub note: String,
     pub tags: HashSet<String>,
     pub metadata: MediaMetadata,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub enum MediaMetadata {
+    Image {
+        orientation: u8,
+    },
+    Video,
+    VideoSlice,
+    Audio,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,6 +42,14 @@ pub struct MediaUpdate {
     pub date: Option<String>,
     pub note: Option<String>,
     pub tags: Option<HashSet<String>>,
+    pub metadata: Option<MediaMetadataUpdate>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum MediaMetadataUpdate {
+    Image {
+        orientation: Option<u8>,
+    },
 }
 
 // messages

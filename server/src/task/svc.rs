@@ -3,7 +3,6 @@ use std::{pin::Pin, sync::Arc};
 use anyhow::Result;
 use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
-use chrono::Local;
 use dashmap::{DashMap, Entry};
 use futures::Future;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
@@ -26,7 +25,7 @@ use crate::{
     },
 };
 use api::task::{Task, TaskLibrary, TaskStatus, TaskType, TaskUid};
-use common::config::ESConfig;
+use common::{config::ESConfig, unix_time};
 
 // task service
 //
@@ -233,7 +232,7 @@ impl ESTaskService for TaskRunner {
         //
         // what "failed" means depends on the task -- since tasks should typically produce reasonable
         // tracing logs, failure could either be catastrophic failure or a single error
-        let start = Local::now().timestamp();
+        let start = unix_time();
         let config = self.config.clone();
         let registry = self.registry.clone();
 
@@ -340,7 +339,7 @@ impl ESTaskService for TaskRunner {
         library: TaskLibrary,
         status: TaskStatus,
         warnings: Option<i64>,
-        end: i64,
+        end: u64,
     ) -> Result<()> {
         // check if the task exists
         let rt_entry = self
@@ -406,7 +405,7 @@ impl ESTaskService for TaskRunner {
 // message back to the task service.
 #[instrument(skip(task_future, sender))]
 fn watch_task(
-    start: i64,
+    start: u64,
     library: TaskLibrary,
     sender: EsmSender,
     task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>>,
@@ -462,7 +461,7 @@ fn watch_task(
                             library,
                             status,
                             warnings,
-                            end: Local::now().timestamp(),
+                            end: unix_time(),
                         }
                         .into(),
                     )

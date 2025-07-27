@@ -3,13 +3,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::Local;
 use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument};
+use tracing::{debug, error, info, instrument};
 
-use crate::{config::ESConfig, db::DbBackend};
+use crate::{config::ESConfig, db::DbBackend, unix_time};
 use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
@@ -32,6 +31,20 @@ use api::{
 // on the flip side, the queries are relatively straightforward to reason about
 // and have an easy realization in terms of the api::search::SearchFilter tools.
 
+// missing calls to-do
+//
+// delete_media
+// delete_library
+
+// sanity check to-do
+//
+// calls that should be transactions for consistency:
+//  * add_media
+//  * delete_collection
+//
+// update_* can fail partway through
+//
+// all mtime bumps should be best-effort
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MariaDbConfig {
     pub url: String,
@@ -59,7 +72,7 @@ impl DbBackend for MariaDBBackend {
         let url = config
             .mariadb
             .clone()
-            .expect("mariadb.url config not present")
+            .expect("mariadb config not present")
             .url;
 
         Ok(Self {
@@ -157,13 +170,13 @@ impl DbBackend for MariaDBBackend {
                 "size" => media.size,
                 "chash" => media.chash,
                 "phash" => media.phash,
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "hidden" => media.hidden,
                 "date" => media.date,
                 "note" => media.note,
                 "tags" => fold_set(media.tags)?,
                 "media_type" => match media.metadata {
-                    MediaMetadata::Image => "Image",
+                    MediaMetadata::Image {..} => "Image",
                     MediaMetadata::Video => "Video",
                     MediaMetadata::VideoSlice => "VideoSlice",
                     MediaMetadata::Audio => "Audio"
@@ -174,15 +187,49 @@ impl DbBackend for MariaDBBackend {
             .collect::<Row>()
             .await?;
 
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("failed to add media"))?;
+        let row = result.pop().ok_or_else(|| {
+            error!({ media_path = media.path }, "failed to add media");
+            anyhow::Error::msg("failed to add media")
+        })?;
 
-        let data = from_row_opt::<MediaUuid>(row)?;
+        let media_uuid = from_row_opt::<MediaUuid>(row)?;
 
-        debug!({ media_path = media.path, media_uuid = data }, "added media");
+        match media.metadata {
+            MediaMetadata::Image { orientation } => {
+                let mut result = r"
+                    INSERT INTO images (media_uuid, orientation)
+                    SELECT
+                        :media_uuid,
+                        :orientation
+                    FROM
+                        DUAL
+                    WHERE NOT EXISTS(
+                        SELECT 1
+                        FROM images
+                        WHERE
+                            media_uuid = :media_uuid"
+                    .with(params! {
+                        "media_uuid" => media_uuid,
+                        "orientation" => orientation
+                    })
+                    .run(self.pool.get_conn().await?)
+                    .await?
+                    .collect::<Row>()
+                    .await?;
 
-        Ok(data)
+                result.pop().ok_or_else(|| {
+                    error!({ media_path = media.path, media_uuid }, "failed to add media metadata");
+                    anyhow::Error::msg("failed to add media metadata")
+                })?;
+            }
+            MediaMetadata::Video => {}
+            MediaMetadata::VideoSlice => {}
+            MediaMetadata::Audio => {}
+        };
+
+        debug!({ media_path = media.path, media_uuid }, "added media");
+
+        Ok(media_uuid)
     }
 
     #[instrument(skip(self))]
@@ -213,7 +260,7 @@ impl DbBackend for MariaDBBackend {
                 u64,
                 String,
                 String,
-                i64,
+                u64,
                 bool,
                 String,
                 String,
@@ -255,6 +302,38 @@ impl DbBackend for MariaDBBackend {
 
         debug!("found media details");
 
+        let metadata = match media_data.10.as_str() {
+            "Image" => {
+                let mut result = r"
+                    SELECT orientation FROM images WHERE media_uuid = :media_uuid"
+                    .with(params! {
+                        "media_uuid" => media_uuid,
+                    })
+                    .run(self.pool.get_conn().await?)
+                    .await?
+                    .collect::<Row>()
+                    .await?;
+
+                let row = result.pop().ok_or_else(|| {
+                    error!("missing metadata record");
+                    anyhow::Error::msg(format!("missing metadata record for {media_uuid}"))
+                })?;
+
+                let data = from_row_opt::<u8>(row)?;
+
+                MediaMetadata::Image { orientation: data }
+            }
+            "Video" => MediaMetadata::Video,
+            "VideoSlice" => MediaMetadata::VideoSlice,
+            "Audio" => MediaMetadata::Audio,
+            _ => {
+                error!("invalid media record");
+                return Err(anyhow::Error::msg(format!(
+                    "invalid media record for {media_uuid}"
+                )));
+            }
+        };
+
         Ok(Some((
             Media {
                 library_uuid: media_data.0,
@@ -267,17 +346,7 @@ impl DbBackend for MariaDBBackend {
                 date: media_data.7,
                 note: media_data.8,
                 tags: unfold_set(&media_data.9),
-                metadata: match media_data.10.as_str() {
-                    "Image" => MediaMetadata::Image,
-                    "Video" => MediaMetadata::Video,
-                    "VideoSlice" => MediaMetadata::VideoSlice,
-                    "Audio" => MediaMetadata::Audio,
-                    _ => {
-                        return Err(anyhow::Error::msg(format!(
-                            "invalid media record for {media_uuid}"
-                        )));
-                    }
-                },
+                metadata,
             },
             collection_data,
             comment_data,
@@ -374,8 +443,6 @@ impl DbBackend for MariaDBBackend {
 
         let _mw = self.locks.media.write().await;
 
-        let mut modified = false;
-
         if let Some(val) = update.hidden {
             r"
             UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
@@ -385,8 +452,6 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
         if let Some(val) = update.date {
@@ -398,8 +463,6 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
         if let Some(val) = update.note {
@@ -411,8 +474,6 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
         if let Some(val) = update.tags {
@@ -424,22 +485,18 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
-        if modified {
-            r"
-            UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-                .with(params! {
-                    "mtime" => Local::now().timestamp(),
-                    "media_uuid" => media_uuid,
-                })
-                .run(self.pool.get_conn().await?)
-                .await?;
-        }
+        r"
+        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
+            .with(params! {
+                "mtime" => unix_time(),
+                "media_uuid" => media_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        debug!({ modified = modified }, "updated media details");
+        debug!("updated media details");
 
         Ok(())
     }
@@ -453,7 +510,7 @@ impl DbBackend for MariaDBBackend {
         r"
         UPDATE media SET path = :path, mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "path" => path,
                 "media_uuid" => media_uuid,
             })
@@ -646,7 +703,7 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "uid" => collection.uid,
                 "gid" => collection.gid,
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "name" => collection.name.clone(),
                 "note" => collection.note,
                 "tags" => fold_set(collection.tags)?,
@@ -657,9 +714,10 @@ impl DbBackend for MariaDBBackend {
             .collect::<Row>()
             .await?;
 
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("failed to add collection to the database"))?;
+        let row = result.pop().ok_or_else(|| {
+            error!("failed to add collection");
+            anyhow::Error::msg("failed to add collection")
+        })?;
 
         let data = from_row_opt::<CollectionUuid>(row)?;
 
@@ -692,7 +750,7 @@ impl DbBackend for MariaDBBackend {
         let data = from_row_opt::<(
             String,
             String,
-            i64,
+            u64,
             String,
             String,
             String,
@@ -752,8 +810,6 @@ impl DbBackend for MariaDBBackend {
 
         let _cw = self.locks.collection.write().await;
 
-        let mut modified = false;
-
         if let Some(val) = update.name {
             r"
             UPDATE collections SET name = :name WHERE collection_uuid = :collection_uuid"
@@ -763,8 +819,6 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
         if let Some(val) = update.note {
@@ -776,8 +830,6 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
         if let Some(val) = update.tags {
@@ -789,22 +841,18 @@ impl DbBackend for MariaDBBackend {
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
-        if modified {
-            r"
-            UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
-                .with(params! {
-                    "mtime" => Local::now().timestamp(),
-                    "collection_uuid" => collection_uuid,
-                })
-                .run(self.pool.get_conn().await?)
-                .await?;
-        }
+        r"
+        UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
+            .with(params! {
+                "mtime" => unix_time(),
+                "collection_uuid" => collection_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
 
-        debug!({ modified = modified }, "updated collection");
+        debug!("updated collection");
 
         Ok(())
     }
@@ -838,21 +886,22 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "media_uuid" => media_uuid,
                 "collection_uuid" => collection_uuid,
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
             })
             .run(self.pool.get_conn().await?)
             .await?
             .collect::<Row>()
             .await?;
 
-        result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("failed to add media to collection"))?;
+        result.pop().ok_or_else(|| {
+            error!("failed to add media to collection");
+            anyhow::Error::msg("failed to add media to collection")
+        })?;
 
         r"
         UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "collection_uuid" => collection_uuid,
             })
             .run(self.pool.get_conn().await?)
@@ -861,7 +910,7 @@ impl DbBackend for MariaDBBackend {
         r"
         UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "media_uuid" => media_uuid,
             })
             .run(self.pool.get_conn().await?)
@@ -888,7 +937,7 @@ impl DbBackend for MariaDBBackend {
         .with(params! {
             "media_uuid" => media_uuid,
             "collection_uuid" => collection_uuid,
-            "mtime" => Local::now().timestamp(),
+            "mtime" => unix_time(),
         })
         .run(self.pool.get_conn().await?)
         .await?;
@@ -896,7 +945,7 @@ impl DbBackend for MariaDBBackend {
         r"
         UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "collection_uuid" => collection_uuid,
             })
             .run(self.pool.get_conn().await?)
@@ -905,7 +954,7 @@ impl DbBackend for MariaDBBackend {
         r"
         UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "media_uuid" => media_uuid,
             })
             .run(self.pool.get_conn().await?)
@@ -1053,7 +1102,7 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "path" => library.path.clone(),
                 "gid" => library.gid,
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "count" => library.count,
             })
             .run(self.pool.get_conn().await?)
@@ -1061,9 +1110,10 @@ impl DbBackend for MariaDBBackend {
             .collect::<Row>()
             .await?;
 
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("failed to add library to the database"))?;
+        let row = result.pop().ok_or_else(|| {
+            error!("failed to add library");
+            anyhow::Error::msg("failed to add library")
+        })?;
 
         let data = from_row_opt::<LibraryUuid>(row)?;
 
@@ -1093,7 +1143,7 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(String, String, String, i64, i64)>(row)?;
+        let data = from_row_opt::<(String, String, String, u64, i64)>(row)?;
 
         debug!("found library details");
 
@@ -1112,23 +1162,27 @@ impl DbBackend for MariaDBBackend {
 
         let _lw = self.locks.library.write().await;
 
-        let mut modified = false;
-
         if let Some(val) = update.count {
             r"
-            UPDATE libraries SET mtime = :mtime, count = :count WHERE library_uuid = :library_uuid"
+            UPDATE libraries SET count = :count WHERE library_uuid = :library_uuid"
                 .with(params! {
-                    "mtime" => Local::now().timestamp(),
                     "count" => val,
                     "library_uuid" => library_uuid,
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
-
-            modified = true;
         }
 
-        debug!({ modified = modified }, "updated library");
+        r"
+        UPDATE libraries SET mtime = :mtime WHERE library_uuid = :library_uuid"
+            .with(params! {
+                "mtime" => unix_time(),
+                "library_uuid" => library_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        debug!("updated library");
 
         Ok(())
     }
@@ -1251,7 +1305,7 @@ impl DbBackend for MariaDBBackend {
             RETURNING comment_uuid"
             .with(params! {
                 "media_uuid" => comment.media_uuid,
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "uid" => comment.uid,
                 "text" => comment.text,
             })
@@ -1260,16 +1314,17 @@ impl DbBackend for MariaDBBackend {
             .collect::<Row>()
             .await?;
 
-        let row = result
-            .pop()
-            .ok_or_else(|| anyhow::Error::msg("failed to add comment to database"))?;
+        let row = result.pop().ok_or_else(|| {
+            error!("failed to add comment");
+            anyhow::Error::msg("failed to add comment")
+        })?;
 
         let data = from_row_opt::<CommentUuid>(row)?;
 
         r"
         UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "mtime" => Local::now().timestamp(),
+                "mtime" => unix_time(),
                 "media_uuid" => comment.media_uuid,
             })
             .run(self.pool.get_conn().await?)
@@ -1301,7 +1356,7 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(MediaUuid, i64, String, String)>(row)?;
+        let data = from_row_opt::<(MediaUuid, u64, String, String)>(row)?;
 
         debug!("found comment details");
 
@@ -1333,7 +1388,7 @@ impl DbBackend for MariaDBBackend {
         // r"
         // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
         //     .with(params! {
-        //         "mtime" => Local::now().timestamp(),
+        //         "mtime" => unix_time(),
         //         "media_uuid" => comment.media_uuid,
         //     })
         //     .run(self.pool.get_conn().await?)
@@ -1364,7 +1419,7 @@ impl DbBackend for MariaDBBackend {
             // r"
             // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
             // .with(params! {
-            //     "mtime" => Local::now().timestamp(),
+            //     "mtime" => unix_time(),
             //     "media_uuid" => comment.media_uuid,
             // })
             // .run(self.pool.get_conn().await?)
