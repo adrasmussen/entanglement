@@ -28,9 +28,7 @@ pub struct Media {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum MediaMetadata {
-    Image {
-        orientation: u8,
-    },
+    Image,
     Video,
     VideoSlice,
     Audio,
@@ -42,14 +40,6 @@ pub struct MediaUpdate {
     pub date: Option<String>,
     pub note: Option<String>,
     pub tags: Option<HashSet<String>>,
-    pub metadata: Option<MediaMetadataUpdate>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum MediaMetadataUpdate {
-    Image {
-        orientation: Option<u8>,
-    },
 }
 
 // messages

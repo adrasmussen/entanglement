@@ -66,7 +66,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
             let media = media_data.media.clone();
 
             match media.metadata {
-                MediaMetadata::Image {..} => {
+                MediaMetadata::Image => {
                     rsx! {
                         ModernModal {
                             title: "Image Viewer",
@@ -320,7 +320,6 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
                         date: None,
                         note: None,
                         tags: Some(new_tags),
-                        metadata: None,
                     },
                 })
                 .await

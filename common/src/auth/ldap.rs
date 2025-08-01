@@ -52,10 +52,20 @@ impl AuthzProvider for LdapAuthz {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         let config = config.ldap.clone().expect("ldap config not found");
 
-        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(&config.key.clone().ok_or(anyhow::Error::msg("missing key"))?)?;
+        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(
+            &config
+                .key
+                .clone()
+                .ok_or(anyhow::Error::msg("missing key"))?,
+        )?;
 
-        let cert: Vec<CertificateDer> =
-            CertificateDer::pem_file_iter(&config.cert.clone().ok_or(anyhow::Error::msg("missing cert"))?)?.collect::<Result<Vec<_>, _>>()?;
+        let cert: Vec<CertificateDer> = CertificateDer::pem_file_iter(
+            &config
+                .cert
+                .clone()
+                .ok_or(anyhow::Error::msg("missing cert"))?,
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
         let ca_cert: Vec<CertificateDer> =
             CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
 

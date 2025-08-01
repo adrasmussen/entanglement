@@ -173,11 +173,16 @@ pub(super) async fn stream_media(
         //
         // note the argument to take() is one-indexed; see below for semantics
         Body::from_stream(
-            FramedRead::with_capacity(file_handle, BytesCodec::new(), READ_BUF_SIZE).take((end - start).try_into()?),
+            FramedRead::with_capacity(file_handle, BytesCodec::new(), READ_BUF_SIZE)
+                .take((end - start).try_into()?),
         )
     } else {
         // for normal reads, just consume the whole file
-        Body::from_stream(FramedRead::with_capacity(file_handle, BytesCodec::new(), READ_BUF_SIZE))
+        Body::from_stream(FramedRead::with_capacity(
+            file_handle,
+            BytesCodec::new(),
+            READ_BUF_SIZE,
+        ))
     };
 
     // http response status code

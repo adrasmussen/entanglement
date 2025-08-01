@@ -66,7 +66,7 @@ pub async fn process_image(path: &Path) -> Result<MediaData> {
     Ok(MediaData {
         hash,
         date: datetime_original,
-        metadata: MediaMetadata::Image { orientation: 0 },
+        metadata: MediaMetadata::Image,
     })
 }
 
@@ -83,7 +83,7 @@ pub async fn create_image_thumbnail(
     spawn_blocking(move || {
         let mut decoder = ImageReader::open(original_path.clone())?.into_decoder()?;
 
-        // this both solves the crate version collision and corrects the orientation, too
+        // ensure that the thumbnail matches the orientation of the original image
         let orientation = decoder.orientation()?;
 
         debug!({orientation = ?orientation}, "orientation for image");

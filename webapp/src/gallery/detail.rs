@@ -150,7 +150,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                     // Main media display
                     div { class: "media-detail-view",
                         match media.metadata {
-                            MediaMetadata::Image { orientation } => rsx! {
+                            MediaMetadata::Image => rsx! {
                                 img {
                                     class: "media-detail-image",
                                     src: full_link(media_uuid()),
@@ -202,7 +202,6 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                                 date,
                                                 note,
                                                 tags,
-                                                metadata: None,
                                             },
                                         },
                                     )
@@ -274,7 +273,6 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                                                             date: None,
                                                             note: None,
                                                             tags: None,
-                                                            metadata: None,
                                                         },
                                                     },
                                                 )

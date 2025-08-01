@@ -2,8 +2,10 @@ use std::{
     collections::HashSet,
     path::PathBuf,
     sync::{
-        atomic::{AtomicI64, Ordering}, Arc
-    }, time::UNIX_EPOCH,
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    },
+    time::UNIX_EPOCH,
 };
 
 use anyhow::Result;
@@ -12,7 +14,7 @@ use tokio::{
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{debug, instrument, span, warn, Instrument, Level};
+use tracing::{Instrument, Level, debug, instrument, span, warn};
 
 use crate::{
     db::msg::DbMsg,
@@ -123,7 +125,8 @@ pub async fn clean_library(
                         warnings.fetch_add(1, Ordering::Relaxed);
                     }
                 }
-            }.instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid))
+            }
+            .instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid))
         });
     }
 
@@ -142,9 +145,7 @@ pub async fn clean_library(
             DbMsg::UpdateLibrary {
                 resp: tx,
                 library_uuid,
-                update: LibraryUpdate {
-                    count: None,
-                },
+                update: LibraryUpdate { count: None },
             }
             .into(),
         )
@@ -207,7 +208,6 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
                         date: None,
                         note: None,
                         tags: Some(tags),
-                        metadata: None,
                     },
                 }
                 .into(),
@@ -227,7 +227,12 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     //
     // if the original media is modified in-place (rotating, rebalancing, etc), then
     // we need to both recalculate hashes and regenerate the symlink
-    if path_metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs() > media.mtime {
+    if path_metadata
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs()
+        > media.mtime
+    {
         warn!("missing code path")
     }
 

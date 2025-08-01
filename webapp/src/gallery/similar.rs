@@ -143,7 +143,7 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                         class: "similar-media-grid",
                         style: "display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); width: 100%;",
 
-                        for &media_uuid in filtered_items {
+                        for & media_uuid in filtered_items {
                             Link {
                                 key: "{media_uuid}",
                                 to: Route::GalleryDetail {

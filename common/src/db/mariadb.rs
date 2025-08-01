@@ -176,7 +176,7 @@ impl DbBackend for MariaDBBackend {
                 "note" => media.note,
                 "tags" => fold_set(media.tags)?,
                 "media_type" => match media.metadata {
-                    MediaMetadata::Image {..} => "Image",
+                    MediaMetadata::Image => "Image",
                     MediaMetadata::Video => "Video",
                     MediaMetadata::VideoSlice => "VideoSlice",
                     MediaMetadata::Audio => "Audio"
@@ -193,39 +193,6 @@ impl DbBackend for MariaDBBackend {
         })?;
 
         let media_uuid = from_row_opt::<MediaUuid>(row)?;
-
-        match media.metadata {
-            MediaMetadata::Image { orientation } => {
-                let mut result = r"
-                    INSERT INTO images (media_uuid, orientation)
-                    SELECT
-                        :media_uuid,
-                        :orientation
-                    FROM
-                        DUAL
-                    WHERE NOT EXISTS(
-                        SELECT 1
-                        FROM images
-                        WHERE
-                            media_uuid = :media_uuid"
-                    .with(params! {
-                        "media_uuid" => media_uuid,
-                        "orientation" => orientation
-                    })
-                    .run(self.pool.get_conn().await?)
-                    .await?
-                    .collect::<Row>()
-                    .await?;
-
-                result.pop().ok_or_else(|| {
-                    error!({ media_path = media.path, media_uuid }, "failed to add media metadata");
-                    anyhow::Error::msg("failed to add media metadata")
-                })?;
-            }
-            MediaMetadata::Video => {}
-            MediaMetadata::VideoSlice => {}
-            MediaMetadata::Audio => {}
-        };
 
         debug!({ media_path = media.path, media_uuid }, "added media");
 
@@ -302,38 +269,6 @@ impl DbBackend for MariaDBBackend {
 
         debug!("found media details");
 
-        let metadata = match media_data.10.as_str() {
-            "Image" => {
-                let mut result = r"
-                    SELECT orientation FROM images WHERE media_uuid = :media_uuid"
-                    .with(params! {
-                        "media_uuid" => media_uuid,
-                    })
-                    .run(self.pool.get_conn().await?)
-                    .await?
-                    .collect::<Row>()
-                    .await?;
-
-                let row = result.pop().ok_or_else(|| {
-                    error!("missing metadata record");
-                    anyhow::Error::msg(format!("missing metadata record for {media_uuid}"))
-                })?;
-
-                let data = from_row_opt::<u8>(row)?;
-
-                MediaMetadata::Image { orientation: data }
-            }
-            "Video" => MediaMetadata::Video,
-            "VideoSlice" => MediaMetadata::VideoSlice,
-            "Audio" => MediaMetadata::Audio,
-            _ => {
-                error!("invalid media record");
-                return Err(anyhow::Error::msg(format!(
-                    "invalid media record for {media_uuid}"
-                )));
-            }
-        };
-
         Ok(Some((
             Media {
                 library_uuid: media_data.0,
@@ -346,7 +281,18 @@ impl DbBackend for MariaDBBackend {
                 date: media_data.7,
                 note: media_data.8,
                 tags: unfold_set(&media_data.9),
-                metadata,
+                metadata: match media_data.10.as_str() {
+                    "Image" => MediaMetadata::Image,
+                    "Video" => MediaMetadata::Video,
+                    "VideoSlice" => MediaMetadata::VideoSlice,
+                    "Audio" => MediaMetadata::Audio,
+                    _ => {
+                        error!("invalid media record");
+                        return Err(anyhow::Error::msg(format!(
+                            "invalid media record for {media_uuid}"
+                        )));
+                    }
+                },
             },
             collection_data,
             comment_data,

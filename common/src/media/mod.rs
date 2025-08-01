@@ -46,7 +46,7 @@ pub async fn create_thumbnail(
     metadata: &MediaMetadata,
 ) -> Result<()> {
     match metadata {
-        MediaMetadata::Image {..}=> Box::pin(create_image_thumbnail(path, thumbnail_path)).await?,
+        MediaMetadata::Image => Box::pin(create_image_thumbnail(path, thumbnail_path)).await?,
         MediaMetadata::Video => {
             Box::pin(create_video_thumbnail(path, thumbnail_path, scratch_dir)).await?
         }
