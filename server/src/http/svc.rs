@@ -289,9 +289,7 @@ impl HttpEndpoint {
             };
 
             router = router.route_layer(middleware::from_fn_with_state(data, proxy_auth));
-        }
-
-        if config.authn_backend == AuthnBackend::X509Cert {
+        } else if config.authn_backend == AuthnBackend::X509Cert {
             router = router.route_layer(middleware::from_fn(cert_auth));
         }
 
@@ -321,7 +319,7 @@ impl HttpEndpoint {
                 || config.authn_backend == AuthnBackend::X509Cert
             {
                 let client_ca_path = config.http.client_ca_cert.clone().expect(
-                    "http server configured for proxy header auth but no client ca cert specified",
+                    "http server configured for tls-based auth but no client ca cert specified",
                 );
 
                 let ca_cert: Vec<CertificateDer> = CertificateDer::pem_file_iter(client_ca_path)
@@ -350,12 +348,12 @@ impl HttpEndpoint {
             .with_single_cert(cert, key)
             .expect("http server failed to configure tls");
 
-        // enable the http2 over tls protocol, as some proxies will refuse to connect
+        // enable the http2 over tls protocol, as some proxies will refuse to connect otherwise
         tls_config.alpn_protocols = vec!["h2".into()];
 
         let listener = TcpListener::bind(socket)
             .await
-            .expect("http listener failed to bind tcp socket");
+            .expect("http server listener failed to bind tcp socket");
 
         let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
 

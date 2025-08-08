@@ -57,6 +57,42 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
 
     let collection_context = props.collection_uuid.map(|uuid| uuid.to_string());
 
+    // Calculate collection colors for this media
+    let collection_colors: Vec<CollectionColor> = collections
+        .iter()
+        .filter_map(|uuid| collection_color_signal().get(uuid).cloned())
+        .collect();
+
+    // Generate background style based on collection colors
+    let info_background_style = if collection_colors.is_empty() {
+        String::new()
+    } else if collection_colors.len() == 1 {
+        // Single color - use the light pastel version
+        format!("background-color: {}; border-radius: 0 0 var(--radius-lg) var(--radius-lg);", collection_colors[0].to_medium_css_color())
+    } else {
+        // Multiple colors - create horizontal stripes using CSS gradient
+        let stripe_size = 100.0 / collection_colors.len() as f32;
+        let mut gradient_stops = Vec::new();
+
+        for (i, color) in collection_colors.iter().enumerate() {
+            let start_percent = i as f32 * stripe_size;
+            let end_percent = (i + 1) as f32 * stripe_size;
+
+            gradient_stops.push(format!(
+                "{} {}%, {} {}%",
+                color.to_medium_css_color(),
+                start_percent,
+                color.to_medium_css_color(),
+                end_percent
+            ));
+        }
+
+        format!(
+            "background: linear-gradient(to right, {}); border-radius: 0 0 var(--radius-lg) var(--radius-lg);",
+            gradient_stops.join(", ")
+        )
+    };
+
     rsx! {
         div {
             class: "media-card",
@@ -95,32 +131,16 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         loading: "lazy",
                     }
                 }
-                div { class: "media-card-info",
+                div {
+                    class: "media-card-info",
+                    style: info_background_style,
+
                     p { class: "date", "{media.date}" }
                     p { class: "note",
                         if media.note.is_empty() {
                             "No description"
                         } else {
                             {media.note.clone().lines().next().unwrap_or("No description").to_owned()}
-                        }
-                    }
-
-                    if !collection_color_signal().is_empty() {
-                        div {
-                            class: "collection-indicators",
-                            style: "display: flex; gap: var(--space-1); margin-top: var(--space-1); flex-wrap: wrap;",
-                            for (i , color) in collection_color_signal().iter() {
-                                if collections.contains(i) {
-                                    div {
-                                        key: "{i}",
-                                        style: format!(
-                                            "width: 8px; height: 8px; border-radius: 50%; background-color: {}; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.1);",
-                                            color.to_css_color(),
-                                        ),
-                                        title: "{color}",
-                                    }
-                                }
-                            }
                         }
                     }
                 }

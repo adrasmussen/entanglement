@@ -41,7 +41,7 @@ pub(super) async fn stream_media(
     Extension(current_user): Extension<CurrentUser>,
     Path((dir, media_uuid)): Path<(String, MediaUuid)>,
 ) -> Result<Response, AppError> {
-    debug!("serving media");
+    debug!({media_uuid}, "serving media");
 
     let state = state.clone();
     let uid = current_user.uid.clone();
@@ -101,6 +101,8 @@ pub(super) async fn stream_media(
             },
         ),
     };
+
+    debug!({media_uuid}, "streaming {} bytes", end - start);
 
     // http response headers
     //

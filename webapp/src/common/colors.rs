@@ -49,6 +49,21 @@ impl CollectionColor {
         }
     }
 
+    pub fn to_medium_css_color(self) -> &'static str {
+        match self {
+            Self::Red => "#FCA5A5",
+            Self::Orange => "#FDBA74",
+            Self::Yellow => "#FDE047",
+            Self::Green => "#86EFAC",
+            Self::Blue => "#93C5FD",
+            Self::Purple => "#C4B5FD",
+            Self::Pink => "#F9A8D4",
+            Self::Gray => "#D1D5DB",
+            Self::Teal => "#5EEAD4",
+            Self::Indigo => "#A5B4FC",
+        }
+    }
+
     pub fn to_light_css_color(self) -> &'static str {
         match self {
             Self::Red => "#FEF2F2",
