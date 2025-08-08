@@ -40,71 +40,75 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
 
     let app_url_root = HTTP_URL_ROOT.to_owned();
 
-    let router = if mode == ConnMode::Proxy {
-        let proxy_auth_config = config
-            .proxyheader
-            .clone()
-            .expect("proxy header config missing");
+    let router = match mode {
+        ConnMode::Proxy => {
+            let proxy_auth_config = config
+                .proxyheader
+                .clone()
+                .expect("proxy header config missing");
 
-        let header_key =
-            HeaderName::from_lowercase(proxy_auth_config.header.to_lowercase().as_bytes())
-                .expect("invalid proxy auth header");
+            let header_key =
+                HeaderName::from_lowercase(proxy_auth_config.header.to_lowercase().as_bytes())
+                    .expect("invalid proxy auth header");
 
-        let proxy_cn = proxy_auth_config.proxy_cn;
+            let proxy_cn = proxy_auth_config.proxy_cn;
 
-        let service = async move |headers: HeaderMap, Extension(peer_cn): Extension<String>| {
-            let proxy_user = match headers.get(&header_key) {
-                Some(val) => match val.to_str() {
-                    Ok(val) => val.to_owned(),
-                    Err(_) => {
-                        println!("failed to convert proxy header value to string");
-                        return (
-                            StatusCode::BAD_REQUEST,
-                            "failed to convert proxy header value".to_owned(),
-                        )
+            let service = async move |headers: HeaderMap, Extension(peer_cn): Extension<String>| {
+                let proxy_user = match headers.get(&header_key) {
+                    Some(val) => match val.to_str() {
+                        Ok(val) => val.to_owned(),
+                        Err(_) => {
+                            println!("failed to convert proxy header value to string");
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                "failed to convert proxy header value".to_owned(),
+                            )
+                                .into_response();
+                        }
+                    },
+                    None => {
+                        println!("proxy header missing!");
+                        return (StatusCode::BAD_REQUEST, "proxy header missing".to_owned())
                             .into_response();
                     }
-                },
-                None => {
-                    println!("proxy header missing!");
-                    return (StatusCode::BAD_REQUEST, "proxy header missing".to_owned())
+                };
+
+                if peer_cn != proxy_cn {
+                    println!("peer cn does not match config file");
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        "peer cn does not match config file".to_owned(),
+                    )
                         .into_response();
                 }
+
+                println!("proxy cn: {peer_cn}");
+                println!("proxy header: {header_key}");
+                println!("proxy user: {proxy_user}");
+
+                (
+                    StatusCode::OK,
+                    "entanglement proxy connection check succeeded".to_owned(),
+                )
+                    .into_response()
             };
 
-            if peer_cn != proxy_cn {
-                println!("peer cn does not match config file");
-                return (
-                    StatusCode::BAD_REQUEST,
-                    "peer cn does not match config file".to_owned(),
-                )
-                    .into_response();
-            }
+            Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
+        }
+        ConnMode::User => {
+            let service =
+                async move |_headers: HeaderMap, Extension(peer_cn): Extension<String>| {
+                    println!("user cn: {peer_cn}");
 
-            println!("proxy cn: {peer_cn}");
-            println!("proxy header: {header_key}");
-            println!("proxy user: {proxy_user}");
+                    (
+                        StatusCode::OK,
+                        "entanglement user connection check succeeded".to_owned(),
+                    )
+                        .into_response()
+                };
 
-            (
-                StatusCode::OK,
-                "entanglement proxy connection check succeeded".to_owned(),
-            )
-                .into_response()
-        };
-
-        Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
-    } else {
-        let service = async move |_headers: HeaderMap, Extension(peer_cn): Extension<String>| {
-            println!("user cn: {peer_cn}");
-
-            (
-                StatusCode::OK,
-                "entanglement proxy connection check succeeded".to_owned(),
-            )
-                .into_response()
-        };
-
-        Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
+            Router::<()>::new().route(&format!("/{app_url_root}/check"), get(service))
+        }
     };
 
     // tls setup

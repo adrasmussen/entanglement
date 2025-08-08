@@ -1506,41 +1506,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "entg-auth"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "common",
- "tokio",
-]
-
-[[package]]
-name = "entg-http"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "api",
- "axum 0.8.4",
- "clap",
- "common",
- "futures",
- "futures-util",
- "hyper",
- "hyper-rustls",
- "hyper-util",
- "rustls 0.23.28",
- "rustls-pki-types",
- "rustls-webpki 0.101.7",
- "tokio",
- "tokio-rustls 0.26.2",
- "tokio-util",
- "tower 0.5.2",
- "tower-http",
- "x509-certificate",
-]
-
-[[package]]
 name = "enumset"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4328,6 +4293,31 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+]
+
+[[package]]
+name = "tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "api",
+ "axum 0.8.4",
+ "clap",
+ "common",
+ "futures",
+ "futures-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "rustls 0.23.28",
+ "rustls-pki-types",
+ "rustls-webpki 0.101.7",
+ "tokio",
+ "tokio-rustls 0.26.2",
+ "tokio-util",
+ "tower 0.5.2",
+ "tower-http",
+ "x509-certificate",
 ]
 
 [[package]]

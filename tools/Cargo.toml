@@ -1,11 +1,19 @@
 [package]
-name = "entg-http"
+name = "tools"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "entg-auth"
+path = "bin/auth/main.rs"
+
+[[bin]]
+name = "entg-http"
+path = "bin/http/main.rs"
+
 [dependencies]
-api = { path = "../../api" }
-common = { path = "../../common" }
+api = { path = "../api" }
+common = { path = "../common" }
 
 anyhow = { workspace = true }
 axum = { workspace =  true }
