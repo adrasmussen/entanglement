@@ -8,6 +8,10 @@ name = "entg-auth"
 path = "bin/auth/main.rs"
 
 [[bin]]
+name = "entg-gss"
+path = "bin/gss/main.rs"
+
+[[bin]]
 name = "entg-http"
 path = "bin/http/main.rs"
 

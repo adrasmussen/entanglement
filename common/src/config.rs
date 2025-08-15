@@ -6,7 +6,7 @@ use toml;
 use tracing::{Level, debug, instrument};
 
 use crate::{
-    auth::{ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig},
+    auth::{ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig, gss::GssConfig},
     db::mariadb::MariaDbConfig,
     server::{FsConfig, HttpConfig, TaskConfig},
 };
@@ -26,6 +26,7 @@ pub struct ESConfig {
     pub task: TaskConfig,
 
     // backends
+    pub gss: Option<GssConfig>,
     pub ldap: Option<LdapConfig>,
     pub mariadb: Option<MariaDbConfig>,
     pub tomlfile: Option<TomlFileConfig>,

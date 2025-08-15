@@ -3,6 +3,7 @@ use std::{
     fmt::{Debug, Display},
     path::PathBuf,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -22,7 +23,7 @@ use crate::{auth::AuthzProvider, config::ESConfig};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct LdapConfig {
-    // url in normal ldap form ldap://host:port
+    // url in normal ldap form ldaps://host:port
     pub url: String,
     // cert used to verify server connection
     pub ca_cert: PathBuf,
@@ -37,9 +38,16 @@ pub struct LdapConfig {
     pub group_filter: String,
     // attribute for group membership, i.e. memberUid
     pub group_member_attr: String,
+    // method for authenticating to the server
+    pub auth: LdapClientAuth,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum LdapClientAuth {
     // pem-encoded tls cert and key to communicate with ldap server
-    pub key: Option<PathBuf>,
-    pub cert: Option<PathBuf>,
+    X509Cert { key: PathBuf, cert: PathBuf },
+    // gssapi with kerberos lib defaults
+    GssApi { fqdn: String },
 }
 
 pub struct LdapAuthz {
@@ -52,26 +60,11 @@ impl AuthzProvider for LdapAuthz {
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         let config = config.ldap.clone().expect("ldap config not found");
 
-        let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(
-            &config
-                .key
-                .clone()
-                .ok_or(anyhow::Error::msg("missing key"))?,
-        )?;
-
-        let cert: Vec<CertificateDer> = CertificateDer::pem_file_iter(
-            &config
-                .cert
-                .clone()
-                .ok_or(anyhow::Error::msg("missing cert"))?,
-        )?
-        .collect::<Result<Vec<_>, _>>()?;
+        // set up tls for verifying ldaps server cert
         let ca_cert: Vec<CertificateDer> =
             CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
 
-        // legacy hacks for older rustls needed by ldap
-        let key = PrivateKey(key.secret_pkcs8_der().to_vec());
-        let cert = cert.iter().map(|cert| Certificate(cert.to_vec())).collect();
+        // legacy hacks for older rustls
         let ca_cert: Vec<Certificate> = ca_cert
             .iter()
             .map(|cert| Certificate(cert.to_vec()))
@@ -86,12 +79,27 @@ impl AuthzProvider for LdapAuthz {
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()?
-            .with_root_certificates(ca_root_store)
-            .with_client_auth_cert(cert, key)?;
+            .with_root_certificates(ca_root_store);
+
+        let tls_config = match config.clone().auth {
+            LdapClientAuth::X509Cert { key, cert } => {
+                let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(key)?;
+
+                let cert: Vec<CertificateDer> =
+                    CertificateDer::pem_file_iter(cert)?.collect::<Result<Vec<_>, _>>()?;
+
+                // legacy hacks for older rustls needed by ldap
+                let key = PrivateKey(key.secret_pkcs8_der().to_vec());
+                let cert = cert.iter().map(|cert| Certificate(cert.to_vec())).collect();
+
+                tls_config.with_client_auth_cert(cert, key)?
+            }
+            LdapClientAuth::GssApi { .. } => tls_config.with_no_client_auth(),
+        };
 
         let settings = LdapConnSettings::new()
             .set_config(Arc::new(tls_config))
-            .set_starttls(true);
+            .set_conn_timeout(Duration::from_secs(10));
 
         Ok(LdapAuthz { config, settings })
     }
@@ -107,7 +115,11 @@ impl AuthzProvider for LdapAuthz {
 
         ldap3::drive!(conn);
 
-        ldap.sasl_external_bind().await?;
+        // TODO -- the gssapi bind uses blocking calls
+        match &self.config.auth {
+            LdapClientAuth::X509Cert { .. } => ldap.sasl_external_bind().await?,
+            LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,
+        };
 
         // query the ldap server for all group entries whose memeber attribute contains the uid in question
         let (res_entries, _res) = ldap
@@ -165,7 +177,10 @@ impl AuthzProvider for LdapAuthz {
 
         ldap3::drive!(conn);
 
-        ldap.sasl_external_bind().await?;
+        match &self.config.auth {
+            LdapClientAuth::X509Cert { .. } => ldap.sasl_external_bind().await?,
+            LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,
+        };
 
         // query the ldap server for all group entries whose memeber attribute contains the uid in question
         let (res_entries, _res) = ldap

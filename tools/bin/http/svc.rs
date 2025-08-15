@@ -35,7 +35,7 @@ pub async fn serve_http(config: Arc<ESConfig>, mode: &ConnMode) -> ! {
             .http
             .socket
             .parse::<SocketAddrV6>()
-            .expect("Failed to parse http_socket ipv6 address/port"),
+            .expect("failed to parse http_socket ipv6 address/port"),
     );
 
     let app_url_root = HTTP_URL_ROOT.to_owned();

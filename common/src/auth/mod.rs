@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use crate::config::ESConfig;
 
 pub mod cert;
+pub mod gss;
 pub mod ldap;
 pub mod proxy;
 pub mod tomlfile;
