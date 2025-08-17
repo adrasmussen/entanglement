@@ -95,7 +95,7 @@ impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
             let val = match init.await {
                 Ok(v) => v,
                 Err(err) => {
-                    error!("error during cell initialization");
+                    error!("error during cell initialization: {err}");
                     cell.set(None);
                     self.remove(&key);
                     return Err(err);

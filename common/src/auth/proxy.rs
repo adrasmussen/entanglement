@@ -14,7 +14,6 @@ use crate::config::ESConfig;
 pub struct ProxyHeaderConfig {
     // the header passed down from the proxy, must be all lowercase
     pub header: String,
-
     // the subject cn field in the client x509 cert used by the proxy
     pub proxy_cn: String,
 }

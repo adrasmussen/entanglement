@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum, arg, command};
+use clap::{Parser, arg, command};
 
 use common::config::read_config;
 
@@ -17,7 +17,7 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let config = read_config(PathBuf::from(cli.config)).await;
+    let _config = read_config(PathBuf::from(cli.config)).await;
 
     Ok(())
 }

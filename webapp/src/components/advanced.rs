@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
 use tracing::error;
-use web_sys::wasm_bindgen::JsCast;
 
 use crate::{
     common::colors::CollectionColor,
@@ -581,45 +580,31 @@ fn AvailableCollectionItem(props: AvailableCollectionItemProps) -> Element {
             }
 
             // Color selector and add button
-            div { style: "display: flex; align-items: center; gap: var(--space-2);",
-                select {
-                    class: "form-select",
-                    style: "min-width: 100px;",
-                    id: "color-select-{collection_uuid}",
-                    for available_color in CollectionColor::all() {
-                        option {
-                            value: "{available_color}",
-                            selected: available_color == CollectionColor::Blue, // Default to blue
-                            "{available_color}"
-                        }
-                    }
-                }
-                button {
-                    class: "btn btn-sm btn-primary",
-                    onclick: move |_| {
-                        if let Some(window) = web_sys::window() {
-                            if let Some(document) = window.document() {
-                                if let Some(select) = document
-                                    .get_element_by_id(&format!("color-select-{}", collection_uuid))
-                                {
-                                    if let Some(select) = select.dyn_ref::<web_sys::HtmlSelectElement>()
-                                    {
-                                        let selected_value = select.value();
-                                        for available_color in CollectionColor::all() {
-                                            if available_color.to_string() == selected_value {
-                                                collection_color_signal
-                                                    .with_mut(|map| {
-                                                        map.insert(collection_uuid, available_color);
-                                                    });
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+            div {
+                form {
+                    style: "display: flex; align-items: center; gap: var(--space-2);",
+                    onsubmit: move |event| {
+                        if let Some(color) = event
+                            .values()
+                            .get(&format!("color-select-{collection_uuid}"))
+                            .map(|v| CollectionColor::from(v.as_value()))
+                        {
+                            collection_color_signal.with_mut(|map| map.insert(collection_uuid, color));
                         }
                     },
-                    "Add Color"
+                    select {
+                        class: "form-select",
+                        style: "min-width: 100px;",
+                        name: "color-select-{collection_uuid}",
+                        for available_color in CollectionColor::all() {
+                            option {
+                                value: "{available_color}",
+                                selected: available_color == CollectionColor::Blue, // Default to blue
+                                "{available_color}"
+                            }
+                        }
+                    }
+                    button { class: "btn btn-sm btn-primary", r#type: "submit", "Add Color" }
                 }
             }
         }

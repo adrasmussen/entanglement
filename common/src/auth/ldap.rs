@@ -47,6 +47,9 @@ pub enum LdapClientAuth {
     // pem-encoded tls cert and key to communicate with ldap server
     X509Cert { key: PathBuf, cert: PathBuf },
     // gssapi with kerberos lib defaults
+    //
+    // currently, this more or less assumes gssproxy, or that the
+    // server namespace has a well-behaved default keytab
     GssApi { fqdn: String },
 }
 
@@ -182,7 +185,7 @@ impl AuthzProvider for LdapAuthz {
             LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,
         };
 
-        // query the ldap server for all group entries whose memeber attribute contains the uid in question
+        // query the ldap server for all group entries whose member attribute contains the uid in question
         let (res_entries, _res) = ldap
             .search(
                 &self.config.group_base,

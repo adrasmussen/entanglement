@@ -76,8 +76,8 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
             form {
                 class: "comment-form",
                 style: "margin-bottom: var(--space-4); background-color: var(--neutral-50); padding: var(--space-3); border-radius: var(--radius-md);",
-                onsubmit: move |evt| async move {
-                    evt.prevent_default();
+                onsubmit: move |event| async move {
+                    event.prevent_default();
                     let comment_text = new_comment();
                     if comment_text.trim().is_empty() {
                         status_signal.set("Comment cannot be empty".into());

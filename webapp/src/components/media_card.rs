@@ -131,9 +131,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         loading: "lazy",
                     }
                 }
-                div {
-                    class: "media-card-info",
-                    style: info_background_style,
+                div { class: "media-card-info", style: info_background_style,
 
                     p { class: "date", "{media.date}" }
                     p { class: "note",

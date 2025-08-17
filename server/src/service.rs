@@ -11,9 +11,10 @@ use common::config::ESConfig;
 pub enum ServiceType {
     Auth,
     Db,
-    Echo,
     Http,
     Task,
+    #[allow(dead_code)]
+    Echo,
 }
 
 // Entanglement Service Messages
@@ -95,7 +96,7 @@ pub trait EntanglementService: Send + Sync + 'static {
 // service message responder
 //
 // in the spirit of tower, the magic of the entanglement service model is in the message_handler
-// rpc function.  services may respond to extneral messages on other channels (http) as well.
+// rpc function.  services may respond to external messages on other channels (http) as well.
 #[async_trait]
 pub trait ESInner: Sized + Send + Sync + 'static {
     fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self>;
