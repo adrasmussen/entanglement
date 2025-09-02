@@ -412,6 +412,7 @@ fn watch_task(
 ) -> (JoinHandle<()>, CancellationToken) {
     let cancel = CancellationToken::new();
 
+    // the extra block is to clone the cancel token properly
     let handle = {
         let cancel = cancel.clone();
 
@@ -440,7 +441,9 @@ fn watch_task(
                             error!("task failed: {err}");
                             (TaskStatus::Failure, None)
                         },
-                        Err(_) => (TaskStatus::Unknown, None),
+                        Err(err) => {
+                            error!("task runtime join error: {err}");
+                            (TaskStatus::Unknown, None)},
                     }
 
                 }

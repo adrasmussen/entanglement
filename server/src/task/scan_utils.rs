@@ -178,6 +178,11 @@ impl ScanFile {
         // in lieu of some more complicated introspection, we rely on the file extention being
         // a (mostly) correct representation of the file's contents.  both the image and video
         // collectors are somewhat flexible on their inputs.
+        //
+        // this list is not even close to exhaustive, and future improvements are expected.
+        //
+        // note that the extensions are also used by the http service to guess the mime type of
+        // the media files; see http/stream.rs for details.
         let ext = path
             .extension()
             .and_then(|f| f.to_str())
@@ -309,15 +314,6 @@ impl ScanFile {
         }
 
         // media processing
-        //
-        // in lieu of some more complicated introspection, we rely on the file extention being
-        // a (mostly) correct representation of the file's contents.  both the image and video
-        // collectors are somewhat flexible on their inputs.
-        //
-        // this list is not even close to exhaustive, and future improvements are expected.
-        //
-        // note that the extensions are also used by the http service to guess the mime type of
-        // the media files; see http/stream.rs for details.
         let media_data: MediaData = match self.mtype {
             MediaType::Image => process_image(&self.path).await?,
             MediaType::Video => process_video(&self.path, &self.scratch_dir).await?,
