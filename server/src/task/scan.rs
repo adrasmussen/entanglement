@@ -201,6 +201,9 @@ pub async fn scan_library(
         }.instrument(span!(Level::INFO, "dedup_media", media_uuid)));
     }
 
+    // wait for phase two to complete
+    tasks.join_all().await;
+
     let file_count = context.file_count.load(Ordering::Relaxed);
     let warnings = context.warnings.load(Ordering::Relaxed);
 
