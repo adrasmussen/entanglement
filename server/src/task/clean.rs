@@ -5,7 +5,6 @@ use std::{
         Arc,
         atomic::{AtomicI64, Ordering},
     },
-    time::UNIX_EPOCH,
 };
 
 use anyhow::Result;
@@ -181,19 +180,6 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     }
 
     let path_metadata = metadata(&path).await?;
-
-    // modified media validation
-    //
-    // if the original media is modified in-place (rotating, rebalancing, etc), then
-    // we need to both recalculate hashes and regenerate the symlink
-    if path_metadata
-        .modified()?
-        .duration_since(UNIX_EPOCH)?
-        .as_secs()
-        > media.mtime
-    {
-        warn!("missing code path")
-    }
 
     // symlink validation and cleanup
     //

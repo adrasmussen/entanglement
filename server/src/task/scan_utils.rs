@@ -164,7 +164,6 @@ pub struct ScanContext {
     pub file_count: AtomicI64,
     pub warnings: AtomicI64,
     pub known_files: DashSet<KnownFile>,
-    pub chashes: DashSet<String>,
     pub scratch_base: PathBuf,
 }
 
@@ -330,7 +329,7 @@ impl ScanContext {
         //
         // if the real file matched by hash, there may be duplicates elswewhere in the filesystem,
         // but if we matched by path then it will be unique in this vec
-        files.pop_if(|f| f.hash == real_file.hash && !(f == &real_file));
+        files.retain(|f| f == &real_file || f.hash != real_file.hash);
 
         // then update the record to point to the new object, also removing it from the list
         //
@@ -342,7 +341,12 @@ impl ScanContext {
         // finally, if there are both hash and path matches, this will update the original
         // record to point to the hash match but there will still be the path match in the
         // dashset (and that should be the only remaining item)
-        if let Some(file) = files.pop_if(|f| f == &real_file) {
+
+        if let Some(file) = files
+            .extract_if(.., |f| f == &real_file)
+            .collect::<Vec<_>>()
+            .pop()
+        {
             debug!({ media_uuid = media_uuid }, "updating media record");
             let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -382,13 +386,14 @@ impl ScanContext {
             )));
         }
 
-        debug!({media_uuid = media_uuid, path = real_file.path}, "updating original path after matching moved hash");
+
 
         if let Some(file) = files.pop() {
             // it's possible that the modified original path itself is a duplicate
             //
             // in that case, we simply add the clone tag and leave it, as there is no programatic
             // way to determine if the new record is newer or older than the original record
+            debug!({media_uuid = media_uuid, path = real_file.path}, "updating original path after matching moved hash");
 
             let new_uuid = match context.get_media_by_chash(&file.hash).await? {
                 Some(media) => media.media_uuid,
@@ -398,7 +403,7 @@ impl ScanContext {
                     let scan = ScanFile::from_known(context.clone(), file).await?;
 
                     scan.register().await?.ok_or_else(|| {
-                            anyhow::Error::msg(format!("internal error: new media record for {path} not added due to deduplication check"))
+                            anyhow::Error::msg(format!("failed to add new media record for {path}"))
                         })?
                 }
             };
@@ -497,7 +502,7 @@ impl ScanFile {
                     media_uuid: media.media_uuid,
                     path: pathstr.to_string(),
                     hash: content_hash(&path).await?,
-                    mtime: media.mtime,
+                    mtime,
                 }));
             }
         }
@@ -507,6 +512,8 @@ impl ScanFile {
         let chash = content_hash(&path).await?;
 
         let scratch_dir = create_scratch_dir(context.clone(), &chash).await?;
+
+        debug!({path = pathstr}, "scanning file");
 
         Ok(FileStatus::Register(ScanFile {
             context,
@@ -553,10 +560,10 @@ impl ScanFile {
         // however, this means that the other copies are not tracked for changes via the
         // known file checker; we could hypothetically extend the path in the database
         // to include all paths if this ends up becoming a problem
-        if !self.context.chashes.insert(self.hash.clone()) {
-            debug!("duplicate media found (concurrent check)");
-            return Ok(None);
-        }
+        //if !self.context.chashes.insert(self.hash.clone()) {
+        //    debug!("duplicate media found (concurrent check)");
+        //    return Ok(None);
+        // }
 
         // matching hash check
         //
@@ -574,7 +581,7 @@ impl ScanFile {
                 media_uuid: media.media_uuid,
                 path: self.pathstr.to_string(),
                 hash: self.hash.clone(),
-                mtime: media.mtime,
+                mtime: self.mtime,
             });
 
             return Ok(None);

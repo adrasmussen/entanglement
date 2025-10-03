@@ -62,7 +62,6 @@ pub async fn scan_library(
         file_count: AtomicI64::new(0),
         warnings: AtomicI64::new(0),
         known_files: DashSet::new(),
-        chashes: DashSet::new(),
         scratch_base: config
             .task
             .scan_scratch
@@ -139,9 +138,10 @@ pub async fn scan_library(
                         .await
                         .map_err(|_| anyhow::Error::msg("scan exceeded timeout"))
                     {
-                        Ok(Ok(_)) => {
+                        Ok(Ok(Some(_))) => {
                             context.file_count.fetch_add(1, Ordering::Relaxed);
                         }
+                        Ok(Ok(None)) => {}
                         Ok(Err(err)) | Err(err) => {
                             warn!("scan error: {err:?}");
                             context.warnings.fetch_add(1, Ordering::Relaxed);
