@@ -3,7 +3,6 @@ use dioxus_router::prelude::*;
 
 use crate::{
     Route,
-    common::local_time,
     components::modal::{MODAL_STACK, Modal},
 };
 use api::library::*;
@@ -125,9 +124,9 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     td { style: "padding: var(--space-3);", "{library.count}" }
 
                                     // Last modified column
-                                    td { style: "padding: var(--space-3);",
-                                        "{local_time(library.mtime)}"
-                                    }
+                                    //td { style: "padding: var(--space-3);",
+                                    //    "{local_time(library.mtime)}"
+                                    //}
 
                                     // Actions column
                                     td { style: "padding: var(--space-3); text-align: right;",

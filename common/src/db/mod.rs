@@ -36,17 +36,23 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn get_media_uuids(&self) -> Result<Vec<MediaUuid>>;
 
-    async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>>;
+    async fn get_media_by_path(&self, path: String) -> Result<Option<MediaByPath>>;
 
-    async fn get_media_uuid_by_chash(
+    async fn get_media_by_chash(
         &self,
         library_uuid: LibraryUuid,
         chash: String,
-    ) -> Result<Option<MediaUuid>>;
+    ) -> Result<Option<MediaByCHash>>;
 
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()>;
 
-    async fn replace_media_path(&self, media_uuid: MediaUuid, path: String) -> Result<()>;
+    async fn replace_media_path(
+        &self,
+        media_uuid: MediaUuid,
+        path: String,
+        hash: String,
+        mtime: u64,
+    ) -> Result<()>;
 
     async fn search_media(
         &self,
@@ -128,4 +134,19 @@ pub trait DbBackend: Send + Sync + 'static {
         hidden: Option<bool>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>>;
+}
+
+// structs needed to do media updates
+#[derive(Debug)]
+pub struct MediaByPath {
+    pub media_uuid: MediaUuid,
+    pub hash: String,
+    pub mtime: u64,
+}
+
+#[derive(Debug)]
+pub struct MediaByCHash {
+    pub media_uuid: MediaUuid,
+    pub path: String,
+    pub mtime: u64,
 }

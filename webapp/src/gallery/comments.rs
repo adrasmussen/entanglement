@@ -63,7 +63,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
             }
 
             // Sort comments by timestamp (newest first)
-            comments.sort_by(|a, b| b.1.mtime.cmp(&a.1.mtime));
+            comments.sort_by(|a, b| b.1.date.cmp(&a.1.date));
             comments
         }
     });
@@ -87,8 +87,8 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
                             &AddCommentReq {
                                 comment: Comment {
                                     media_uuid,
-                                    mtime: 0,
                                     uid: String::from(""),
+                                    date: 0,
                                     text: comment_text,
                                 },
                             },
@@ -154,7 +154,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
                                             div {
                                                 class: "comment-time",
                                                 style: "font-size: 0.875rem; color: var(--text-tertiary);",
-                                                "{local_time(comment.mtime)}"
+                                                "{local_time(comment.date)}"
                                             }
                                         }
                                         div { class: "comment-text", style: "white-space: pre-wrap;", "{comment.text}" }

@@ -5,7 +5,7 @@ use dioxus_router::prelude::*;
 
 use crate::{
     Route,
-    common::{local_time, storage::*},
+    common::storage::*,
     components::{
         media_card::MediaCard,
         modal::{MODAL_STACK, Modal, ModalBox},
@@ -163,7 +163,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let library = library_data.library;
     let media = media_data.media;
 
-    let formatted_time = local_time(library.mtime);
+    //let formatted_time = local_time(library.mtime);
 
     rsx! {
         div { class: "container with-sticky",
@@ -190,7 +190,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary) font-size: 0.875rem;",
                                 span { "Owner: {library.uid}" }
                                 span { "Group: {library.gid}" }
-                                span { "Last scanned: {formatted_time}" }
+                                //span { "Last scanned: {formatted_time}" }
                                 span { "File count: {library.count}" }
                             }
                             TaskBar { update_signal, library_uuid }

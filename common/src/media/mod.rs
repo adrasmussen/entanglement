@@ -23,7 +23,7 @@ pub struct MediaData {
     pub metadata: MediaMetadata,
 }
 
-pub async fn content_hash(path: &PathBuf) -> Result<String> {
+pub async fn content_hash(path: impl AsRef<Path>) -> Result<String> {
     let file = File::open(&path).await?;
 
     let mut hasher = Sha512::new();

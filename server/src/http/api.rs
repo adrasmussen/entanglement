@@ -222,8 +222,8 @@ pub(super) async fn add_comment(
                 resp: tx,
                 comment: Comment {
                     media_uuid: message.comment.media_uuid,
-                    mtime: 0,
                     uid,
+                    date: message.comment.date,
                     text: message.comment.text,
                 },
             }
@@ -365,7 +365,6 @@ pub(super) async fn add_collection(
                 collection: Collection {
                     uid,
                     gid: message.collection.gid,
-                    mtime: 0,
                     name: message.collection.name,
                     note: message.collection.note,
                     tags: message.collection.tags,

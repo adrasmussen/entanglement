@@ -20,12 +20,9 @@ use crate::{
     db::msg::DbMsg,
     fs::{media_link_path, media_thumbnail_path},
     service::{ESMRegistry, EsmSender, ServiceType},
+    task::scan_utils::add_tag_to_media,
 };
-use api::{
-    library::{LibraryUpdate, LibraryUuid},
-    media::{MediaUpdate, MediaUuid},
-    search::SearchFilter,
-};
+use api::{library::LibraryUuid, media::MediaUuid, search::SearchFilter};
 use common::{config::ESConfig, media::create_thumbnail};
 
 #[derive(Debug)]
@@ -137,22 +134,6 @@ pub async fn clean_library(
 
     let warnings = warnings.load(Ordering::Relaxed);
 
-    // update the mtime
-    let (tx, rx) = channel();
-
-    db_svc_sender
-        .send(
-            DbMsg::UpdateLibrary {
-                resp: tx,
-                library_uuid,
-                update: LibraryUpdate { count: None },
-            }
-            .into(),
-        )
-        .await?;
-
-    rx.await??;
-
     Ok(warnings)
 }
 
@@ -192,29 +173,7 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     debug!("original media validation");
 
     if !try_exists(&path).await? {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        let mut tags = media.tags.clone();
-
-        tags.insert("TBD_DELETEME".to_owned());
-
-        db_svc_sender
-            .send(
-                DbMsg::UpdateMedia {
-                    resp: tx,
-                    media_uuid,
-                    update: MediaUpdate {
-                        hidden: None,
-                        date: None,
-                        note: None,
-                        tags: Some(tags),
-                    },
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await??;
+        add_tag_to_media(db_svc_sender.clone(), media_uuid, "TBD_DELETEME".to_owned()).await?;
 
         // fail here (generating a warning by the Walkdir-transvering thread) so that
         // we don't try and subsequently fail any of the later steps

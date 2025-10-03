@@ -1,19 +1,22 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicI64, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    },
+    time::Duration,
 };
 
 use anyhow::Result;
 use dashmap::DashSet;
 
-use tokio::{fs::create_dir_all, sync::oneshot::channel, task::JoinSet};
-use tracing::{Instrument, Level, debug, error, instrument, span, warn};
+use tokio::{fs::create_dir_all, sync::oneshot::channel, task::JoinSet, time::timeout};
+use tracing::{Instrument, Level, debug, error, instrument, span, warn, info};
 use walkdir::WalkDir;
 
 use crate::{
     db::msg::DbMsg,
     service::{ESMRegistry, ServiceType},
-    task::scan_utils::{ScanContext, ScanFile, get_path_and_metadata},
+    task::scan_utils::{FileStatus, ScanContext, ScanFile, get_path_and_metadata},
 };
 use api::library::{LibraryUpdate, LibraryUuid};
 use common::config::ESConfig;
@@ -55,9 +58,10 @@ pub async fn scan_library(
     let context = Arc::new(ScanContext {
         config: config.clone(),
         library_uuid,
-        db_svc_sender,
+        db_svc_sender: db_svc_sender.clone(),
         file_count: AtomicI64::new(0),
         warnings: AtomicI64::new(0),
+        known_files: DashSet::new(),
         chashes: DashSet::new(),
         scratch_base: config
             .task
@@ -70,11 +74,21 @@ pub async fn scan_library(
 
     let mut tasks: JoinSet<()> = JoinSet::new();
 
-    let scan_threads = config.task.scan_threads;
+    let scan_timeout = Duration::from_secs(context.config.task.scan_timeout);
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
-    debug!("library scan beginning filesystem walk");
+
+    //
+    // scan phase one
+    //
+    // in the first pass, we identify:
+    //  * all new files
+    //  * any modified files linked to a database record by path or hash
+    //
+    // everything else is skipped, incrementing the counter if it was a file
+    // whose path is known and hasn't been modified
+    info!("library scan phase one: filesystem walk and adding new media");
 
     for entry in WalkDir::new(config.fs.media_srcdir.clone().join(library.path))
         .same_file_system(true)
@@ -89,7 +103,7 @@ pub async fn scan_library(
 
         // we allow this to be configurable so that we don't swamp the media server when registering
         // a large collection of media
-        while tasks.len() > scan_threads {
+        while tasks.len() > config.task.scan_threads {
             tasks.join_next().await;
         }
 
@@ -103,23 +117,32 @@ pub async fn scan_library(
         let (path, metadata) = get_path_and_metadata(entry).await?;
 
         if metadata.is_file() {
-            let file = match ScanFile::new(context.clone(), path.clone(), metadata).await? {
-                Some(v) => v,
-                None => {
-                    context.file_count.fetch_add(1, Ordering::Relaxed);
-                    continue;
-                }
-            };
-
             tasks.spawn({
+                // TODO -- why do these continues work?
                 let context = context.clone();
 
+                let file = match ScanFile::init(context.clone(), path.clone(), metadata).await? {
+                    FileStatus::Register(v) => v,
+                    FileStatus::Exists(file) => {
+                        context.known_files.insert(file);
+                        continue;
+                    }
+                    FileStatus::Skip => {
+                        context.file_count.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
+                    FileStatus::Unknown => continue,
+                };
+
                 async move {
-                    match file.timed_register().await {
-                        Ok(()) => {
+                    match timeout(scan_timeout, file.register())
+                        .await
+                        .map_err(|_| anyhow::Error::msg("scan exceeded timeout"))
+                    {
+                        Ok(Ok(_)) => {
                             context.file_count.fetch_add(1, Ordering::Relaxed);
                         }
-                        Err(err) => {
+                        Ok(Err(err)) | Err(err) => {
                             warn!("scan error: {err:?}");
                             context.warnings.fetch_add(1, Ordering::Relaxed);
                         }
@@ -130,11 +153,53 @@ pub async fn scan_library(
         }
     }
 
-    // cleanup
+    // wait for phase one to complete
     tasks.join_all().await;
 
-    // handled via Drop
-    // remove_dir_all(&context.scratch_base).await?;
+    //
+    // scan phase two
+    //
+    // after having considered all files, we have a whole collection of linked records
+    // that correspond to moved, changed, or duplicated files
+    info!("library scan phase two: deduplicating and detecting changed media");
+
+    // this early return is a bit cavalier, but this really shouldn't be able to fail
+    let known_files = context.collate_known_files()?;
+
+    let mut tasks: JoinSet<()> = JoinSet::new();
+
+    for item in known_files.iter_mut() {
+        let context = context.clone();
+        let media_uuid = *item.key();
+        let files = item.value().clone();
+
+        // check this first so that a database channel closure doesn't generate a ton of logs
+        if context.db_svc_sender.is_closed() {
+            error!("library scan task stopped -- database service cannot be reached");
+            return Err(anyhow::Error::msg("database esm channel dropped"));
+        };
+
+        // we allow this to be configurable so that we don't swamp the media server when registering
+        // a large collection of media
+        while tasks.len() > config.task.scan_threads {
+            tasks.join_next().await;
+        }
+
+        tasks.spawn(async move {
+            let context = context.clone();
+
+            match timeout(scan_timeout, context.resolve_duplicates(media_uuid, files))
+                .await
+                .map_err(|_| anyhow::Error::msg("dedup exceeded timeout"))
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(err)) | Err(err) => {
+                    warn!("dedup error: {err:?}");
+                    context.warnings.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }.instrument(span!(Level::INFO, "dedup_media", media_uuid)));
+    }
 
     let file_count = context.file_count.load(Ordering::Relaxed);
     let warnings = context.warnings.load(Ordering::Relaxed);

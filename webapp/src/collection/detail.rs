@@ -6,7 +6,7 @@ use dioxus_router::prelude::*;
 use crate::{
     Route,
     collection::MEDIA_SEARCH_KEY,
-    common::{local_time, storage::*},
+    common::storage::*,
     components::{
         media_card::MediaCard,
         modal::{MODAL_STACK, Modal, ModalBox},
@@ -144,7 +144,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let collection = collection_data.collection;
     let media = media_data.media;
 
-    let formatted_time = local_time(collection.mtime);
+    //let formatted_time = local_time(collection.mtime);
     let formatted_tags = fold_set(collection.tags.clone())
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
@@ -185,7 +185,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                 ",
                                 span { "Owner: {collection.uid}" }
                                 span { "Group: {collection.gid}" }
-                                span { "Last modified: {formatted_time}" }
+                                //span { "Last modified: {formatted_time}" }
                             }
 
                             if !collection.note.is_empty() {

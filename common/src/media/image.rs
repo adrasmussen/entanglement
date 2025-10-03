@@ -14,7 +14,7 @@ use api::media::MediaMetadata;
 // unfortunately, the image crate is largely built from synchronous std::io tech, which
 // means spawn_blocking() wrappers on all of it to avoid jamming the runtime
 
-#[instrument(skip_all)]
+#[instrument]
 pub async fn hash_image(path: &Path) -> Result<String> {
     debug!("calculating hash");
 
@@ -30,7 +30,7 @@ pub async fn hash_image(path: &Path) -> Result<String> {
     Ok(hash)
 }
 
-#[instrument(skip_all)]
+#[instrument]
 pub async fn process_image(path: &Path) -> Result<MediaData> {
     debug!("processing image");
 

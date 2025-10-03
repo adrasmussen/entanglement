@@ -1,5 +1,8 @@
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -8,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument};
 
-use crate::{config::ESConfig, db::DbBackend, unix_time};
+use crate::{
+    config::ESConfig,
+    db::{DbBackend, MediaByCHash, MediaByPath},
+};
 use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
@@ -43,8 +49,6 @@ use api::{
 //  * delete_collection
 //
 // update_* can fail partway through
-//
-// all mtime bumps should be best-effort
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MariaDbConfig {
     pub url: String,
@@ -170,7 +174,7 @@ impl DbBackend for MariaDBBackend {
                 "size" => media.size,
                 "chash" => media.chash,
                 "phash" => media.phash,
-                "mtime" => unix_time(),
+                "mtime" => media.mtime,
                 "hidden" => media.hidden,
                 "date" => media.date,
                 "note" => media.note,
@@ -323,13 +327,13 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip(self))]
-    async fn get_media_uuid_by_path(&self, path: String) -> Result<Option<MediaUuid>> {
+    async fn get_media_by_path(&self, path: String) -> Result<Option<MediaByPath>> {
         debug!("searching for media by path");
 
         let _mr = self.locks.media.read().await;
 
         let mut result = r"
-            SELECT media_uuid FROM media WHERE path = :path"
+            SELECT media_uuid, chash, mtime FROM media WHERE path = :path"
             .with(params! {
                 "path" => path,
             })
@@ -343,25 +347,29 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<MediaUuid>(row)?;
+        let data = from_row_opt::<(MediaUuid, String, u64)>(row)?;
 
-        debug!({ media_uuid = data }, "found media");
+        debug!({ media_uuid = data.0 }, "found media");
 
-        Ok(Some(data))
+        Ok(Some(MediaByPath {
+            media_uuid: data.0,
+            hash: data.1,
+            mtime: data.2,
+        }))
     }
 
     #[instrument(skip(self))]
-    async fn get_media_uuid_by_chash(
+    async fn get_media_by_chash(
         &self,
         library_uuid: LibraryUuid,
         chash: String,
-    ) -> Result<Option<MediaUuid>> {
+    ) -> Result<Option<MediaByCHash>> {
         debug!("searching for media by content hash");
 
         let _mr = self.locks.media.read().await;
 
         let mut result = r"
-            SELECT media_uuid FROM media WHERE library_uuid = :library_uuid AND chash = :chash"
+            SELECT media_uuid, path, mtime FROM media WHERE library_uuid = :library_uuid AND chash = :chash"
             .with(params! {
                 "library_uuid" => library_uuid,
                 "chash" => chash,
@@ -376,11 +384,15 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<MediaUuid>(row)?;
+        let data = from_row_opt::<(MediaUuid, String, u64)>(row)?;
 
-        debug!({ media_uuid = data }, "found media");
+        debug!({ media_uuid = data.0 }, "found media");
 
-        Ok(Some(data))
+        Ok(Some(MediaByCHash {
+            media_uuid: data.0,
+            path: data.1,
+            mtime: data.2,
+        }))
     }
 
     #[instrument(skip(self, update))]
@@ -433,32 +445,30 @@ impl DbBackend for MariaDBBackend {
                 .await?;
         }
 
-        r"
-        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
         debug!("updated media details");
 
         Ok(())
     }
 
     #[instrument(skip(self))]
-    async fn replace_media_path(&self, media_uuid: MediaUuid, path: String) -> Result<()> {
+    async fn replace_media_path(
+        &self,
+        media_uuid: MediaUuid,
+        path: String,
+        hash: String,
+        mtime: u64,
+    ) -> Result<()> {
         debug!("replacing media path");
 
         let _mw = self.locks.media.write().await;
 
         r"
-        UPDATE media SET path = :path, mtime = :mtime WHERE media_uuid = :media_uuid"
+        UPDATE media SET path = :path, chash = :hash, mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "mtime" => unix_time(),
-                "path" => path,
                 "media_uuid" => media_uuid,
+                "path" => path,
+                "hash" => hash,
+                "mtime" => mtime,
             })
             .run(self.pool.get_conn().await?)
             .await?;
@@ -618,6 +628,119 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
+    // comment queries
+    #[instrument(skip(self, comment))]
+    async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
+        debug!({ media_uuid = comment.media_uuid }, "adding comment");
+
+        let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
+
+        let mut result = r"
+            INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
+            VALUES (UUID_SHORT(), :media_uuid, :uid, date, :text)
+            RETURNING comment_uuid"
+            .with(params! {
+                "media_uuid" => comment.media_uuid,
+                "uid" => comment.uid,
+                "date" => SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+                "text" => comment.text,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let row = result.pop().ok_or_else(|| {
+            error!("failed to add comment");
+            anyhow::Error::msg("failed to add comment")
+        })?;
+
+        let data = from_row_opt::<CommentUuid>(row)?;
+
+        debug!({media_uuid = comment.media_uuid, comment_uuid = data}, "added comment");
+
+        Ok(data)
+    }
+
+    #[instrument(skip(self))]
+    async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
+        debug!("getting comment details");
+
+        let _yr = self.locks.comment.read().await;
+
+        let mut result = r"
+            SELECT media_uuid, uid, date, text FROM comments WHERE comment_uuid = :comment_uuid"
+            .with(params! {
+                "comment_uuid" => comment_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let row = match result.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
+
+        let data = from_row_opt::<(MediaUuid, String, u64, String)>(row)?;
+
+        debug!("found comment details");
+
+        Ok(Some(Comment {
+            media_uuid: data.0,
+            uid: data.1,
+            date: data.2,
+            text: data.3,
+        }))
+    }
+
+    // TODO -- find a simple way to get the media_uuid so that we can bump the timestamp
+
+    #[instrument(skip(self))]
+    async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
+        debug!("deleting comment");
+
+        // let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
+
+        r"
+        DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
+            .with(params! {
+                "comment_uuid" => comment_uuid,
+            })
+            .run(self.pool.get_conn().await?)
+            .await?;
+
+        debug!("deleted comment");
+
+        Ok(())
+    }
+
+    #[instrument(skip(self, text))]
+    async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
+        debug!("updating comment");
+
+        // let _mw = self.locks.media.write().await;
+        let _yw = self.locks.comment.write().await;
+
+        if let Some(val) = text {
+            r"
+            UPDATE comments SET text = :text WHERE comment_uuid = :comment_uuid"
+                .with(params! {
+                    "text" => val.clone(),
+                    "comment_uuid" => comment_uuid,
+                })
+                .run(self.pool.get_conn().await?)
+                .await?;
+        }
+
+        debug!("updated comment");
+
+        Ok(())
+    }
+
     // collection queries
     #[instrument(skip(self, collection))]
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid> {
@@ -626,12 +749,11 @@ impl DbBackend for MariaDBBackend {
         let _cw = self.locks.collection.write().await;
 
         let mut result = r"
-            INSERT INTO collections (collection_uuid, uid, gid, mtime, name, note, tags, cover)
+            INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
             SELECT
                 UUID_SHORT(),
                 :uid,
                 :gid,
-                :mtime,
                 :name,
                 :note,
                 :tags,
@@ -649,7 +771,6 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "uid" => collection.uid,
                 "gid" => collection.gid,
-                "mtime" => unix_time(),
                 "name" => collection.name.clone(),
                 "note" => collection.note,
                 "tags" => fold_set(collection.tags)?,
@@ -679,7 +800,7 @@ impl DbBackend for MariaDBBackend {
         let _cr = self.locks.collection.read().await;
 
         let mut result = r"
-            SELECT uid, gid, mtime, name, note, tags, cover FROM collections WHERE collection_uuid = :collection_uuid"
+            SELECT uid, gid, name, note, tags, cover FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
             "collection_uuid" => collection_uuid,
         })
@@ -693,26 +814,20 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(
-            String,
-            String,
-            u64,
-            String,
-            String,
-            String,
-            Option<MediaUuid>,
-        )>(row)?;
+        let data =
+            from_row_opt::<(String, String, String, String, String, Option<MediaUuid>)>(row)?;
 
         debug!("found collection details");
+
+        let tags = data.4.clone();
 
         Ok(Some(Collection {
             uid: data.0,
             gid: data.1,
-            mtime: data.2,
-            name: data.3,
-            note: data.4,
-            tags: unfold_set(&data.5),
-            cover: data.6,
+            name: data.2,
+            note: data.3,
+            tags: unfold_set(&tags),
+            cover: data.5,
         }))
     }
 
@@ -789,15 +904,6 @@ impl DbBackend for MariaDBBackend {
                 .await?;
         }
 
-        r"
-        UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "collection_uuid" => collection_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
         debug!("updated collection");
 
         Ok(())
@@ -811,8 +917,7 @@ impl DbBackend for MariaDBBackend {
     ) -> Result<()> {
         debug!("adding media to collection");
 
-        let _mw = self.locks.media.write().await;
-        let _cw = self.locks.collection.write().await;
+        let _cw = self.locks.contents.write().await;
 
         let mut result = r"
             INSERT INTO collection_contents (media_uuid, collection_uuid)
@@ -832,7 +937,6 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "media_uuid" => media_uuid,
                 "collection_uuid" => collection_uuid,
-                "mtime" => unix_time(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -843,24 +947,6 @@ impl DbBackend for MariaDBBackend {
             error!("failed to add media to collection");
             anyhow::Error::msg("failed to add media to collection")
         })?;
-
-        r"
-        UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "collection_uuid" => collection_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
 
         debug!("added media to collection");
 
@@ -875,36 +961,16 @@ impl DbBackend for MariaDBBackend {
     ) -> Result<()> {
         debug!("removing media from collection");
 
-        let _mw = self.locks.media.write().await;
-        let _cw = self.locks.collection.write().await;
+        let _cw = self.locks.contents.write().await;
 
         r"
         DELETE FROM collection_contents WHERE (media_uuid = :media_uuid AND collection_uuid = :collection_uuid)"
         .with(params! {
             "media_uuid" => media_uuid,
             "collection_uuid" => collection_uuid,
-            "mtime" => unix_time(),
         })
         .run(self.pool.get_conn().await?)
         .await?;
-
-        r"
-        UPDATE collections SET mtime = :mtime WHERE collection_uuid = :collection_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "collection_uuid" => collection_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        r"
-        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "media_uuid" => media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
 
         debug!("removed media from collection");
 
@@ -1029,12 +1095,11 @@ impl DbBackend for MariaDBBackend {
         let _lw = self.locks.library.write().await;
 
         let mut result = r"
-            INSERT INTO libraries (library_uuid, path, gid, mtime, count)
+            INSERT INTO libraries (library_uuid, path, gid, count)
             SELECT
                 UUID_SHORT()
                 :path,
                 :gid,
-                :mtime,
                 :count
             FROM
                 DUAL
@@ -1048,7 +1113,6 @@ impl DbBackend for MariaDBBackend {
             .with(params! {
                 "path" => library.path.clone(),
                 "gid" => library.gid,
-                "mtime" => unix_time(),
                 "count" => library.count,
             })
             .run(self.pool.get_conn().await?)
@@ -1075,7 +1139,7 @@ impl DbBackend for MariaDBBackend {
         let _lr = self.locks.library.read().await;
 
         let mut result = r"
-            SELECT path, uid, gid, mtime, count FROM libraries WHERE library_uuid = :library_uuid"
+            SELECT path, uid, gid, count FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
                 "library_uuid" => library_uuid,
             })
@@ -1089,7 +1153,7 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(String, String, String, u64, i64)>(row)?;
+        let data = from_row_opt::<(String, String, String, i64)>(row)?;
 
         debug!("found library details");
 
@@ -1097,8 +1161,7 @@ impl DbBackend for MariaDBBackend {
             path: data.0,
             uid: data.1,
             gid: data.2,
-            mtime: data.3,
-            count: data.4,
+            count: data.3,
         }))
     }
 
@@ -1118,15 +1181,6 @@ impl DbBackend for MariaDBBackend {
                 .run(self.pool.get_conn().await?)
                 .await?;
         }
-
-        r"
-        UPDATE libraries SET mtime = :mtime WHERE library_uuid = :library_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "library_uuid" => library_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
 
         debug!("updated library");
 
@@ -1235,145 +1289,5 @@ impl DbBackend for MariaDBBackend {
         debug!({ count = data.len() }, "found media in library");
 
         Ok(data)
-    }
-
-    // comment queries
-    #[instrument(skip(self, comment))]
-    async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
-        debug!({ media_uuid = comment.media_uuid }, "adding comment");
-
-        let _mw = self.locks.media.write().await;
-        let _yw = self.locks.comment.write().await;
-
-        let mut result = r"
-            INSERT INTO comments (comment_uuid, media_uuid, mtime, uid, text)
-            VALUES (UUID_SHORT(), :media_uuid, :mtime, :uid, :text)
-            RETURNING comment_uuid"
-            .with(params! {
-                "media_uuid" => comment.media_uuid,
-                "mtime" => unix_time(),
-                "uid" => comment.uid,
-                "text" => comment.text,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = result.pop().ok_or_else(|| {
-            error!("failed to add comment");
-            anyhow::Error::msg("failed to add comment")
-        })?;
-
-        let data = from_row_opt::<CommentUuid>(row)?;
-
-        r"
-        UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            .with(params! {
-                "mtime" => unix_time(),
-                "media_uuid" => comment.media_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        debug!({media_uuid = comment.media_uuid, comment_uuid = data}, "added comment");
-
-        Ok(data)
-    }
-
-    #[instrument(skip(self))]
-    async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
-        debug!("getting comment details");
-
-        let _yr = self.locks.comment.read().await;
-
-        let mut result = r"
-            SELECT media_uuid, mtime, uid, text FROM comments WHERE comment_uuid = :comment_uuid"
-            .with(params! {
-                "comment_uuid" => comment_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
-            .await?;
-
-        let row = match result.pop() {
-            Some(row) => row,
-            None => return Ok(None),
-        };
-
-        let data = from_row_opt::<(MediaUuid, u64, String, String)>(row)?;
-
-        debug!("found comment details");
-
-        Ok(Some(Comment {
-            media_uuid: data.0,
-            mtime: data.1,
-            uid: data.2,
-            text: data.3,
-        }))
-    }
-
-    // TODO -- find a simple way to get the media_uuid so that we can bump the timestamp
-
-    #[instrument(skip(self))]
-    async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
-        debug!("deleting comment");
-
-        // let _mw = self.locks.media.write().await;
-        let _yw = self.locks.comment.write().await;
-
-        r"
-        DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
-            .with(params! {
-                "comment_uuid" => comment_uuid,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?;
-
-        // r"
-        // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-        //     .with(params! {
-        //         "mtime" => unix_time(),
-        //         "media_uuid" => comment.media_uuid,
-        //     })
-        //     .run(self.pool.get_conn().await?)
-        //     .await?;
-
-        debug!("deleted comment");
-
-        Ok(())
-    }
-
-    #[instrument(skip(self, text))]
-    async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
-        debug!("updating comment");
-
-        // let _mw = self.locks.media.write().await;
-        let _yw = self.locks.comment.write().await;
-
-        if let Some(val) = text {
-            r"
-            UPDATE comments SET text = :text WHERE comment_uuid = :comment_uuid"
-                .with(params! {
-                    "text" => val.clone(),
-                    "comment_uuid" => comment_uuid,
-                })
-                .run(self.pool.get_conn().await?)
-                .await?;
-
-            // r"
-            // UPDATE media SET mtime = :mtime WHERE media_uuid = :media_uuid"
-            // .with(params! {
-            //     "mtime" => unix_time(),
-            //     "media_uuid" => comment.media_uuid,
-            // })
-            // .run(self.pool.get_conn().await?)
-            // .await?;
-        }
-
-        debug!("updated comment");
-
-        Ok(())
     }
 }

@@ -9,8 +9,8 @@ pub type CommentUuid = u64;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Comment {
     pub media_uuid: MediaUuid,
-    pub mtime: u64,
     pub uid: String,
+    pub date: u64,
     pub text: String,
 }
 

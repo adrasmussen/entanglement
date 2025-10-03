@@ -100,6 +100,7 @@ impl EntanglementService for EchoService {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct EchoInner {
     registry: ESMRegistry,
 }

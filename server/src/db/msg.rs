@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use api::{collection::*, comment::*, library::*, media::*, search::SearchFilter};
+use common::db::{MediaByCHash, MediaByPath};
 
 use crate::service::*;
 
@@ -26,11 +27,11 @@ pub enum DbMsg {
         resp: EsmResp<Vec<MediaUuid>>,
     },
     GetMediaUuidByPath {
-        resp: EsmResp<Option<MediaUuid>>,
+        resp: EsmResp<Option<MediaByPath>>,
         path: String,
     },
     GetMediaUuidByCHash {
-        resp: EsmResp<Option<MediaUuid>>,
+        resp: EsmResp<Option<MediaByCHash>>,
         library_uuid: LibraryUuid,
         chash: String,
     },
@@ -43,6 +44,8 @@ pub enum DbMsg {
         resp: EsmResp<()>,
         media_uuid: MediaUuid,
         path: String,
+        hash: String,
+        mtime: u64,
     },
     SearchMedia {
         resp: EsmResp<Vec<MediaUuid>>,

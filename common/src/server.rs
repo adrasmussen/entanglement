@@ -51,4 +51,7 @@ pub struct TaskConfig {
     // temporary folder used by scanner for things like creating
     // video thumbnails
     pub scan_scratch: PathBuf,
+
+    // time to wait on individual scan jobs
+    pub scan_timeout: u64,
 }

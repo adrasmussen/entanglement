@@ -61,7 +61,6 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
             collection: Collection {
                 uid: "".to_string(),
                 gid: collection_group(),
-                mtime: 0,
                 name: collection_name(),
                 note: collection_note(),
                 tags: unfold_set(&collection_tags()),
