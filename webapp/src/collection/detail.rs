@@ -145,7 +145,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let formatted_tags = fold_set(collection.tags.clone())
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
-
+    // temporary
     let action_button = rsx! {
         div { style: "margin-left: auto;",
             button {
@@ -250,7 +250,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this collection...",
                     status: format!("Found {} items in this collection", media.len()),
-                    action_button,
+                    //action_button,
                 }
             }
 

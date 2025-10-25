@@ -276,10 +276,11 @@ impl ESAuthService for AuthCache {
     }
 
     // authz
-    #[instrument(skip_all)]
+
     // CACHE LOOKUP FUNCTION
     //
     // this is the primary access method for the user AwaitCache
+    #[instrument(skip_all)]
     async fn groups_for_user(&self, uid: String) -> anyhow::Result<HashSet<String>> {
         let user_cache = self.user_cache.clone();
 
@@ -294,7 +295,7 @@ impl ESAuthService for AuthCache {
                         Err(err) => Err(anyhow::Error::from(err)),
                     }
                 }
-                .instrument(span!(Level::INFO, "groups_for_user")),
+                .instrument(span!(Level::DEBUG, "groups_for_user")),
             )
             .await?;
 
@@ -312,6 +313,7 @@ impl ESAuthService for AuthCache {
     // CACHE LOOKUP FUNCTION
     //
     // this is the primary access method for the media AwaitCache
+    #[instrument(skip_all)]
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
@@ -329,7 +331,7 @@ impl ESAuthService for AuthCache {
                         Err(err) => Err(anyhow::Error::from(err)),
                     }
                 }
-                .instrument(span!(Level::INFO, "can_access_media")),
+                .instrument(span!(Level::DEBUG, "can_access_media")),
             )
             .await?;
 

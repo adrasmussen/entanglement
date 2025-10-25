@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
                         println!("users in group: {users:#?}");
                     }
                     AuthzCommands::GroupsForUser { uid } => {
-                        let groups = backend.users_in_group(uid.clone()).await?;
+                        let groups = backend.groups_for_user(uid.clone()).await?;
 
                         println!("groups containing user: {groups:#?}");
                     }
