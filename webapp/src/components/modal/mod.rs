@@ -133,7 +133,7 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
 }
 
 #[derive(Clone, PartialEq, Props)]
-pub struct ModalProps {
+pub struct ModalInnerProps {
     title: String,
     #[props(default)]
     size: ModalSize,
@@ -154,7 +154,7 @@ pub enum ModalSize {
 }
 
 #[component]
-pub fn ModernModal(props: ModalProps) -> Element {
+pub fn ModalInner(props: ModalInnerProps) -> Element {
     // Determine width based on size
     let width = match props.size {
         ModalSize::Small => "max-width: 400px;",
@@ -172,9 +172,7 @@ pub fn ModernModal(props: ModalProps) -> Element {
                 if !props.disable_close {
                     MODAL_STACK
                         .with_mut(|v| {
-                            if !v.is_empty() {
-                                v.pop();
-                            }
+                            v.pop();
                         });
                 }
             },
@@ -192,9 +190,7 @@ pub fn ModernModal(props: ModalProps) -> Element {
                             onclick: move |_| {
                                 MODAL_STACK
                                     .with_mut(|v| {
-                                        if !v.is_empty() {
-                                            v.pop();
-                                        }
+                                        v.pop();
                                     });
                             },
                             "×"

@@ -30,7 +30,9 @@ fn NavBarInner() -> Element {
         header { class: "app-header",
             div { class: "nav-container",
                 div { class: "logo",
-                    Link { to: Route::ModernHome {}, style: "display: flex; align-items: center;",
+                    Link {
+                        to: Route::ModernHome {},
+                        style: "display: flex; align-items: center;",
                         img {
                             src: "/entanglement/app/assets/header.svg",
                             alt: "Entanglement",

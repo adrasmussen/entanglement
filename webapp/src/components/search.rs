@@ -21,8 +21,7 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
     let status = props.status.clone();
 
     rsx! {
-        div {
-            class: "search-bar",
+        div { class: "search-bar",
             form {
                 style: "flex: 1; display: flex; align-items: center; gap: var(--space-2);",
                 onsubmit: move |event| async move {
@@ -33,8 +32,7 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
                     search_signal.set(filter.clone());
                     set_local_storage(storage_key, filter);
                 },
-                div {
-                    class: "search-input",
+                div { class: "search-input",
                     input {
                         class: "form-input",
                         style: "width: 100%;",
@@ -74,8 +72,7 @@ pub fn CompactSearchBar(props: CompactSearchBarProps) -> Element {
     let placeholder = props.placeholder;
 
     rsx! {
-        div {
-            class: "search-bar",
+        div { class: "search-bar",
             form {
                 class: "form-group",
                 style: "width: 100%;",

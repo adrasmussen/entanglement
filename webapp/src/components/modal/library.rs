@@ -3,7 +3,7 @@ use gloo_timers::callback::Timeout;
 
 use crate::{
     common::local_time,
-    components::modal::{MODAL_STACK, ModalSize, ModernModal},
+    components::modal::{MODAL_STACK, ModalSize, ModalInner},
 };
 
 use api::{library::LibraryUuid, task::*};
@@ -57,7 +57,7 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
         }
     };
     rsx! {
-        ModernModal {
+        ModalInner {
             title: "Start Library Task",
             size: ModalSize::Medium,
             footer,
@@ -271,7 +271,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal {
+        ModalInner {
             title: "Confirm library task stop",
             size: ModalSize::Small,
             footer,
@@ -315,7 +315,7 @@ pub fn TaskHistoryModal(props: TaskHistoryModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal { title: "Task History", size: ModalSize::Large, footer,
+        ModalInner { title: "Task History", size: ModalSize::Large, footer,
 
             div {
                 class: "task-history-content",

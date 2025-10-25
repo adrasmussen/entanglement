@@ -4,14 +4,9 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
-    Route,
-    collection::MEDIA_SEARCH_KEY,
-    common::storage::*,
-    components::{
-        media_card::MediaCard,
-        modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
-    },
+    collection::MEDIA_SEARCH_KEY, common::storage::*, components::{
+        self, media_card::MediaCard, modal::{Modal, ModalBox, MODAL_STACK}, search::SearchBar
+    }, Route
 };
 use api::{
     collection::*,
@@ -150,9 +145,24 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let formatted_tags = fold_set(collection.tags.clone())
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
+
+    let action_button = rsx! {
+        div { style: "margin-left: auto;",
+            button {
+                class: "btn btn-primary",
+                onclick: move |_| {
+                    components::sidebar::SIDEBAR_SIGNAL
+                        .with_mut(|v| *v = Some(components::sidebar::Sidebar::Advanced));
+                },
+                "Open Sidebar"
+            }
+        }
+    };
+
     rsx! {
         div { class: "container with-sticky",
             ModalBox { update_signal }
+            components::sidebar::SidebarBox {}
 
             div { class: "sticky-header",
                 // breadcrumb navigation
@@ -187,7 +197,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                                 ",
                                 span { "Owner: {collection.uid}" }
                                 span { "Group: {collection.gid}" }
-                                //span { "Last modified: {formatted_time}" }
+                                                        //span { "Last modified: {formatted_time}" }
                             }
 
                             if !collection.note.is_empty() {
@@ -240,6 +250,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this collection...",
                     status: format!("Found {} items in this collection", media.len()),
+                    action_button,
                 }
             }
 

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal};
+use crate::components::modal::{MODAL_STACK, ModalSize, ModalInner};
 use api::{
     comment::{CommentUuid, DeleteCommentReq, delete_comment},
     media::MediaUuid,
@@ -60,7 +60,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal { title: "Confirm Deletion", size: ModalSize::Small, footer,
+        ModalInner { title: "Confirm Deletion", size: ModalSize::Small, footer,
 
             div { class: "confirmation-content",
                 p { class: "confirmation-message",

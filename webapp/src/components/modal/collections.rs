@@ -5,7 +5,7 @@ use gloo_timers::callback::Timeout;
 use tracing::error;
 
 use crate::components::{
-    modal::{MODAL_STACK, Modal, ModalSize, ModernModal, ProgressBar},
+    modal::{MODAL_STACK, Modal, ModalSize, ModalInner, ProgressBar},
     search::CompactSearchBar,
 };
 use api::{
@@ -131,7 +131,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal {
+        ModalInner {
             title: "Create New Collection",
             size: ModalSize::Medium,
             footer,
@@ -373,7 +373,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal { title: "Edit Collection", size: ModalSize::Medium, footer,
+        ModalInner { title: "Edit Collection", size: ModalSize::Medium, footer,
             div { class: "edit-collection-form",
                 match &*collection_future.read() {
                     Some(Ok(_)) => {
@@ -495,7 +495,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal {
+        ModalInner {
             title: "Confirm Collection Deletion",
             size: ModalSize::Small,
             footer,
@@ -605,7 +605,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
     };
 
     rsx! {
-        ModernModal { title: "Add to Collection", size: ModalSize::Medium, footer,
+        ModalInner { title: "Add to Collection", size: ModalSize::Medium, footer,
             div {
                 p { "Search Collections" }
                 CompactSearchBar {
@@ -700,7 +700,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal { title: "Confirm Removal", size: ModalSize::Small, footer,
+        ModalInner { title: "Confirm Removal", size: ModalSize::Small, footer,
 
             div { class: "confirmation-content",
                 p { class: "confirmation-message",
@@ -869,7 +869,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     };
 
     rsx! {
-        ModernModal {
+        ModalInner {
             title: format!("Add {} Items to Collection", media_count),
             size: ModalSize::Medium,
             footer,

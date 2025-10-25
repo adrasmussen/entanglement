@@ -31,9 +31,8 @@ pub fn CollectionSearch() -> Element {
         .await
     });
 
-    // Create action button for search bar - positioned on the right
     let action_button = rsx! {
-        div { style: "margin-left: auto;", // This will push the button to the right
+        div { style: "margin-left: auto;",
             button {
                 class: "btn btn-primary",
                 onclick: move |_| {
@@ -44,7 +43,6 @@ pub fn CollectionSearch() -> Element {
         }
     };
 
-    // Get status text
     let status = match &*collection_future.read() {
         Some(Ok(resp)) => format!("Found {} collections", resp.collections.len()),
         Some(Err(_)) => String::from("Error searching collections"),
@@ -53,18 +51,15 @@ pub fn CollectionSearch() -> Element {
 
     rsx! {
         div { class: "container with-sticky",
-            // Modal container for popups
             ModalBox { update_signal }
 
             div { class: "sticky-header",
-                // Page header
                 div {
                     class: "page-header",
                     style: "margin-bottom: var(--space-4);",
                     p { "Organize and browse your media collections" }
                 }
 
-                // Search controls
                 SearchBar {
                     search_signal: collection_search_signal,
                     storage_key: COLLECTION_SEARCH_KEY,
@@ -75,7 +70,6 @@ pub fn CollectionSearch() -> Element {
             }
 
             div { class: "scrollable-content",
-                // Collection grid
                 match &*collection_future.read() {
                     Some(Ok(resp)) => {
                         rsx! {
@@ -97,7 +91,6 @@ pub fn CollectionSearch() -> Element {
                                 div {
                                     class: "collection-card loading",
                                     style: "background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); height: 100%;",
-                                    // Skeleton loading UI
                                     div { class: "skeleton", style: "height: 180px;" }
                                     div { style: "padding: var(--space-3);",
                                         div {

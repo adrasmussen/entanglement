@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModernModal, ProgressBar};
+use crate::components::modal::{MODAL_STACK, ModalSize, ModalInner, ProgressBar};
 use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
@@ -68,7 +68,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
             match media.metadata {
                 MediaMetadata::Image => {
                     rsx! {
-                        ModernModal {
+                        ModalInner {
                             title: "Image Viewer",
                             size: crate::components::modal::ModalSize::Full,
 
@@ -148,7 +148,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                 MediaMetadata::Video => {
                     // Handle video differently - full screen with controls
                     rsx! {
-                        ModernModal {
+                        ModalInner {
                             title: "Video Player",
                             size: crate::components::modal::ModalSize::Large,
 
@@ -176,7 +176,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                 _ => {
                     // Unsupported media type
                     rsx! {
-                        ModernModal {
+                        ModalInner {
                             title: "Unsupported Media",
                             size: crate::components::modal::ModalSize::Medium,
 
@@ -200,7 +200,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
         }
         Some(Err(err)) => {
             rsx! {
-                ModernModal {
+                ModalInner {
                     title: "Error",
                     size: crate::components::modal::ModalSize::Small,
 
@@ -222,7 +222,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
         }
         None => {
             rsx! {
-                ModernModal {
+                ModalInner {
                     title: "Loading...",
                     size: crate::components::modal::ModalSize::Medium,
 
@@ -382,7 +382,7 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
     };
 
     rsx! {
-        ModernModal {
+        ModalInner {
             title: format!("Add Tags to {} Items", media_count),
             size: ModalSize::Medium,
             footer,

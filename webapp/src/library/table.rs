@@ -95,7 +95,6 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
                                     onmouseenter: move |_| {},
 
-                                    // Path column with link
                                     td { style: "padding: var(--space-3);",
                                         Link {
                                             to: Route::LibraryDetail {
@@ -106,7 +105,6 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                         }
                                     }
 
-                                    // Group column
                                     td { style: "padding: var(--space-3);",
                                         span {
                                             class: "group-badge",
@@ -115,10 +113,8 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                         }
                                     }
 
-                                    // File count column
                                     td { style: "padding: var(--space-3);", "{library.count}" }
 
-                                    // Actions column
                                     td { style: "padding: var(--space-3); display: flex; justify-content: right;",
                                         button {
                                             class: "btn btn-secondary",

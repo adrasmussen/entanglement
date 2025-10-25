@@ -3,3 +3,4 @@ pub mod media_card;
 pub mod modal;
 pub mod navigation;
 pub mod search;
+pub mod sidebar;

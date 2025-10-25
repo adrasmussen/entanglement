@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::fs::read_to_string;
 use toml;
+use tracing::{info, instrument};
 
 use crate::auth::{AuthnProvider, AuthzProvider};
 use crate::config::ESConfig;
@@ -50,10 +51,13 @@ impl TomlAuthnFile {
 
 #[async_trait]
 impl AuthnProvider for TomlAuthnFile {
+    #[instrument(skip_all)]
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
+        info!("reading toml file for authn");
+
         let filename = config
             .tomlfile
             .clone()
@@ -102,6 +106,7 @@ struct TomlGroup {
 }
 
 impl TomlAuthzFile {
+    #[instrument(skip_all)]
     async fn parse(&self) -> Result<HashMap<String, TomlGroup>> {
         let doc = read_to_string(&self.filename).await?;
 
@@ -118,10 +123,13 @@ impl TomlAuthzFile {
 
 #[async_trait]
 impl AuthzProvider for TomlAuthzFile {
+    #[instrument(skip_all)]
     fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized,
     {
+        info!("reading toml file for authz");
+
         let filename = config
             .tomlfile
             .clone()

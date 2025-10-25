@@ -17,7 +17,7 @@ use rustls::{
 };
 use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer, pem::PemObject};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{auth::AuthzProvider, config::ESConfig};
 
@@ -60,7 +60,9 @@ pub struct LdapAuthz {
 
 #[async_trait]
 impl AuthzProvider for LdapAuthz {
+    #[instrument(skip_all)]
     fn new(config: Arc<ESConfig>) -> Result<Self> {
+        info!("configuring ldap3 authz settings");
         let config = config.ldap.clone().expect("ldap config not found");
 
         // set up tls for verifying ldaps server cert

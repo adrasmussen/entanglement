@@ -483,8 +483,8 @@ pub const BASE_COMPONENTS: &str = r#"
 
 /* Layout utilities */
 .container {
-  width: 100%;
-  max-width: var(--container-width);
+  width: 60%;
+  /* max-width: var(--container-width) */
   margin: 0 auto;
   padding: 0 var(--space-4);
 }
@@ -637,5 +637,116 @@ td {
   background-color: var(--background);
   padding-top: var(--space-4);
   padding-bottom: var(--space-2);
+}
+
+/* Sidebar Styles */
+.sidebar {
+  position: fixed;
+  top: var(--header-height);
+  right: 0;
+  height: calc(100vh - var(--header-height));
+  width: 20%;
+  min-width: 280px;
+  max-width: 400px;
+  background-color: var(--surface);
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+  transform: translateX(100%);
+  transition: transform var(--transition-normal) var(--easing-standard);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-open {
+  transform: translateX(0);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  z-index: 35;
+  animation: fade-in var(--transition-fast) var(--easing-standard);
+  cursor: pointer;
+}
+
+.sidebar-close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  transition: background-color var(--transition-fast) var(--easing-standard),
+              color var(--transition-fast) var(--easing-standard);
+  z-index: 1;
+}
+
+.sidebar-close:hover {
+  background-color: var(--neutral-100);
+  color: var(--text-primary);
+}
+
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  padding-top: calc(var(--space-6) + 40px); /* Account for close button */
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-300) transparent;
+}
+
+.sidebar-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-body::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-300);
+  border-radius: 20px;
+}
+
+.sidebar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
 }
 "#;
