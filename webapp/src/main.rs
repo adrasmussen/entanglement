@@ -7,6 +7,7 @@ use tracing::Level;
 mod common;
 
 mod components;
+use components::navigation::NavBar;
 
 mod home;
 use home::ModernHome;
@@ -21,7 +22,6 @@ mod library;
 use library::{Libraries, LibraryDetail, LibrarySearch};
 
 fn main() {
-    // Init logger
     dioxus_logger::init(Level::DEBUG).expect("failed to init logger");
     launch(App);
 }
@@ -69,14 +69,5 @@ pub fn App() -> Element {
         style { "{common::style::MODERN_STYLES}" }
         style { "{common::style::HOME_STYLES}" }
         Router::<Route> { config: RouterConfig::default }
-    }
-}
-
-// Replace the NavBar component with our modern version
-#[component]
-fn NavBar() -> Element {
-    rsx! {
-        components::navigation::ModernNavBar {}
-        Outlet::<Route> {}
     }
 }

@@ -10,13 +10,11 @@ use api::library::*;
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryTableProps {
     libraries: Vec<LibraryUuid>,
-    update_signal: Signal<()>,
 }
 
 #[component]
 pub fn LibraryTable(props: LibraryTableProps) -> Element {
     let libraries = props.libraries.clone();
-    let _update_signal = props.update_signal;
 
     if libraries.is_empty() {
         return rsx! {
@@ -85,9 +83,6 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                 th { style: "padding: var(--space-3); text-align: left;",
                                     "File Count"
                                 }
-                                th { style: "padding: var(--space-3); text-align: left;",
-                                    "Last Modified"
-                                }
                                 th { style: "padding: var(--space-3); text-align: right;",
                                     "Actions"
                                 }
@@ -123,13 +118,8 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                     // File count column
                                     td { style: "padding: var(--space-3);", "{library.count}" }
 
-                                    // Last modified column
-                                    //td { style: "padding: var(--space-3);",
-                                    //    "{local_time(library.mtime)}"
-                                    //}
-
                                     // Actions column
-                                    td { style: "padding: var(--space-3); text-align: right;",
+                                    td { style: "padding: var(--space-3); display: flex; justify-content: right;",
                                         button {
                                             class: "btn btn-secondary",
                                             style: "margin-right: var(--space-2);",

@@ -85,7 +85,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         collection_uuid
     }));
     let collection_future = use_resource(move || async move {
+        update_signal();
         let collection_uuid = collection_uuid();
+
         get_collection(&GetCollectionReq { collection_uuid }).await
     });
 

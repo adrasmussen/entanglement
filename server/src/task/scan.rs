@@ -117,7 +117,6 @@ pub async fn scan_library(
 
         if metadata.is_file() {
             tasks.spawn({
-                // TODO -- why do these continues work?
                 let context = context.clone();
 
                 let file = match ScanFile::init(context.clone(), path.clone(), metadata).await? {

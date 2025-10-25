@@ -14,14 +14,12 @@ use api::{collection::*, search::SearchFilter};
 pub fn CollectionSearch() -> Element {
     let update_signal = use_signal(|| ());
 
-    // Get search signal from local storage
     let collection_search_signal =
         use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
 
-    // Fetch collections data
     let collection_future = use_resource(move || async move {
-        // Read the update signal to trigger a refresh when needed
-        update_signal.read();
+        update_signal();
+
         let filter = collection_search_signal()
             .split_whitespace()
             .map(|s| s.to_owned())
@@ -63,7 +61,6 @@ pub fn CollectionSearch() -> Element {
                 div {
                     class: "page-header",
                     style: "margin-bottom: var(--space-4);",
-                    h1 { class: "section-title", "Collections" }
                     p { "Organize and browse your media collections" }
                 }
 

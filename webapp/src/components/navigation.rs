@@ -3,16 +3,34 @@ use dioxus_router::prelude::*;
 
 use crate::Route;
 
-#[component]
-pub fn ModernNavBar() -> Element {
-    let current_path: Route = use_route();
+#[derive(Clone, PartialEq, Props)]
+struct NavBarButtonProps {
+    name: String,
+    target: Route,
+}
 
+#[component]
+fn NavBarButton(props: NavBarButtonProps) -> Element {
+    let name = props.name;
+    let target = props.target;
+
+    let current_path: Route = use_route();
+    rsx! {
+        Link {
+            class: if current_path.is_child_of(&target) || current_path == (target) { "nav-link active" } else { "nav-link" },
+            to: target,
+            "{name}"
+        }
+    }
+}
+
+#[component]
+fn NavBarInner() -> Element {
     rsx! {
         header { class: "app-header",
             div { class: "nav-container",
-                // Logo area
                 div { class: "logo",
-                    Link { to: Route::ModernHome {}, class: "flex items-center",
+                    Link { to: Route::ModernHome {}, style: "display: flex; align-items: center;",
                         img {
                             src: "/entanglement/app/assets/header.svg",
                             alt: "Entanglement",
@@ -22,28 +40,29 @@ pub fn ModernNavBar() -> Element {
                     }
                 }
 
-                // Navigation links
                 nav { class: "nav-links",
-                    Link {
-                        to: Route::GallerySearch {},
-                        class: if current_path.is_child_of(&Route::GallerySearch {})
-    || current_path == (Route::GallerySearch {}) { "nav-link active" } else { "nav-link" },
-                        "Gallery"
+                    NavBarButton {
+                        name: "Gallery".to_owned(),
+                        target: Route::GallerySearch {},
                     }
-                    Link {
-                        to: Route::CollectionSearch {},
-                        class: if current_path.is_child_of(&Route::CollectionSearch {})
-    || current_path == (Route::CollectionSearch {}) { "nav-link active" } else { "nav-link" },
-                        "Collections"
+                    NavBarButton {
+                        name: "Collections".to_owned(),
+                        target: Route::CollectionSearch {},
                     }
-                    Link {
-                        to: Route::LibrarySearch {},
-                        class: if current_path.is_child_of(&Route::LibrarySearch {})
-    || current_path == (Route::LibrarySearch {}) { "nav-link active" } else { "nav-link" },
-                        "Libraries"
+                    NavBarButton {
+                        name: "Libraries".to_owned(),
+                        target: Route::LibrarySearch {},
                     }
                 }
             }
         }
+    }
+}
+
+#[component]
+pub fn NavBar() -> Element {
+    rsx! {
+        NavBarInner {}
+        Outlet::<Route> {}
     }
 }

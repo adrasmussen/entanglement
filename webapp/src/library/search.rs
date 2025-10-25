@@ -14,7 +14,8 @@ pub fn LibrarySearch() -> Element {
     let library_search_signal = use_signal::<String>(|| try_local_storage(LIBRARY_SEARCH_KEY));
 
     let library_future = use_resource(move || async move {
-        update_signal.read();
+        update_signal();
+
         let filter = library_search_signal();
         search_libraries(&SearchLibrariesReq { filter }).await
     });
@@ -33,7 +34,6 @@ pub fn LibrarySearch() -> Element {
                 div {
                     class: "page-header",
                     style: "margin-bottom: var(--space-4);",
-                    h1 { class: "section-title", "Libraries" }
                     p { "Manage your media source libraries" }
                 }
 
@@ -49,7 +49,7 @@ pub fn LibrarySearch() -> Element {
                 match &*library_future.read() {
                     Some(Ok(resp)) => {
                         rsx! {
-                            LibraryTable { libraries: resp.libraries.clone(), update_signal }
+                            LibraryTable { libraries: resp.libraries.clone() }
                         }
                     }
                     Some(Err(err)) => rsx! {

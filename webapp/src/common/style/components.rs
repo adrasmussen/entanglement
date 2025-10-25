@@ -115,7 +115,7 @@ pub const BASE_COMPONENTS: &str = r#"
   resize: vertical;
 }
 
-/* Media display components */
+/* Media cards */
 .media-card {
   display: block;
   background-color: var(--surface);
@@ -169,7 +169,6 @@ pub const BASE_COMPONENTS: &str = r#"
 }
 
 /* Standard image display in detail view */
-
 .media-detail-page {
   display: flex;
   gap: var(--space-6);
@@ -225,24 +224,6 @@ pub const BASE_COMPONENTS: &str = r#"
   overflow-y: auto;
   max-height: calc(100vh - 140px);
   padding-right: var(--space-2);
-}
-
-.image-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-.image-controls .btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  font-size: 0.875rem;
 }
 
 /* Full size image in modal */
@@ -500,7 +481,6 @@ pub const BASE_COMPONENTS: &str = r#"
   color: rgba(255, 255, 255, 0.9);
 }
 
-
 /* Layout utilities */
 .container {
   width: 100%;
@@ -509,25 +489,11 @@ pub const BASE_COMPONENTS: &str = r#"
   padding: 0 var(--space-4);
 }
 
-.grid {
-  display: grid;
-  gap: var(--space-4);
-}
-
-.flex {
+.container.with-sticky {
   display: flex;
-}
-
-.flex-col {
   flex-direction: column;
-}
-
-.items-center {
-  align-items: center;
-}
-
-.justify-between {
-  justify-content: space-between;
+  height: calc(100vh - var(--header-height));
+  padding-bottom: 0;
 }
 
 /* Responsive media grid */
@@ -635,6 +601,7 @@ td {
   gap: var(--space-4);
 }
 
+/* animations */
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -643,5 +610,32 @@ td {
 @keyframes slide-up {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Search bar */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  background-color: var(--surface);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-input {
+  flex: 1;
+  flex-grow: 1;
+  margin-right: var(--space-2);
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background-color: var(--background);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-2);
 }
 "#;

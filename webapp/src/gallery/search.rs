@@ -30,6 +30,8 @@ pub fn GallerySearch() -> Element {
     let mut collection_color_signal = use_signal(HashMap::new);
 
     let media_future = use_resource(move || async move {
+        update_signal();
+
         let filter = media_search_signal()
             .split_whitespace()
             .map(|s| s.to_owned())
@@ -82,7 +84,6 @@ pub fn GallerySearch() -> Element {
                 div {
                     class: "page-header",
                     style: "margin-bottom: var(--space-4);",
-                    h1 { class: "section-title", "Photo Gallery" }
                     p { "Browse and search all accessible media" }
                 }
 
@@ -127,6 +128,8 @@ pub fn GallerySearch() -> Element {
                                     p { "No media found matching your search criteria." }
                                 }
                             } else {
+                                // TODO -- convert this to a MediaGrid element (see equivalent in collections and libraries)
+                                //         and convert them all to reactive memos instead of cloning
                                 div { class: "media-grid",
                                     for search_resp in resp.media.iter() {
                                         MediaCard {

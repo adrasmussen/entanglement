@@ -10,7 +10,7 @@ use api::{fold_set, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {
-    // This is a String because we get it from the Router
+    // this is a String because we get it from the Router
     media_uuid: String,
 }
 
@@ -78,9 +78,12 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
     // this is the api call that actually does all of the work, defined in the api crate so that
     // the struct defintions are shared with the server
+    //
+    // we also subscribe this future to the update_signal to trigger a complete refresh, since
+    // modal boxes do their own api calls and might change any part of the media db record
     let media_future = use_resource(move || async move {
-        let media_uuid = media_uuid();
         update_signal();
+        let media_uuid = media_uuid();
 
         get_media(&GetMediaReq { media_uuid }).await
     });
@@ -134,20 +137,19 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
     rsx! {
         div { class: "container",
-            // Breadcrumb navigation
             div { class: "breadcrumb",
                 Link { to: Route::GallerySearch {}, "Gallery" }
                 span { " / " }
                 span { "Media Details" }
             }
 
-            // Side-by-side layout with independent scrolling
+            // side-by-side layout with independent scrolling
             div { class: "media-detail-page",
 
-                // Left column - Media display (fixed position)
+                // left column -- Media display (fixed position)
                 div { class: "media-detail-main",
 
-                    // Main media display
+                    // main media display
                     div { class: "media-detail-view",
                         match media.metadata {
                             MediaMetadata::Image => rsx! {
@@ -175,10 +177,10 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                     SimilarMedia { media_uuid }
                 }
 
-                // Right column - All metadata, collections, and comments (scrollable)
+                // right column -- all metadata, collections, and comments (scrollable)
                 div { class: "media-detail-sidebar",
 
-                    // Media metadata form
+                    // media metadata form
                     div { class: "detail-section",
                         form {
                             class: "media-detail-form",
@@ -348,13 +350,13 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                         }
                     }
 
-                    // Collections section
+                    // collections section
                     //
                     // currently, all relevant state changes happen through modals
                     // which have the update_signal already
                     CollectionTable { collection_uuids, media_uuid }
 
-                    // Comments section
+                    // comments section
                     //
                     // while some comment actions are in modals, creating comments
                     // requires its own update_signal hook

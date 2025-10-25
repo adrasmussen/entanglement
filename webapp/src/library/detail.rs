@@ -82,6 +82,8 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     // see GalleryInner for details
     let library_uuid = use_memo(use_reactive(&library_uuid, |library_uuid| library_uuid));
     let library_future = use_resource(move || async move {
+        update_signal();
+
         let library_uuid = library_uuid();
         get_library(&GetLibraryReq { library_uuid }).await
     });

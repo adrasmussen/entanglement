@@ -34,11 +34,10 @@ a {
 a:hover {
   text-decoration: underline;
 }
-
-/* Combine our design system parts */"#,
+"#,
     CSS_VARIABLES,
     BASE_COMPONENTS,
-    r#"
+r#"
 /* Application-specific styles */
 .app-header {
   background-color: var(--surface);
@@ -67,7 +66,7 @@ a:hover {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   transition: color var(--transition-fast) var(--easing-standard),
-              background-color var(--transition-fast) var(--easing-standard);
+  background-color var(--transition-fast) var(--easing-standard);
 }
 
 .nav-link:hover {
@@ -92,50 +91,10 @@ a:hover {
   color: var(--text-primary);
 }
 
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-6);
-  background-color: var(--surface);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.search-input {
-  flex-grow: 1;
-}
-
-.sticky-container {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--header-height));
-  overflow: hidden;
-}
-
-.sticky-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background-color: var(--background);
-  padding-top: var(--space-4);
-  padding-bottom: var(--space-2);
-}
-
 .scrollable-content {
   flex: 1;
   overflow-y: auto;
   padding-bottom: var(--space-4);
 }
-
-/* Adjust the container to work with sticky headers */
-.container.with-sticky {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--header-height));
-  padding-bottom: 0;
-}
-
 "#
 );
