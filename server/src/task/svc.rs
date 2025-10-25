@@ -380,7 +380,7 @@ impl ESTaskService for TaskRunner {
         // grab the ring buffer lock for the entirety of the archiving action
         let mut ring = ring_entry.write().await;
 
-        ring.push(Task {
+        ring.enqueue(Task {
             task_type: completed_task.task.task_type,
             uid: completed_task.task.uid,
             status,

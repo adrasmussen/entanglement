@@ -9,13 +9,8 @@ use std::{
 use anyhow::Result;
 use async_trait::async_trait;
 use ldap3::{LdapConnAsync, LdapConnSettings, Scope, SearchEntry};
-use rustls::{
-    Certificate,
-    ClientConfig,
-    PrivateKey,
-    RootCertStore, // pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-};
-use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer, pem::PemObject};
+use rustls::{ClientConfig, RootCertStore};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, warn};
 
@@ -69,33 +64,19 @@ impl AuthzProvider for LdapAuthz {
         let ca_cert: Vec<CertificateDer> =
             CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
 
-        // legacy hacks for older rustls
-        let ca_cert: Vec<Certificate> = ca_cert
-            .iter()
-            .map(|cert| Certificate(cert.to_vec()))
-            .collect();
-
         let mut ca_root_store = RootCertStore::empty();
         for c in ca_cert {
-            ca_root_store.add(&c)?
+            ca_root_store.add(c)?
         }
 
-        let tls_config = ClientConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_safe_default_protocol_versions()?
-            .with_root_certificates(ca_root_store);
+        let tls_config = ClientConfig::builder().with_root_certificates(ca_root_store);
 
         let tls_config = match config.clone().auth {
             LdapClientAuth::X509Cert { key, cert } => {
-                let key: PrivatePkcs8KeyDer = PemObject::from_pem_file(key)?;
+                let key: PrivateKeyDer = PemObject::from_pem_file(key)?;
 
                 let cert: Vec<CertificateDer> =
                     CertificateDer::pem_file_iter(cert)?.collect::<Result<Vec<_>, _>>()?;
-
-                // legacy hacks for older rustls needed by ldap
-                let key = PrivateKey(key.secret_pkcs8_der().to_vec());
-                let cert = cert.iter().map(|cert| Certificate(cert.to_vec())).collect();
 
                 tls_config.with_client_auth_cert(cert, key)?
             }
