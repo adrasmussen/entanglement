@@ -1,8 +1,5 @@
 [workspace]
-members = [ "api", "common",
-    "server", "tools",
-    "webapp",
-]
+members = ["api", "common", "server", "tools", "webapp"]
 
 resolver = "2"
 
@@ -36,23 +33,26 @@ hyper-rustls = { version = "0.27.7", features = ["http2"] }
 hyper-util = "0.1.4"
 image = "0.25.6"
 kamadak-exif = "0.6.1"
-ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring", "gssapi"] }
+ldap3 = { version = "0.12.1", default-features = false, features = [
+    "tls-rustls-aws-lc-rs",
+    "gssapi",
+] }
 mime_guess = "2.0.5"
 mysql_async = "0.36.0"
 paste = "1.0.15"
 rand = "0.9.1"
 regex = "1.11.1"
 ringbuffer = "0.16.0"
-rustls = "0.23.34"
+rustls = { version = "0.23.34", features = ["aws-lc-rs"] }
 rustls-pemfile = "2.2.0"
 rustls-pki-types = "1.11.0"
-rustls-webpki = "0.103.7"
+rustls-webpki = { version = "0.103.7", features = ["aws-lc-rs"] }
 saphyr = "0.0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.117"
 sha2 = "0.10.8"
 tokio = { version = "1.37.0", features = ["full", "tracing"] }
-tokio-rustls = "0.26.2"
+tokio-rustls = { version = "0.26.2", features = ["aws-lc-rs"] }
 tokio-stream = { version = "0.1.17", features = ["full"] }
 tokio-util = "0.7.11"
 toml = "0.9.8"
