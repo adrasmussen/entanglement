@@ -702,7 +702,6 @@ td {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-6) var(--space-4) var(--space-4);
-  padding-top: calc(var(--space-6) + 40px); /* Account for close button */
   scrollbar-width: thin;
   scrollbar-color: var(--neutral-300) transparent;
 }

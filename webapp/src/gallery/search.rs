@@ -5,12 +5,9 @@ use dioxus::prelude::*;
 use crate::{
     common::storage::try_local_storage,
     components::{
-        advanced::{
-            AdvancedSearchTab, AdvancedTabs, BulkEditMode, BulkEditTab, CollectionColorTab,
-        },
-        media_card::MediaCard,
-        modal::ModalBox,
-        search::SearchBar,
+        self, advanced::{
+            AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab,
+        }, media_card::MediaCard, modal::ModalBox, search::SearchBar
     },
     gallery::MEDIA_SEARCH_KEY,
 };
@@ -99,7 +96,7 @@ pub fn GallerySearch() -> Element {
                     action_button,
                 }
 
-                AdvancedTabs {
+                components::sidebar::AdvancedSidebar {
                     show_signal: advanced_expanded,
                     tabs: HashMap::from([
                         ("Advanced Search".to_owned(), rsx! {
