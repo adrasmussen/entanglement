@@ -98,7 +98,6 @@ impl DbBackend for MariaDBBackend {
         //  * if the media is not hidden, any collection that contains the media
         //  * the library that contains that media
         let result = r"
-            /* media_access_groups {uuid} */
             SELECT
                 gid
             FROM

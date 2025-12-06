@@ -134,7 +134,7 @@ pub(super) async fn stream_media(
                 .fs
                 .media_srvdir
                 .join(LINK_PATH)
-                .join(media_uuid),
+                .join(&media_uuid),
         )
         .await?,
     )
@@ -144,7 +144,7 @@ pub(super) async fn stream_media(
             headers.insert(CONTENT_TYPE, HeaderValue::from_str(mime.essence_str())?);
         }
         None => {
-            warn!("failed to guess mime type")
+            warn!({media_uuid}, "failed to guess mime type")
         }
     }
 

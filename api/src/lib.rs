@@ -47,7 +47,8 @@ pub const HTTP_URL_ROOT: &str = "entanglement";
 //
 // for relational dbs, this is obviously an antipattern -- but a tags table and pivot
 // would be a lot of effort for relatively little gain, not to mention making the full
-// text searches much more complicated
+// text searches much more complicated.  note, however, that even mariadb's set type
+// uses the same logic under the hood (and thus disallows commas)
 //
 // these methods are also used in the webapp, which adds the awkward requirement that
 // the separator be commonly-found on keyboards.  eventually, better text input methods
@@ -134,7 +135,7 @@ impl From<anyhow::Error> for WebError {
 // endpoints
 //
 // these functions control how the webapp communicates with the server, either by
-// create the future directly or by providing a String that is interpreted by the
+// creating the future directly or by providing a String that is interpreted by the
 // browser (img or a tags)
 #[macro_export]
 macro_rules! http_endpoint {

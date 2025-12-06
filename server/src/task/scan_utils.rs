@@ -139,7 +139,7 @@ fn get_mtype(path: &Path) -> Result<MediaType> {
 
     match ext.as_str() {
         "jpg" | "png" | "tiff" => Ok(MediaType::Image),
-        "mp4" | "avi" => Ok(MediaType::Video),
+        "mp4" | "avi" | "mov "=> Ok(MediaType::Video),
         _ => Err(anyhow::Error::msg(format!("unknown media extention {ext}"))),
     }
 }
@@ -252,7 +252,7 @@ impl ScanContext {
         media_uuid: MediaUuid,
         mut files: Vec<KnownFile>,
     ) -> Result<()> {
-        debug!({media_uuid = media_uuid, file_count = files.len()}, "resolving duplicates");
+        debug!({media_uuid, file_count = files.len()}, "resolving duplicates");
 
         let context = self.clone();
 
@@ -281,7 +281,7 @@ impl ScanContext {
             // this corresponds to the trivial update, i.e. touched mtime
             for file in files.iter() {
                 if media.chash == file.hash && media.path == file.path {
-                    debug!({media_uuid = media_uuid, path = file.path}, "matched original file");
+                    debug!({media_uuid, path = file.path}, "matched original file");
                     return Ok(file.clone());
                 }
             }
@@ -300,7 +300,7 @@ impl ScanContext {
             }
 
             if let Some(file) = real {
-                debug!({media_uuid = media_uuid, path = file.path}, "matched oldest moved file");
+                debug!({media_uuid, path = file.path}, "matched oldest moved file");
                 return Ok(file.clone());
             }
 
@@ -310,7 +310,7 @@ impl ScanContext {
             // this corresponds to mutating the original file
             for file in files.iter() {
                 if media.path == file.path {
-                    debug!({media_uuid = media_uuid, path = file.path}, "matched original path");
+                    debug!({media_uuid, path = file.path}, "matched original path");
                     return Ok(file.clone());
                 }
             }
@@ -333,21 +333,18 @@ impl ScanContext {
 
         // then update the record to point to the new object, also removing it from the list
         //
-        // if we matched by hash (i.e. moved original), then this will simply update the path
-        // to point to the oldest file
+        // update the metadata, even in the case of an original match, so that subsequent
+        // runs skip the file correctly
         //
-        // if we matched by path only, then this both updates the hash and mtime
-        //
-        // finally, if there are both hash and path matches, this will update the original
-        // record to point to the hash match but there will still be the path match in the
-        // dashset (and that should be the only remaining item)
+        // finally, if there are both hash and path matches, there will still be the path match in
+        // the dashset (and that should be the only remaining item)
 
         if let Some(file) = files
             .extract_if(.., |f| f == &real_file)
             .collect::<Vec<_>>()
             .pop()
         {
-            debug!({ media_uuid = media_uuid }, "updating media record");
+            debug!({media_uuid}, "updating media record");
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             context
@@ -386,14 +383,12 @@ impl ScanContext {
             )));
         }
 
-
-
         if let Some(file) = files.pop() {
             // it's possible that the modified original path itself is a duplicate
             //
             // in that case, we simply add the clone tag and leave it, as there is no programatic
             // way to determine if the new record is newer or older than the original record
-            debug!({media_uuid = media_uuid, path = real_file.path}, "updating original path after matching moved hash");
+            debug!({media_uuid, path = real_file.path}, "updating original path after matching moved hash");
 
             let new_uuid = match context.get_media_by_chash(&file.hash).await? {
                 Some(media) => media.media_uuid,
@@ -458,7 +453,7 @@ impl Drop for ScanFile {
 }
 
 impl ScanFile {
-    pub async fn init(
+    pub async fn from_path(
         context: Arc<ScanContext>,
         path: PathBuf,
         metadata: Metadata,

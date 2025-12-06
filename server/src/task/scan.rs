@@ -119,7 +119,7 @@ pub async fn scan_library(
             tasks.spawn({
                 let context = context.clone();
 
-                let file = match ScanFile::init(context.clone(), path.clone(), metadata).await? {
+                let file = match ScanFile::from_path(context.clone(), path.clone(), metadata).await? {
                     FileStatus::Register(v) => v,
                     FileStatus::Exists(file) => {
                         context.known_files.insert(file);
