@@ -31,6 +31,8 @@ use common::{config::ESConfig, unix_time};
 //
 // several of the common library operations (scan, clean, run scripts, etc) take too long
 // for a single frontend api call.  instead, they are managed by this service.
+//
+// eventually, the core of this service should be rebuilt as a state machine
 pub struct TaskService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<EsmReceiver>>,
@@ -252,7 +254,7 @@ impl ESTaskService for TaskRunner {
             },
         };
 
-        info!({ start = start }, "starting task");
+        info!({ start }, "starting task");
 
         // spawn the future inside of the infalliable watcher and send the result back via ESM
         let (_handle, cancel) = watch_task(start, library, task_svc_sender, task_future);
@@ -283,7 +285,7 @@ impl ESTaskService for TaskRunner {
         let rt_entry = self
             .running_tasks
             .get(&library)
-            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has no running task")))?;
+            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has not run a task")))?;
 
         // even if we send a stop task message immediately after starting a task, we will wait
         // until it is successfully running and set into the dashmap before freeing the lock
@@ -345,7 +347,7 @@ impl ESTaskService for TaskRunner {
         let rt_entry = self
             .running_tasks
             .get(&library)
-            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has no running task")))?;
+            .ok_or_else(|| anyhow::Error::msg(format!("library {library} has not run a task")))?;
 
         // hold the option lock just long enough to take() the running task
         let completed_task = {
@@ -454,8 +456,10 @@ fn watch_task(
             // failure modes associated with sending the completion message and print their errors
             let (tx, rx) = tokio::sync::oneshot::channel();
 
-            // this blocks on the write lock for the running task, since we need it to take() the
-            // running task from the Option and put it into the ringbuffer
+            // this ultimately blocks on the write lock for the running task (via the handler), since
+            // we need it to take() the running task from the Option and put it into the ringbuffer
+            //
+            // however, the only contention for that lock is in the creation of the task
             match async {
                 sender
                     .send(
