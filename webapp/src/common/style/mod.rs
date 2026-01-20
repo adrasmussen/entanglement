@@ -37,7 +37,7 @@ a:hover {
 "#,
     CSS_VARIABLES,
     BASE_COMPONENTS,
-r#"
+    r#"
 /* Application-specific styles */
 .app-header {
   background-color: var(--surface);

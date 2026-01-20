@@ -3,7 +3,7 @@ use gloo_timers::callback::Timeout;
 
 use crate::{
     common::local_time,
-    components::modal::{MODAL_STACK, ModalSize, ModalInner},
+    components::modal::{MODAL_STACK, ModalInner, ModalSize},
 };
 
 use api::{library::LibraryUuid, task::*};

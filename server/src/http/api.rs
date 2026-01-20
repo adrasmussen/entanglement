@@ -41,8 +41,6 @@ pub(super) async fn get_users_in_group(
     Extension(_current_user): Extension<CurrentUser>,
     Json(message): Json<GetUsersInGroupReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -68,10 +66,10 @@ pub(super) async fn get_media(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<GetMediaReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.can_access_media(&uid, &message.media_uuid).await? {
+    if !state
+        .can_access_media(&current_user.uid, &message.media_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -106,10 +104,10 @@ pub(super) async fn update_media(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<UpdateMediaReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_media(&uid, &message.media_uuid).await? {
+    if !state
+        .owns_media(&current_user.uid, &message.media_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -138,12 +136,9 @@ pub(super) async fn search_media(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled as part of the db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -170,12 +165,9 @@ pub(super) async fn similar_media(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SimilarMediaReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled as part of the db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -203,11 +195,8 @@ pub(super) async fn add_comment(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<AddCommentReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !state
-        .can_access_media(&uid, &message.comment.media_uuid)
+        .can_access_media(&current_user.uid, &message.comment.media_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -222,7 +211,7 @@ pub(super) async fn add_comment(
                 resp: tx,
                 comment: Comment {
                     media_uuid: message.comment.media_uuid,
-                    uid,
+                    uid: current_user.uid,
                     date: message.comment.date,
                     text: message.comment.text,
                 },
@@ -245,11 +234,8 @@ pub(super) async fn get_comment(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<GetCommentReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !state
-        .can_access_comment(&uid, &message.comment_uuid)
+        .can_access_comment(&current_user.uid, &message.comment_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -281,10 +267,10 @@ pub(super) async fn delete_comment(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<DeleteCommentReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_comment(&uid, &message.comment_uuid).await? {
+    if !state
+        .owns_comment(&current_user.uid, &message.comment_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -312,10 +298,10 @@ pub(super) async fn update_comment(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<UpdateCommentReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_comment(&uid, &message.comment_uuid).await? {
+    if !state
+        .owns_comment(&current_user.uid, &message.comment_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -344,12 +330,12 @@ pub(super) async fn add_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<AddCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // anyone may create an collection, but they must be in the group of the collection they create
     if !state
-        .is_group_member(&uid, HashSet::from([message.collection.gid.clone()]))
+        .is_group_member(
+            &current_user.uid,
+            HashSet::from([message.collection.gid.clone()]),
+        )
         .await?
     {
         return Err(anyhow::Error::msg("User must be a member of collection group").into());
@@ -363,7 +349,7 @@ pub(super) async fn add_collection(
             DbMsg::AddCollection {
                 resp: tx,
                 collection: Collection {
-                    uid,
+                    uid: current_user.uid,
                     gid: message.collection.gid,
                     name: message.collection.name,
                     note: message.collection.note,
@@ -389,11 +375,8 @@ pub(super) async fn get_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<GetCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !state
-        .can_access_collection(&uid, &message.collection_uuid)
+        .can_access_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -425,11 +408,8 @@ pub(super) async fn delete_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<DeleteCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !state
-        .owns_collection(&uid, &message.collection_uuid)
+        .owns_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -459,11 +439,8 @@ pub(super) async fn update_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<UpdateCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !state
-        .owns_collection(&uid, &message.collection_uuid)
+        .owns_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -494,15 +471,15 @@ pub(super) async fn add_media_to_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<AddMediaToCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_media(&uid, &message.media_uuid).await? {
+    if !state
+        .owns_media(&current_user.uid, &message.media_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
     if !state
-        .can_access_collection(&uid, &message.collection_uuid)
+        .can_access_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -537,15 +514,14 @@ pub(super) async fn rm_media_from_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<RmMediaFromCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     if !(state
-        .owns_collection(&uid, &message.collection_uuid)
+        .owns_collection(&current_user.uid, &message.collection_uuid)
         .await?
-        || state.owns_media(&uid, &message.media_uuid).await?
+        || state
+            .owns_media(&current_user.uid, &message.media_uuid)
+            .await?
             && state
-                .can_access_collection(&uid, &message.collection_uuid)
+                .can_access_collection(&current_user.uid, &message.collection_uuid)
                 .await?)
     {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -580,12 +556,9 @@ pub(super) async fn search_collections(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchCollectionsReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled in db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -615,12 +588,9 @@ pub(super) async fn search_media_in_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaInCollectionReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled in db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -648,10 +618,10 @@ pub(super) async fn get_library(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<GetLibraryReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_library(&uid, &message.library_uuid).await? {
+    if !state
+        .owns_library(&current_user.uid, &message.library_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -681,12 +651,9 @@ pub(super) async fn search_libraries(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchLibrariesReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled as part of the db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -713,12 +680,9 @@ pub(super) async fn search_media_in_library(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaInLibraryReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     // auth handled as part of the db search
 
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -747,10 +711,10 @@ pub(super) async fn start_task(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<StartTaskReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_library(&uid, &message.library_uuid).await? {
+    if !state
+        .owns_library(&current_user.uid, &message.library_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -765,7 +729,9 @@ pub(super) async fn start_task(
                     library_uuid: message.library_uuid,
                 },
                 task_type: message.task_type,
-                uid: TaskUid::User { uid },
+                uid: TaskUid::User {
+                    uid: current_user.uid,
+                },
             }
             .into(),
         )
@@ -782,10 +748,10 @@ pub(super) async fn stop_task(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<StopTaskReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    if !state.owns_library(&uid, &message.library_uuid).await? {
+    if !state
+        .owns_library(&current_user.uid, &message.library_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
@@ -815,12 +781,9 @@ pub(super) async fn show_tasks(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<ShowTasksReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
     match message.library {
         TaskLibrary::User { library_uuid } => {
-            if !state.owns_library(&uid, &library_uuid).await? {
+            if !state.owns_library(&current_user.uid, &library_uuid).await? {
                 return Ok(StatusCode::UNAUTHORIZED.into_response());
             }
         }
@@ -857,10 +820,7 @@ pub(super) async fn batch_search_and_sort(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<BatchSearchAndSortReq>,
 ) -> Result<Response, AppError> {
-    let state = state.clone();
-    let uid = current_user.uid.clone();
-
-    let gid = state.groups_for_user(&uid).await?;
+    let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 

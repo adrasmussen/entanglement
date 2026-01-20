@@ -5,9 +5,11 @@ use dioxus::prelude::*;
 use crate::{
     common::storage::try_local_storage,
     components::{
-        self, advanced::{
-            AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab,
-        }, media_card::MediaCard, modal::ModalBox, search::SearchBar
+        self,
+        advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
+        media_card::MediaCard,
+        modal::ModalBox,
+        search::SearchBar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };

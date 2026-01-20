@@ -1,12 +1,12 @@
 use std::{path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use tokio;
-use toml;
+use tokio::fs::read_to_string;
+use toml::from_str;
 use tracing::{Level, debug, instrument};
 
 use crate::{
-    auth::{ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig, gss::GssConfig},
+    auth::{gss::GssConfig, ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig},
     db::mariadb::MariaDbConfig,
     server::{FsConfig, HttpConfig, TaskConfig},
 };
@@ -68,13 +68,14 @@ struct TomlConfigFile {
 pub async fn read_config(filename: PathBuf) -> Arc<ESConfig> {
     debug!("reading config file");
 
-    let doc = tokio::fs::read_to_string(filename)
-        .await
-        .expect("failed to read config file");
+    let doc = match read_to_string(filename).await {
+        Ok(val) => val,
+        Err(err) => panic!("failed to read config file: {err}"),
+    };
 
     // hamfisted way to prevent sensitive info in the config file
     // from being printed to logs
-    let data: TomlConfigFile = match toml::from_str(&doc) {
+    let data: TomlConfigFile = match from_str(&doc) {
         Ok(val) => val,
         Err(err) => panic!("failed to parse config file: {err}"),
     };

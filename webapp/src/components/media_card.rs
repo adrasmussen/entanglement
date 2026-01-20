@@ -68,7 +68,10 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
         String::new()
     } else if collection_colors.len() == 1 {
         // Single color - use the light pastel version
-        format!("background-color: {}; border-radius: 0 0 var(--radius-lg) var(--radius-lg);", collection_colors[0].to_medium_css_color())
+        format!(
+            "background-color: {}; border-radius: 0 0 var(--radius-lg) var(--radius-lg);",
+            collection_colors[0].to_medium_css_color()
+        )
     } else {
         // Multiple colors - create horizontal stripes using CSS gradient
         let stripe_size = 100.0 / collection_colors.len() as f32;

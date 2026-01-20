@@ -5,7 +5,7 @@ use gloo_timers::callback::Timeout;
 use tracing::error;
 
 use crate::components::{
-    modal::{MODAL_STACK, Modal, ModalSize, ModalInner, ProgressBar},
+    modal::{MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar},
     search::CompactSearchBar,
 };
 use api::{

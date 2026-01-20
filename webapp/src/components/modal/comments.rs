@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModalInner};
+use crate::components::modal::{MODAL_STACK, ModalInner, ModalSize};
 use api::{
     comment::{CommentUuid, DeleteCommentReq, delete_comment},
     media::MediaUuid,

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
-use crate::components::modal::{MODAL_STACK, ModalSize, ModalInner, ProgressBar};
+use crate::components::modal::{MODAL_STACK, ModalInner, ModalSize, ProgressBar};
 use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]

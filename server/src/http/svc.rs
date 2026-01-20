@@ -408,9 +408,11 @@ impl HttpEndpoint {
                                     if let Some(cn) = &conn_cn {
                                         request.extensions_mut().insert(ClientCn {cn: cn.clone()});
                                     }
-                                    router.clone().call(request)});
 
-                                let service = service.clone();
+                                    router.clone().call(request)
+                                });
+
+                               // let service = service.clone();
 
                                 let io = TokioIo::new(stream);
 

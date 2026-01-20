@@ -1,4 +1,4 @@
-use std::{io::SeekFrom, path::PathBuf, sync::Arc};
+use std::{io::SeekFrom, path::MAIN_SEPARATOR, str::FromStr, sync::Arc};
 
 use anyhow::Result;
 use axum::{
@@ -39,22 +39,30 @@ pub(super) async fn stream_media(
     headers: HeaderMap,
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
-    Path((dir, media_uuid)): Path<(String, MediaUuid)>,
+    Path((dir, media_uuid_str)): Path<(String, String)>,
 ) -> Result<Response, AppError> {
-    debug!({media_uuid}, "serving media");
+    debug!({ media_uuid_str }, "serving media");
 
-    let state = state.clone();
-    let uid = current_user.uid.clone();
+    // instead of having axum parse the u64, we avoid an allocation by doing a
+    // conversion here
+    //
+    // this has the benefit of checking the input string for validity; e.g. no
+    // path separators
+    let media_uuid: MediaUuid = match u64::from_str(&media_uuid_str) {
+        Ok(v) => v,
+        Err(_) => return Ok(StatusCode::BAD_REQUEST.into_response()),
+    };
 
-    if !state.can_access_media(&uid, &media_uuid).await? {
+    if !state
+        .can_access_media(&current_user.uid, &media_uuid)
+        .await?
+    {
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
-    let media_uuid = media_uuid.to_string();
-
     // the pathbuf join() method inexplicably replaces the path if the argument
     // is absolute, so we include this explicit check
-    if PathBuf::from(&dir).is_absolute() || PathBuf::from(&media_uuid).is_absolute() {
+    if dir.contains(MAIN_SEPARATOR) {
         return Ok(StatusCode::BAD_REQUEST.into_response());
     }
 
@@ -66,7 +74,11 @@ pub(super) async fn stream_media(
     //
     // see also task/scan_utils.rs for the functions that control how new media
     // is added to the streaming directories.
-    let filename = state.config.fs.media_srvdir.join(dir).join(&media_uuid);
+    //
+    // it would be nice to avoid the allocation here if at all possible
+    let mut filename = state.config.fs.media_srvdir.join(dir);
+
+    filename.push(&media_uuid_str);
 
     // here and below we use tokio logic to handle the filesystem operations
     // so that we don't block the server threads
@@ -91,7 +103,7 @@ pub(super) async fn stream_media(
         None => (false, (0, length)),
         Some(val) => (
             true,
-            match parse_ranges(state.clone(), val.to_str()?, length) {
+            match parse_ranges(&state, val.to_str()?, length) {
                 Ok(v) => v,
                 Err(err) => {
                     return Ok(
@@ -102,7 +114,7 @@ pub(super) async fn stream_media(
         ),
     };
 
-    debug!({media_uuid}, "streaming {} bytes", end - start);
+    debug!({ media_uuid }, "streaming {} bytes", end - start);
 
     // http response headers
     //
@@ -134,7 +146,7 @@ pub(super) async fn stream_media(
                 .fs
                 .media_srvdir
                 .join(LINK_PATH)
-                .join(&media_uuid),
+                .join(&media_uuid_str),
         )
         .await?,
     )
@@ -144,7 +156,7 @@ pub(super) async fn stream_media(
             headers.insert(CONTENT_TYPE, HeaderValue::from_str(mime.essence_str())?);
         }
         None => {
-            warn!({media_uuid}, "failed to guess mime type")
+            warn!({ media_uuid }, "failed to guess mime type")
         }
     }
 
@@ -207,19 +219,17 @@ pub(super) async fn stream_media(
 // errors here should be reported by caller as StatusCode::RANGE_NOT_SATISFIABLE
 //
 // if we enable multipart support, this will need to be adapted to produce a vec
-fn parse_ranges(state: Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(u64, u64)> {
+fn parse_ranges(state: &Arc<HttpEndpoint>, ranges: &str, length: u64) -> Result<(u64, u64)> {
     // there is only one supported unit, but the spec technically allows for others
     if !ranges.starts_with("bytes=") {
         return Err(anyhow::Error::msg("invalid range unit"));
     }
 
-    // the regex should only be created once, and HttpEndpoint is the only place
-    let regex = state.range_regex.clone();
-
     // even though we only support sending a single range back, we need to check to see if
     // the client is expecting more.  the const generic for extract is the number of
     // capture groups, and must match the regex (or the whole thing will panic)
-    let mut match_iter = regex
+    let mut match_iter = state
+        .range_regex
         .captures_iter(ranges)
         .map(|c| c.extract::<2>())
         .map(|(_, [s, e])| parse_endpoints(s, e));

@@ -10,7 +10,7 @@ use anyhow::Result;
 use dashmap::DashSet;
 
 use tokio::{fs::create_dir_all, sync::oneshot::channel, task::JoinSet, time::timeout};
-use tracing::{Instrument, Level, debug, error, instrument, span, warn, info};
+use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 use walkdir::WalkDir;
 
 use crate::{
@@ -119,18 +119,19 @@ pub async fn scan_library(
             tasks.spawn({
                 let context = context.clone();
 
-                let file = match ScanFile::from_path(context.clone(), path.clone(), metadata).await? {
-                    FileStatus::Register(v) => v,
-                    FileStatus::Exists(file) => {
-                        context.known_files.insert(file);
-                        continue;
-                    }
-                    FileStatus::Skip => {
-                        context.file_count.fetch_add(1, Ordering::Relaxed);
-                        continue;
-                    }
-                    FileStatus::Unknown => continue,
-                };
+                let file =
+                    match ScanFile::from_path(context.clone(), path.clone(), metadata).await? {
+                        FileStatus::Register(v) => v,
+                        FileStatus::Exists(file) => {
+                            context.known_files.insert(file);
+                            continue;
+                        }
+                        FileStatus::Skip => {
+                            context.file_count.fetch_add(1, Ordering::Relaxed);
+                            continue;
+                        }
+                        FileStatus::Unknown => continue,
+                    };
 
                 async move {
                     match timeout(scan_timeout, file.register())
@@ -184,20 +185,23 @@ pub async fn scan_library(
             tasks.join_next().await;
         }
 
-        tasks.spawn(async move {
-            let context = context.clone();
+        tasks.spawn(
+            async move {
+                let context = context.clone();
 
-            match timeout(scan_timeout, context.resolve_duplicates(media_uuid, files))
-                .await
-                .map_err(|_| anyhow::Error::msg("dedup exceeded timeout"))
-            {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) | Err(err) => {
-                    warn!("dedup error: {err:?}");
-                    context.warnings.fetch_add(1, Ordering::Relaxed);
+                match timeout(scan_timeout, context.resolve_duplicates(media_uuid, files))
+                    .await
+                    .map_err(|_| anyhow::Error::msg("dedup exceeded timeout"))
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(err)) | Err(err) => {
+                        warn!("dedup error: {err:?}");
+                        context.warnings.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
-        }.instrument(span!(Level::INFO, "dedup_media", media_uuid)));
+            .instrument(span!(Level::INFO, "dedup_media", media_uuid)),
+        );
     }
 
     // wait for phase two to complete

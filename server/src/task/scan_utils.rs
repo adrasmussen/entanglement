@@ -139,7 +139,7 @@ fn get_mtype(path: &Path) -> Result<MediaType> {
 
     match ext.as_str() {
         "jpg" | "png" | "tiff" => Ok(MediaType::Image),
-        "mp4" | "avi" | "mov "=> Ok(MediaType::Video),
+        "avi" | "mov" | "mp4" => Ok(MediaType::Video),
         _ => Err(anyhow::Error::msg(format!("unknown media extention {ext}"))),
     }
 }
@@ -344,7 +344,7 @@ impl ScanContext {
             .collect::<Vec<_>>()
             .pop()
         {
-            debug!({media_uuid}, "updating media record");
+            debug!({ media_uuid }, "updating media record");
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             context
@@ -398,8 +398,8 @@ impl ScanContext {
                     let scan = ScanFile::from_known(context.clone(), file).await?;
 
                     scan.register().await?.ok_or_else(|| {
-                            anyhow::Error::msg(format!("failed to add new media record for {path}"))
-                        })?
+                        anyhow::Error::msg(format!("failed to add new media record for {path}"))
+                    })?
                 }
             };
 
@@ -508,7 +508,7 @@ impl ScanFile {
 
         let scratch_dir = create_scratch_dir(context.clone(), &chash).await?;
 
-        debug!({path = pathstr}, "scanning file");
+        debug!({ path = pathstr }, "scanning file");
 
         Ok(FileStatus::Register(ScanFile {
             context,

@@ -71,8 +71,8 @@ pub fn SimilarMediaInner(props: SimilarMediaInnerProps) -> Element {
                     }
                 }
             };
-        },
-        Some(v) => v
+        }
+        Some(v) => v,
     };
 
     let filtered_items = similar_media
