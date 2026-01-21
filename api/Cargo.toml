@@ -7,6 +7,6 @@ license = { workspace = true }
 [dependencies]
 anyhow = { workspace =  true }
 gloo-net = { workspace =  true }
-paste = { workspace =  true }
+pastey = { workspace =  true }
 regex = { workspace =  true }
 serde = { workspace =  true, features = ["derive"] }

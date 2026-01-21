@@ -140,7 +140,7 @@ impl From<anyhow::Error> for WebError {
 #[macro_export]
 macro_rules! http_endpoint {
     ($name:ident) => {
-        paste::paste!{
+        pastey::paste!{
             pub async fn [<$name:snake>](req: &[<$name:camel Req>]) -> Result<[<$name:camel Resp>], $crate::WebError> {
                 use $crate::HTTP_URL_ROOT;
                 let resp = gloo_net::http::Request::post(format!("/{}/api/{}", HTTP_URL_ROOT, stringify!([<$name:camel>])).as_str())

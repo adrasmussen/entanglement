@@ -14,7 +14,7 @@ constcat = { workspace =  true }
 dioxus = { workspace =  true, features = ["web"] }
 dioxus-logger = { workspace =  true }
 dioxus-router = { workspace =  true }
-getrandom = { workspace =  true, features = ["js"] }
+getrandom = { workspace =  true, features = ["wasm_js"] }
 gloo-console = { workspace =  true }
 gloo-net = { workspace =  true }
 gloo-storage = { workspace =  true }
