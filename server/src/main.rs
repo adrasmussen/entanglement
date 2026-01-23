@@ -1,12 +1,9 @@
-use std::{path::PathBuf, thread::sleep, time::Duration};
+use std::path::PathBuf;
 
 use clap::Parser;
-use tracing::{Level, info};
-use tracing_subscriber::{
-    filter::FilterFn,
-    layer::{Layer, SubscriberExt},
-    util::SubscriberInitExt,
-};
+use tokio::signal::unix::{SignalKind, signal};
+use tracing::info;
+use tracing_subscriber::EnvFilter;
 
 mod auth;
 mod checks;
@@ -37,13 +34,8 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let crate_filter = FilterFn::new(|metadata| !metadata.target().starts_with("h2"))
-        .with_max_level_hint(Level::INFO);
-
-    let fmt_layer = tracing_subscriber::fmt::layer();
-
-    tracing_subscriber::registry()
-        .with(fmt_layer.with_filter(crate_filter))
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
         .init();
 
     info!("starting entanglement media management server");
@@ -78,7 +70,12 @@ async fn main() -> anyhow::Result<()> {
 
     info!("startup complete!");
 
-    loop {
-        sleep(Duration::from_secs(u64::MAX));
+    let mut sigint = signal(SignalKind::interrupt())?;
+
+    tokio::select! {
+        _ = sigint.recv() => {
+            info!("caught SIGINT");
+            Ok(())
+        },
     }
 }

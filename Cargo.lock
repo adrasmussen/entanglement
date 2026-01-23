@@ -4205,6 +4205,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-util",
+ "libgssapi",
  "rustls",
  "rustls-pki-types",
  "rustls-webpki",

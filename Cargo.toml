@@ -41,6 +41,7 @@ ldap3 = { version = "0.12.1", default-features = false, features = [
     "tls-rustls-aws-lc-rs",
     "gssapi",
 ] }
+libgssapi = "0.9.1"
 mime_guess = "2.0.5"
 mysql_async = "0.36.1"
 pastey = "0.2.1"

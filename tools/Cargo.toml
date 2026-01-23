@@ -32,6 +32,7 @@ futures-util = { workspace =  true }
 hyper = { workspace =  true }
 hyper-rustls = { workspace =  true }
 hyper-util = { workspace =  true }
+libgssapi = { workspace = true }
 rustls = { workspace = true }
 rustls-pki-types = { workspace = true }
 rustls-webpki = { workspace = true }
