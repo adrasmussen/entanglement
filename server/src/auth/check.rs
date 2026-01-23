@@ -154,7 +154,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
 
-        Ok(uid == &comment.uid)
+        Ok(uid == comment.uid)
     }
 
     #[instrument(skip(self))]
@@ -203,7 +203,7 @@ pub trait AuthCheck: ESInner + Debug {
             .await??
             .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
 
-        Ok(uid == &collection.uid)
+        Ok(uid == collection.uid)
     }
 
     #[instrument(skip(self))]

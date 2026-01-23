@@ -48,7 +48,7 @@ pub const HTTP_URL_ROOT: &str = "entanglement";
 // for relational dbs, this is obviously an antipattern -- but a tags table and pivot
 // would be a lot of effort for relatively little gain, not to mention making the full
 // text searches much more complicated.  note, however, that even mariadb's set type
-// uses the same logic under the hood (and thus disallows commas)
+// uses the same logic under the hood (and thus disallows commas).
 //
 // these methods are also used in the webapp, which adds the awkward requirement that
 // the separator be commonly-found on keyboards.  eventually, better text input methods
@@ -92,7 +92,7 @@ pub fn unfold_set(str: &str) -> HashSet<String> {
 //
 // anyhow::Error does not implement serde::de::StdError, which prevents it from being used
 // in Dioxus's ErrorBoundary handle_error logic.  thus, we create this mostly-transparent
-// wrapper and connect it to both anyhow and the gloo_net errors returned by the api calls
+// wrapper and connect it to both anyhow and the gloo_net errors returned by the api calls.
 #[derive(Clone, Debug)]
 pub struct WebError(Arc<anyhow::Error>);
 

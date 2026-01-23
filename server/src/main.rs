@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
         .with(fmt_layer.with_filter(crate_filter))
         .init();
 
-    info!("entanglement server starting up, processing config file");
+    info!("starting entanglement media management server");
 
     let config = read_config(PathBuf::from(args.config)).await;
 

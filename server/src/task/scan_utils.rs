@@ -223,6 +223,7 @@ impl ScanContext {
                 let mut v = known_files.get_mut(&item.media_uuid).ok_or_else(|| {
                     anyhow::Error::msg("internal error: scan post-walk map missing key")
                 })?;
+
                 v.push(item.clone());
             } else if known_files
                 .insert(item.media_uuid, vec![item.clone()])
@@ -338,7 +339,6 @@ impl ScanContext {
         //
         // finally, if there are both hash and path matches, there will still be the path match in
         // the dashset (and that should be the only remaining item)
-
         if let Some(file) = files
             .extract_if(.., |f| f == &real_file)
             .collect::<Vec<_>>()
@@ -547,26 +547,13 @@ impl ScanFile {
     pub async fn register(&self) -> Result<Option<MediaUuid>> {
         debug!("processing media");
 
-        // concurrent registration check
-        //
-        // we deduplicate by content hash while scanning and only record whichever file
-        // the scanning threads found first
-        //
-        // however, this means that the other copies are not tracked for changes via the
-        // known file checker; we could hypothetically extend the path in the database
-        // to include all paths if this ends up becoming a problem
-        //if !self.context.chashes.insert(self.hash.clone()) {
-        //    debug!("duplicate media found (concurrent check)");
-        //    return Ok(None);
-        // }
-
         // matching hash check
         //
         // the second way that a file can be linked to a record in the database is by hash
         //
         // unlike the path mtime check, however, we cannot determine if a new path matching
-        // an old hash is a moved file or a copy of a file whose original was edited, and
-        // thus we have to compare the known files at the end
+        // an old hash is a copy, a moved file, or a copy of a file whose original was edited,
+        // and thus we have to compare the known files at the end
         let exists = self.context.get_media_by_chash(&self.hash).await?;
 
         if let Some(media) = exists {
@@ -583,6 +570,8 @@ impl ScanFile {
         }
 
         // media processing
+        //
+        // some of these use spawn_blocking() due to the underlying libraries
         let media_data: MediaData = match self.mtype {
             MediaType::Image => process_image(&self.path).await?,
             MediaType::Video => process_video(&self.path, &self.scratch_dir).await?,

@@ -24,7 +24,7 @@ use crate::{
     auth::check::AuthCheck,
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
 };
-use api::{LINK_PATH, media::MediaUuid};
+use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH, media::MediaUuid};
 
 // media stream/download
 //
@@ -60,22 +60,17 @@ pub(super) async fn stream_media(
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
-    // the pathbuf join() method inexplicably replaces the path if the argument
-    // is absolute, so we include this explicit check
-    if dir.contains(MAIN_SEPARATOR) {
-        return Ok(StatusCode::BAD_REQUEST.into_response());
-    }
-
     // the layout of the srv directory is completely controlled by the server,
     // so we could move this around as much as we wanted for better control
     //
-    // dir is usually one of several constants, and could hypothetically be
-    // an enum or similar if there end up being too many variants
-    //
     // see also task/scan_utils.rs for the functions that control how new media
-    // is added to the streaming directories.
+    // is added to the streaming directories
     //
     // it would be nice to avoid the allocation here if at all possible
+    if !matches!(dir.as_str(), LINK_PATH | THUMBNAIL_PATH | SLICE_PATH) {
+        return Ok(StatusCode::BAD_REQUEST.into_response());
+    }
+
     let mut filename = state.config.fs.media_srvdir.join(dir);
 
     filename.push(&media_uuid_str);
