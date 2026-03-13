@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
@@ -8,14 +8,17 @@ use crate::{
     collection::MEDIA_SEARCH_KEY,
     common::storage::*,
     components::{
+        advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_card::MediaCard,
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
+        sidebar::AdvancedSidebar,
     },
 };
 use api::{
     collection::*,
     fold_set,
+    media::MediaUuid,
     search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
     sort::SortMethod,
 };
@@ -92,8 +95,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     });
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
-    let bulk_edit_signal = use_signal(|| None);
-    let collection_color_signal = use_signal(HashMap::new);
+    let mut advanced_expanded = use_signal(|| false);
+    let mut bulk_edit_signal = use_signal(|| None);
+    let mut collection_color_signal = use_signal(HashMap::new);
 
     let media_future = use_resource(move || async move {
         let collection_uuid = collection_uuid();
@@ -143,11 +147,42 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         Some(v) => v,
     };
 
+    let media_uuids = use_memo(move || match &*media_future.read() {
+        Some(Ok(v)) => Some(
+            v.media
+                .iter()
+                .map(|m| m.media_uuid)
+                .collect::<HashSet<MediaUuid>>(),
+        ),
+        _ => None,
+    });
+
     let collection = collection_data.collection;
     let media = media_data.media;
 
     let formatted_tags = fold_set(collection.tags.clone())
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
+
+    let action_button = rsx! {
+        div { style: "display: flex; align-items: center; margin-left: auto;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    if advanced_expanded() {
+                        bulk_edit_signal.set(None);
+                        collection_color_signal.set(HashMap::new());
+                    }
+                    advanced_expanded.set(!advanced_expanded());
+                },
+
+                if advanced_expanded() {
+                    "Hide Advanced"
+                } else {
+                    "Advanced"
+                }
+            }
+        }
+    };
 
     rsx! {
         div { class: "container with-sticky",
@@ -155,57 +190,23 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
             div { class: "sticky-header",
                 div {
-                    class: "breadcrumb",
-                    style: "margin-bottom: var(--space-4);",
-                    Link { to: Route::CollectionSearch {}, "Collections" }
-                    span { " / " }
-                    span { "{collection.name}" }
-                }
-
-                div {
                     class: "collection-detail-header",
-                    style: "
-                        background-color: var(--surface);
-                        border-radius: var(--radius-lg);
-                        padding: var(--space-4);
-                        margin-bottom: var(--space-4);
-                        box-shadow: var(--shadow-sm);
-                    ",
+                    style: "background-color: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); margin-bottom: var(--space-4); box-shadow: var(--shadow-sm);",
                     div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
                         div {
                             h1 { style: "margin: 0 0 var(--space-2) 0;", "{collection.name}" }
-                            div { style: "
-                                    display: flex;
-                                    gap: var(--space-4);
-                                    margin-bottom: var(--space-3);
-                                    color: var(--text-secondary);
-                                    font-size: 0.875rem;
-                                ",
+                            div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary); font-size: 0.875rem;",
                                 span { "Owner: {collection.uid}" }
                                 span { "Group: {collection.gid}" }
                             }
 
                             if !collection.note.is_empty() {
-                                p { style: "
-                                        padding: var(--space-3);
-                                        background-color: var(--neutral-50);
-                                        border-radius: var(--radius-md);
-                                        font-style: italic;
-                                        color: var(--text-secondary);
-                                        max-width: 700px;
-                                    ",
+                                p { style: "padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); font-style: italic; color: var(--text-secondary); max-width: 700px;",
                                     "{collection.note}"
                                 }
                             }
                             if !collection.tags.is_empty() {
-                                p { style: "
-                                        padding: var(--space-3);
-                                        background-color: var(--neutral-50);
-                                        border-radius: var(--radius-md);
-                                        font-style: italic;
-                                        color: var(--text-secondary);
-                                        max-width: 700px;
-                                    ",
+                                p { style: "padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); font-style: italic; color: var(--text-secondary); max-width: 700px;",
                                     "Tags: {formatted_tags}"
                                 }
                             }
@@ -234,7 +235,27 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this collection...",
-                    status: format!("Found {} items in this collection", media.len()),
+                    status: format!("Found {} results", media.len()),
+                    action_button,
+                }
+
+                AdvancedSidebar {
+                    show_signal: advanced_expanded,
+                    tabs: HashMap::from([
+                        ("Advanced Search".to_owned(), rsx! {
+                            AdvancedSearchTab { media_search_signal }
+                        }),
+                        ("Bulk Edit".to_owned(), rsx! {
+                            BulkEditTab {
+                                bulk_edit_signal,
+                                media_uuids,
+                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                            }
+                        }),
+                        ("Collection Labels".to_owned(), rsx! {
+                            CollectionColorTab { collection_color_signal }
+                        }),
+                    ]),
                 }
             }
 
@@ -243,31 +264,14 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                 if media.is_empty() {
                     div {
                         class: "empty-state",
-                        style: "
-                            padding: var(--space-8) var(--space-4);
-                            text-align: center;
-                            background-color: var(--surface);
-                            border-radius: var(--radius-lg);
-                            margin-top: var(--space-4);
-                        ",
-                        div { style: "
-                                font-size: 4rem;
-                                margin-bottom: var(--space-4);
-                                color: var(--neutral-400);
-                            ",
+                        style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                        div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
                             "🖼️"
                         }
-                        h3 { style: "
-                                margin-bottom: var(--space-2);
-                                color: var(--text-primary);
-                            ",
+                        h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
                             "No Media in This Collection"
                         }
-                        p { style: "
-                                color: var(--text-secondary);
-                                max-width: 500px;
-                                margin: 0 auto;
-                            ",
+                        p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
                             "This collection doesn't contain any media yet. Add some media to get started."
                         }
                         button {
@@ -280,12 +284,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                 } else {
                     div {
                         class: "media-grid",
-                        style: "
-                            display: grid;
-                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                            gap: var(--space-4);
-                            margin-top: var(--space-4);
-                        ",
+                        style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
                         for media in media.iter() {
                             MediaCard {
                                 key: "{media.media_uuid}",

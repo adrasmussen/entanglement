@@ -5,11 +5,11 @@ use dioxus::prelude::*;
 use crate::{
     common::storage::try_local_storage,
     components::{
-        self,
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_card::MediaCard,
         modal::ModalBox,
         search::SearchBar,
+        sidebar::AdvancedSidebar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
@@ -22,9 +22,9 @@ use api::{
 #[component]
 pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
-    let mut advanced_expanded = use_signal(|| false);
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
@@ -98,7 +98,7 @@ pub fn GallerySearch() -> Element {
                     action_button,
                 }
 
-                components::sidebar::AdvancedSidebar {
+                AdvancedSidebar {
                     show_signal: advanced_expanded,
                     tabs: HashMap::from([
                         ("Advanced Search".to_owned(), rsx! {

@@ -137,12 +137,6 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
     rsx! {
         div { class: "container",
-            div { class: "breadcrumb",
-                Link { to: Route::GallerySearch {}, "Gallery" }
-                span { " / " }
-                span { "Media Details" }
-            }
-
             // side-by-side layout with independent scrolling
             div { class: "media-detail-page",
 

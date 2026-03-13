@@ -384,6 +384,8 @@ impl HttpEndpoint {
                     accept_result = listener.accept().and_then(|(stream, _remote_addr)| tls_acceptor.accept(stream)) => {
                         match accept_result {
                             Ok(stream) => {
+                                // TODO -- axum has ConnectInfo with a dedicated extractor
+                                //
                                 // since we are using the connection details as inputs to the auth middleware, we
                                 // take a somewhat more roundabout path towards building the service_fn than the
                                 // basic tokio/hyper/axum configuration

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
@@ -7,14 +7,17 @@ use crate::{
     Route,
     common::storage::*,
     components::{
+        advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_card::MediaCard,
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
+        sidebar::AdvancedSidebar,
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
 };
 use api::{
     library::*,
+    media::MediaUuid,
     search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
     sort::SortMethod,
 };
@@ -91,8 +94,9 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     // the library media search is the only place where we can specify hidden = true
     let mut show_hidden = use_signal(|| false);
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
-    let bulk_edit_signal = use_signal(|| None);
-    let collection_color_signal = use_signal(HashMap::new);
+    let mut advanced_expanded = use_signal(|| false);
+    let mut bulk_edit_signal = use_signal(|| None);
+    let mut collection_color_signal = use_signal(HashMap::new);
 
     let media_future = use_resource(move || async move {
         update_signal();
@@ -145,10 +149,39 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         Some(v) => v,
     };
 
+    let media_uuids = use_memo(move || match &*media_future.read() {
+        Some(Ok(v)) => Some(
+            v.media
+                .iter()
+                .map(|m| m.media_uuid)
+                .collect::<HashSet<MediaUuid>>(),
+        ),
+        _ => None,
+    });
+
+    let library = library_data.library;
+    let media = media_data.media;
+
     // search bar action button
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; margin-left: auto;",
-            // Checkbox for hidden files
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    if advanced_expanded() {
+                        bulk_edit_signal.set(None);
+                        collection_color_signal.set(HashMap::new());
+                    }
+                    advanced_expanded.set(!advanced_expanded());
+                },
+
+                if advanced_expanded() {
+                    "Hide Advanced"
+                } else {
+                    "Advanced"
+                }
+            }
+
             input {
                 r#type: "checkbox",
                 id: "show-hidden-checkbox",
@@ -156,31 +189,17 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                 oninput: move |evt| {
                     show_hidden.set(evt.checked());
                 },
-                style: "margin: 0 8px 0 0;",
+                style: "margin: 0 8px 0 8px;",
             }
             label { r#for: "show-hidden-checkbox", style: "margin: 0 16px 0 0;", "Show hidden files" }
         }
     };
-
-    let library = library_data.library;
-    let media = media_data.media;
-
-    //let formatted_time = local_time(library.mtime);
 
     rsx! {
         div { class: "container with-sticky",
             ModalBox { update_signal }
 
             div { class: "sticky-header",
-                // breadcrumb navigation
-                div {
-                    class: "breadcrumb",
-                    style: "margin-bottom: var(--space-4);",
-                    Link { to: Route::LibrarySearch {}, "Libraries" }
-                    span { " / " }
-                    span { "{library.path}" }
-                }
-
                 // library detail view header
                 div {
                     class: "library-detail-header",
@@ -208,7 +227,6 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                             }
                             button {
                                 class: "btn btn-secondary",
-                                style: "margin-right: var(--space-2);",
                                 onclick: move |_| {
                                     MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid())));
                                 },
@@ -222,8 +240,27 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
-                    status: format!("Found {} {}items", media.len(), if show_hidden() { "hidden " } else { "" }),
+                    status: format!("Found {} {}results", media.len(), if show_hidden() { "hidden " } else { "" }),
                     action_button,
+                }
+
+                AdvancedSidebar {
+                    show_signal: advanced_expanded,
+                    tabs: HashMap::from([
+                        ("Advanced Search".to_owned(), rsx! {
+                            AdvancedSearchTab { media_search_signal }
+                        }),
+                        ("Bulk Edit".to_owned(), rsx! {
+                            BulkEditTab {
+                                bulk_edit_signal,
+                                media_uuids,
+                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                            }
+                        }),
+                        ("Collection Labels".to_owned(), rsx! {
+                            CollectionColorTab { collection_color_signal }
+                        }),
+                    ]),
                 }
             }
 
