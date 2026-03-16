@@ -695,6 +695,29 @@ impl DbBackend for MariaDBBackend {
         }))
     }
 
+    #[instrument(skip(self))]
+    async fn get_comment_uuids(&self) -> Result<Vec<CommentUuid>> {
+        debug!("getting all comment uuids");
+
+        let _yr = self.locks.comment.read().await;
+
+        let result = r"
+            SELECT comment_uuid FROM comments"
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let data = result
+            .into_iter()
+            .map(from_row_opt::<CommentUuid>)
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found comments");
+
+        Ok(data)
+    }
+
     // TODO -- find a simple way to get the media_uuid so that we can bump the timestamp
 
     #[instrument(skip(self))]
@@ -828,6 +851,29 @@ impl DbBackend for MariaDBBackend {
             tags: unfold_set(&tags),
             cover: data.5,
         }))
+    }
+
+        #[instrument(skip(self))]
+    async fn get_collection_uuids(&self) -> Result<Vec<CollectionUuid>> {
+        debug!("getting all collection uuids");
+
+        let _xr = self.locks.collection.read().await;
+
+        let result = r"
+            SELECT collection_uuid FROM collections"
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let data = result
+            .into_iter()
+            .map(from_row_opt::<CollectionUuid>)
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found collections");
+
+        Ok(data)
     }
 
     #[instrument(skip(self))]
@@ -1162,6 +1208,29 @@ impl DbBackend for MariaDBBackend {
             gid: data.2,
             count: data.3,
         }))
+    }
+
+        #[instrument(skip(self))]
+    async fn get_library_uuids(&self) -> Result<Vec<LibraryUuid>> {
+        debug!("getting all library uuids");
+
+        let _lr = self.locks.library.read().await;
+
+        let result = r"
+            SELECT library_uuid FROM libraries"
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
+
+        let data = result
+            .into_iter()
+            .map(from_row_opt::<LibraryUuid>)
+            .collect::<Result<Vec<_>, FromRowError>>()?;
+
+        debug!({ count = data.len() }, "found libraries");
+
+        Ok(data)
     }
 
     #[instrument(skip(self, update))]

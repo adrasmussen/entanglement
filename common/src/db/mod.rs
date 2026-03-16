@@ -72,6 +72,8 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>>;
 
+    async fn get_comment_uuids(&self) -> Result<Vec<CommentUuid>>;
+
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()>;
 
     async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()>;
@@ -80,6 +82,8 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid>;
 
     async fn get_collection(&self, collection_uuid: CollectionUuid) -> Result<Option<Collection>>;
+
+    async fn get_collection_uuids(&self) -> Result<Vec<CollectionUuid>>;
 
     async fn delete_collection(&self, collection_uuid: CollectionUuid) -> Result<()>;
 
@@ -118,6 +122,8 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn add_library(&self, library: Library) -> Result<LibraryUuid>;
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> Result<Option<Library>>;
+
+    async fn get_library_uuids(&self) -> Result<Vec<LibraryUuid>>;
 
     async fn update_library(&self, library_uuid: LibraryUuid, update: LibraryUpdate) -> Result<()>;
 
