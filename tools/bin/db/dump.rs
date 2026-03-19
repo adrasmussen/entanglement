@@ -19,7 +19,11 @@ struct MediaRecord {
 
 pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
     let db: Box<dyn DbBackend> = match config.db_backend {
-        common::config::DbBackend::MariaDB => Box::new(MariaDBBackend::new(config)?),
+        common::config::DbBackend::MariaDB => {
+            let backend = MariaDBBackend::new(config).await?;
+            Box::new(backend)
+        }
+        _ => todo!(),
     };
 
     let mut opts = rocksdb::Options::default();
@@ -82,15 +86,13 @@ pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
             .await?
             .ok_or_else(|| anyhow::Error::msg("missing media"))?;
 
-        let key = format!("media_{}", media.chash);
-
         let record = serde_json::to_vec(&MediaRecord {
             media,
             collections,
             comments,
         })?;
 
-        rdb.put(key, record)?;
+        rdb.put(format!("media_{media_uuid}"), record)?;
     }
 
     Ok(())

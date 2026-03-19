@@ -15,6 +15,8 @@ use video::create_video_thumbnail;
 pub mod image;
 pub mod video;
 
+const HASH_BUFFER: usize = 65536;
+
 // intermediate struct used by media processing functions
 #[derive(Clone, Debug)]
 pub struct MediaData {
@@ -27,10 +29,10 @@ pub async fn content_hash(path: impl AsRef<Path>) -> Result<String> {
     let file = File::open(&path).await?;
 
     let mut hasher = Sha512::new();
-    let mut buffer = [0; 8192];
+    let mut buffer = [0; HASH_BUFFER];
 
     // TODO -- perf tuning
-    let mut reader = BufReader::with_capacity(8182, file);
+    let mut reader = BufReader::with_capacity(HASH_BUFFER, file);
 
     while reader.read(&mut buffer).await? > 0 {
         hasher.update(buffer);

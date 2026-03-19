@@ -69,7 +69,7 @@ impl EntanglementService for EchoService {
     #[instrument(skip(self, registry))]
     async fn start(&self, registry: &ESMRegistry) -> Result<()> {
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(EchoInner::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(EchoInner::new(self.config.clone(), registry.clone()).await?);
 
         let msg_serve = {
             async move {
@@ -107,7 +107,7 @@ pub struct EchoInner {
 
 #[async_trait]
 impl ESInner for EchoInner {
-    fn new(_config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
+    async fn new(_config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
         Ok(EchoInner { registry })
     }
 

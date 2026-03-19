@@ -62,7 +62,7 @@ impl EntanglementService for TaskService {
         info!("starting task service");
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(TaskRunner::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(TaskRunner::new(self.config.clone(), registry.clone()).await?);
 
         let serve = {
             async move {
@@ -110,7 +110,7 @@ struct RunningTask {
 
 #[async_trait]
 impl ESInner for TaskRunner {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
         Ok(TaskRunner {
             config: config.clone(),
             registry: registry.clone(),

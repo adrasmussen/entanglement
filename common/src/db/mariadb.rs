@@ -70,7 +70,7 @@ struct TableLocks {
 
 #[async_trait]
 impl DbBackend for MariaDBBackend {
-    fn new(config: Arc<ESConfig>) -> Result<Self> {
+    async fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("creating MariaDB connection pool");
 
         let url = config

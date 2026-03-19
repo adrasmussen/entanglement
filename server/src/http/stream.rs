@@ -1,4 +1,8 @@
-use std::{io::SeekFrom, str::FromStr, sync::Arc};
+use std::{
+    io::{ErrorKind, SeekFrom},
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::Result;
 use axum::{
@@ -18,7 +22,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
     auth::check::AuthCheck,
@@ -79,7 +83,21 @@ pub(super) async fn stream_media(
     // so that we don't block the server threads
     let mut file_handle = match File::open(&filename).await {
         Ok(f) => f,
-        Err(err) => return Ok((StatusCode::NOT_FOUND, err.to_string()).into_response()),
+        Err(err) => {
+            match err.kind() {
+                ErrorKind::NotFound => debug!({ media_uuid }, "media not found: {err}"),
+
+                ErrorKind::PermissionDenied => error!({ media_uuid }, "permission denied: {err}"),
+
+                ErrorKind::StaleNetworkFileHandle => {
+                    error!({ media_uuid }, "stale NFS handle: {err}")
+                }
+
+                _ => warn!({ media_uuid }, "io error: {err}"),
+            }
+
+            return Ok((StatusCode::NOT_FOUND, err.to_string()).into_response());
+        }
     };
 
     let file_metadata = file_handle.metadata().await?;

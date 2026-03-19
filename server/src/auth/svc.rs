@@ -64,7 +64,7 @@ impl EntanglementService for AuthService {
 
         let config = self.config.clone();
         let receiver = self.receiver.clone();
-        let state = Arc::new(AuthCache::new(config.clone(), registry.clone())?);
+        let state = Arc::new(AuthCache::new(config.clone(), registry.clone()).await?);
 
         // for the first pass, we don't need any further machinery for this service
         //
@@ -115,7 +115,7 @@ pub struct AuthCache {
 
 #[async_trait]
 impl ESInner for AuthCache {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         let authn_provider: Box<dyn AuthnProvider> = match config.authn_backend {
             AuthnBackend::ProxyHeader => Box::new(ProxyAuth::new(config.clone())?),
             AuthnBackend::TomlFile => Box::new(TomlAuthnFile::new(config.clone())?),

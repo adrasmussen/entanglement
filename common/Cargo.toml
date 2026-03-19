@@ -10,6 +10,8 @@ api = { path = "../api" }
 anyhow = { workspace = true }
 async_cell = { workspace = true }
 async-trait = { workspace = true }
+bb8 = { workspace = true }
+bb8-postgres = { workspace = true }
 blockhash = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
@@ -19,6 +21,7 @@ image = { workspace = true }
 kamadak-exif = { workspace = true }
 ldap3 = { workspace = true }
 mysql_async = { workspace = true }
+postgres = { workspace = true }
 pastey = { workspace = true }
 regex = { workspace = true }
 rocksdb = { workspace = true }

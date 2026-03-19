@@ -7,7 +7,7 @@ use tracing::{Level, debug, instrument};
 
 use crate::{
     auth::{gss::GssConfig, ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig},
-    db::mariadb::MariaDbConfig,
+    db::{mariadb::MariaDbConfig, postgres::PostgresConfig},
     server::{FsConfig, HttpConfig, TaskConfig},
 };
 
@@ -29,6 +29,7 @@ pub struct ESConfig {
     pub gss: Option<GssConfig>,
     pub ldap: Option<LdapConfig>,
     pub mariadb: Option<MariaDbConfig>,
+    pub postgres: Option<PostgresConfig>,
     pub tomlfile: Option<TomlFileConfig>,
     pub proxyheader: Option<ProxyHeaderConfig>,
 }
@@ -55,6 +56,7 @@ pub enum AuthzBackend {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DbBackend {
     MariaDB,
+    Postgres,
 }
 
 // in order to extract the config table from a larger document, we need to specify it

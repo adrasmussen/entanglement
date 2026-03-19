@@ -16,10 +16,13 @@ use api::{
 pub mod mariadb;
 pub use mariadb::MariaDBBackend;
 
+pub mod postgres;
+pub use postgres::PostgresBackend;
+
 // these are the database RPC calls that any backend server must be able to process
 #[async_trait]
 pub trait DbBackend: Send + Sync + 'static {
-    fn new(config: Arc<ESConfig>) -> Result<Self>
+    async fn new(config: Arc<ESConfig>) -> Result<Self>
     where
         Self: Sized;
 

@@ -92,7 +92,7 @@ impl EntanglementService for HttpService {
         info!("starting http service");
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(HttpEndpoint::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(HttpEndpoint::new(self.config.clone(), registry.clone()).await?);
 
         // if we wanted to support more socket types, we could spawn several listeners since they
         // don't have any relevant state and the message handlers are all fully concurrent
@@ -149,7 +149,7 @@ pub struct HttpEndpoint {
 
 #[async_trait]
 impl ESInner for HttpEndpoint {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
         Ok(HttpEndpoint {
             config: config.clone(),
             registry: registry.clone(),
