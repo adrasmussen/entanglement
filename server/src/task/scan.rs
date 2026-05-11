@@ -148,7 +148,7 @@ pub async fn scan_library(
                         }
                     }
                 }
-                .instrument(span!(Level::INFO, "register_media", path = ?path))
+                .instrument(span!(Level::INFO, "register_media", ?path))
             });
         }
     }
@@ -179,8 +179,6 @@ pub async fn scan_library(
             return Err(anyhow::Error::msg("database esm channel dropped"));
         };
 
-        // we allow this to be configurable so that we don't swamp the media server when registering
-        // a large collection of media
         while tasks.len() > config.task.scan_threads {
             tasks.join_next().await;
         }

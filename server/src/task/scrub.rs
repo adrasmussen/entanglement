@@ -73,6 +73,7 @@ pub async fn cache_scrub(config: Arc<ESConfig>, registry: ESMRegistry) -> Result
     Ok(warnings)
 }
 
+#[instrument(skip_all)]
 async fn remove_path(path: &Path, metadata: &Metadata) -> Result<()> {
     if metadata.is_file() || metadata.is_symlink() {
         remove_file(path).await?

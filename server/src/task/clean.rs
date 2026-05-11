@@ -122,7 +122,11 @@ pub async fn clean_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid.to_string()))
+            .instrument(span!(
+                Level::INFO,
+                "clean_media",
+                %media_uuid
+            ))
         });
     }
 
@@ -136,7 +140,7 @@ pub async fn clean_library(
     Ok(warnings)
 }
 
-#[instrument(skip(context))]
+#[instrument(skip_all)]
 async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Result<()> {
     let config = context.config.clone();
     let db_svc_sender = context.db_svc_sender.clone();
@@ -235,7 +239,9 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     }
 
     if regen {
-        remove_file(&thumbnail_path).await?;
+        if try_exists(&thumbnail_path).await? {
+            remove_file(&thumbnail_path).await?
+        };
 
         let scratch_dir = context.scratch_base.join(media_uuid.to_string());
 

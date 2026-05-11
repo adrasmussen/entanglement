@@ -453,6 +453,7 @@ impl Drop for ScanFile {
 }
 
 impl ScanFile {
+    #[instrument(skip_all)]
     pub async fn from_path(
         context: Arc<ScanContext>,
         path: PathBuf,
@@ -524,6 +525,7 @@ impl ScanFile {
 
     // in certain scenarios, we have to create a new media record for a file already
     // linked to another database record, and so we avoid recalculating hashes
+    #[instrument(skip_all)]
     async fn from_known(context: Arc<ScanContext>, known: KnownFile) -> Result<Self> {
         let path = PathBuf::from(&known.path);
         let metadata = metadata(&path).await?;
