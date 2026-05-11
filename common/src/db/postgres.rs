@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -8,23 +8,29 @@ use anyhow::Result;
 use async_trait::async_trait;
 use bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
-use postgres::NoTls;
+use rustls::{ClientConfig, RootCertStore};
+use rustls_native_certs::load_native_certs;
 use serde::{Deserialize, Serialize};
+use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::{debug, error, info, instrument};
+use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
     db::{DbBackend, MediaByCHash, MediaByPath},
 };
 use api::{
+    UuidSource,
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
-    fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
     search::SearchFilter,
-    unfold_set,
 };
+
+fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
+    set.into_iter().map(|s| (s, None)).collect()
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PostgresConfig {
@@ -32,8 +38,10 @@ pub struct PostgresConfig {
 }
 
 pub struct PostgresBackend {
-    pool: Pool<PostgresConnectionManager<NoTls>>,
+    pool: Pool<PostgresConnectionManager<MakeRustlsConnect>>,
 }
+
+impl UuidSource for PostgresBackend {}
 
 #[async_trait]
 impl DbBackend for PostgresBackend {
@@ -46,8 +54,19 @@ impl DbBackend for PostgresBackend {
             .expect("postgres config not present")
             .url;
 
-        // TODO -- YesTls
-        let manager = PostgresConnectionManager::new_from_stringlike(url, NoTls {})?;
+        let mut root_store = RootCertStore::empty();
+
+        for cert in load_native_certs().certs {
+            root_store.add(cert)?;
+        }
+
+        let tls_config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let tls = MakeRustlsConnect::new(tls_config);
+
+        let manager = PostgresConnectionManager::new_from_stringlike(url, tls)?;
 
         let pool = Pool::builder().build(manager).await?;
 
@@ -80,7 +99,7 @@ impl DbBackend for PostgresBackend {
         ";
 
         let data = conn
-            .query_scalar::<String, str>(statement, &[&media_uuid.to_string()])
+            .query_scalar::<String, str>(statement, &[&media_uuid])
             .await?
             .into_iter()
             .collect();
@@ -99,14 +118,33 @@ impl DbBackend for PostgresBackend {
 
         let statement = r"-- add_media
             INSERT INTO media (media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type)
-            VALUES (UUID7(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES (uuidv7(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             ON CONFLICT (library_uuid, path) DO NOTHING
             RETURNING media_uuid
         ";
 
-        //let data = conn.query_one_scalar(statement, &[&(media.library_uuid as i64), &media.path, &media.size, &media.chash, &media.phash, &media.mtime, &media.hidden, &media.date, &media.note, &media.tags, &media.metadata]).await?;
+        let media_uuid: MediaUuid = conn
+            .query_one_scalar(
+                statement,
+                &[
+                    &media.library_uuid,
+                    &media.path,
+                    &(media.size as i64),
+                    &media.chash,
+                    &media.phash,
+                    &(media.mtime as i64),
+                    &media.hidden,
+                    &media.date,
+                    &media.note,
+                    &set_to_hstore(media.tags),
+                    &media.metadata,
+                ],
+            )
+            .await?;
 
-        todo!()
+        debug!({ media_path = media.path, %media_uuid }, "added media");
+
+        Ok(media_uuid)
     }
 
     async fn get_media(
@@ -164,8 +202,33 @@ impl DbBackend for PostgresBackend {
     }
 
     // comment functions
+    #[instrument(skip(self, comment))]
     async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
-        todo!()
+        debug!({ media_uuid = %comment.media_uuid }, "adding comment");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- add_comment
+            INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
+            VALUES (uuidv7(), $1, $2, $3, $4)
+            RETURNING comment_uuid
+        "#;
+
+        let comment_uuid: CommentUuid = conn
+            .query_one_scalar(
+                statement,
+                &[
+                    &comment.media_uuid,
+                    &comment.uid,
+                    &(comment.date as i64),
+                    &comment.text,
+                ],
+            )
+            .await?;
+
+            debug!({ media_uuid = %comment.media_uuid, %comment_uuid }, "added comment");
+
+        Ok(comment_uuid)
     }
 
     async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
@@ -185,8 +248,36 @@ impl DbBackend for PostgresBackend {
     }
 
     // collection functions
+    #[instrument(skip(self, collection))]
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid> {
-        todo!()
+        debug!({ collection_name = collection.name }, "adding collection");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r"-- add_collection
+            INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
+            VALUES (uuidv7(), $1, $2, $3, $4, $5, $6)
+            ON CONFLICT (uid, name) DO NOTHING
+            RETURNING media_uuid
+        ";
+
+        let collection_uuid: CollectionUuid = conn
+            .query_one_scalar(
+                statement,
+                &[
+                    &collection.uid,
+                    &collection.gid,
+                    &collection.name,
+                    &collection.note,
+                    &set_to_hstore(collection.tags),
+                    &collection.cover,
+                ],
+            )
+            .await?;
+
+        debug!({ collection_name = collection.name, %collection_uuid }, "added collection");
+
+        Ok(collection_uuid)
     }
 
     async fn get_collection(&self, collection_uuid: CollectionUuid) -> Result<Option<Collection>> {
@@ -209,12 +300,34 @@ impl DbBackend for PostgresBackend {
         todo!()
     }
 
+    #[instrument(skip(self))]
     async fn add_media_to_collection(
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     ) -> Result<()> {
-        todo!()
+        debug!("adding media to collection");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- add_media_to_collection
+            INSERT INTO collection_contents (media_uuid, collection_uuid)
+            VALUES ($1, $2)
+            ON CONFLICT (media_uuid, collection_uuid) DO NOTHING
+            RETURNING id
+
+        "#;
+
+        let data: i64 = conn
+            .query_one_scalar(
+                statement,
+                &[&media_uuid, &collection_uuid],
+            )
+            .await?;
+
+        debug!({ id = data }, "added media to collection");
+
+        Ok(())
     }
 
     async fn rm_media_from_collection(
@@ -243,8 +356,26 @@ impl DbBackend for PostgresBackend {
     }
 
     // library functions
+    #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
-        todo!()
+        debug!({ library_path = library.path }, "adding library");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r"-- add_library
+            INSERT INTO libraries (library_uuid, path, gid, count)
+            VALUES (uuidv7(), $1, $2, $3)
+            ON CONFLICT (path) DO NOTHING
+            RETURNING library_uuid
+        ";
+
+        let library_uuid: LibraryUuid = conn
+            .query_one_scalar(statement, &[&library.path, &library.gid, &library.count])
+            .await?;
+
+        debug!({ library_path = library.path , %library_uuid }, "added library");
+
+        Ok(library_uuid)
     }
 
     async fn get_library(&self, library_uuid: LibraryUuid) -> Result<Option<Library>> {

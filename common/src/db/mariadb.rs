@@ -660,7 +660,7 @@ impl DbBackend for MariaDBBackend {
 
         let mut result = r"
             INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
-            VALUES (UUID_SHORT(), :media_uuid, :uid, date, :text)
+            VALUES (UUID_SHORT(), :media_uuid, :uid, :date, :text)
             RETURNING comment_uuid"
             .with(params! {
                 "media_uuid" => comment.media_uuid.to_u64(),

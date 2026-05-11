@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
+use postgres_types::{ToSql, FromSql};
 
 use crate::{
     collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
@@ -25,7 +26,7 @@ pub struct Media {
     pub metadata: MediaMetadata,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, FromSql, PartialEq, Serialize, strum::Display, strum::EnumString, ToSql)]
 pub enum MediaMetadata {
     Image,
     Video,

@@ -51,12 +51,21 @@ pub trait UuidSource {}
 macro_rules! uuid_newtype {
     ($name:tt) => {
         pastey::paste!{
-            #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize)]
+            #[derive(Clone, Copy, Debug, Deserialize, Eq, postgres_types::FromSql, Hash, PartialEq, PartialOrd, Ord, Serialize, postgres_types::ToSql)]
+            #[postgres(transparent)]
             pub struct [<$name Uuid>](uuid::Uuid);
 
             impl [<$name Uuid>]{
                 pub fn try_parse<S: $crate::UuidSource>(_src: &S, input: &str) -> Result<Self, uuid::Error> {
                     Ok(Self(uuid::Uuid::try_parse(input)?))
+                }
+
+                pub fn from_value<S: $crate::UuidSource>(_src: &S, input: uuid::Uuid) -> Self {
+                    Self(input)
+                }
+
+                pub fn value(&self) -> uuid::Uuid {
+                    self.0
                 }
 
                 // TODO -- remove

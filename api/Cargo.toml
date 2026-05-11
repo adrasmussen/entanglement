@@ -8,6 +8,8 @@ license = { workspace = true }
 anyhow = { workspace =  true }
 gloo-net = { workspace =  true }
 pastey = { workspace =  true }
+postgres-types = { workspace =  true }
 regex = { workspace =  true }
 serde = { workspace =  true }
+strum = { workspace =  true }
 uuid = { workspace = true }

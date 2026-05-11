@@ -10,7 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 anyhow = "1.0.86"
 async_cell = "0.2.2"
-async-trait = "0.1.80"
+async-trait = "0.1.89"
 axum = "0.8.4"
 axum-macros = "0.5.0"
 bb8 = "0.9.1"
@@ -47,19 +47,23 @@ libgssapi = "0.9.1"
 mime_guess = "2.0.5"
 mysql_async = "0.36.1"
 pastey = "0.2.2"
-postgres = { version = "0.19.12", features = ["array-impls"] }
+postgres-types = { version = "0.2.13", features = ["derive"] }
 rand = "0.10.1"
 regex = "1.11.1"
 ringbuffer = "0.16.0"
 rocksdb = "0.24.0"
 rustls = { version = "0.23.34", features = ["aws-lc-rs"] }
+rustls-native-certs = "0.8.3"
 rustls-pki-types = "1.11.0"
 rustls-webpki = { version = "0.103.7", features = ["aws-lc-rs"] }
 saphyr = "0.0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.117"
 sha2 = "0.11.0"
+strum = { version = "0.28.0", features = ["derive"] }
 tokio = { version = "1.37.0", features = ["full", "tracing"] }
+tokio-postgres = { version = "0.7.17", features = ["with-uuid-1"] }
+tokio-postgres-rustls = "0.13.0"
 tokio-rustls = { version = "0.26.2", features = ["aws-lc-rs"] }
 tokio-stream = { version = "0.1.17", features = ["full"] }
 tokio-util = "0.7.11"

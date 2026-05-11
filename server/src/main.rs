@@ -56,6 +56,8 @@ async fn main() -> anyhow::Result<()> {
 
     info!("starting core services");
 
+    // TODO -- build the root cert store into config/world
+
     let registry = ESMRegistry::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);
