@@ -9,4 +9,5 @@ anyhow = { workspace =  true }
 gloo-net = { workspace =  true }
 pastey = { workspace =  true }
 regex = { workspace =  true }
-serde = { workspace =  true, features = ["derive"] }
+serde = { workspace =  true }
+uuid = { workspace = true }

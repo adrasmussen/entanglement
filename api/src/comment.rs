@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid};
+use crate::{http_endpoint, uuid_newtype, media::MediaUuid};
 
-// structs and types
+// structs
 
-pub type CommentUuid = u64;
+uuid_newtype!(Comment);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Comment {

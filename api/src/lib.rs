@@ -39,6 +39,48 @@ pub const SLICE_PATH: &str = "slices";
 // when running behind a reverse proxy, the upstream settings must also match.
 pub const HTTP_URL_ROOT: &str = "entanglement";
 
+// uuids
+pub trait UuidSource {}
+
+#[macro_export]
+macro_rules! uuid_newtype {
+    ($name:tt) => {
+        pastey::paste!{
+            #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize)]
+            pub struct [<$name Uuid>](uuid::Uuid);
+
+            impl [<$name Uuid>]{
+                pub fn try_parse<S: $crate::UuidSource>(_src: &S, input: &str) -> Result<Self, uuid::Error> {
+                    Ok(Self(uuid::Uuid::try_parse(input)?))
+                }
+
+                // TODO -- remove
+                pub fn from_u64<S: $crate::UuidSource>(_src: &S, input: u64) -> Self {
+                    Self(uuid::Uuid::from_u64_pair(0, input))
+                }
+
+                pub fn to_u64(&self) -> u64 {
+                    self.0.as_u64_pair().1
+                }
+            }
+
+            // impl std::ops::Deref for [<$name Uuid>] {
+            //     type Target = uuid::Uuid;
+
+            //     fn deref(&self) -> &Self::Target {
+            //         &self.0
+            //     }
+            // }
+
+            impl std::fmt::Display for [<$name Uuid>] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
+        }
+    };
+}
+
 // set folding
 //
 // some databases do not support a column type of set/vec/list, so we need a consistent

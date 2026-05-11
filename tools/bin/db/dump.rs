@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use api::{collection::CollectionUuid, comment::CommentUuid, media::Media};
@@ -9,6 +9,8 @@ use common::{
     config::ESConfig,
     db::{DbBackend, MariaDBBackend},
 };
+
+const LIBRARY_PREFIX: &str = "library_";
 
 #[derive(Serialize, Deserialize)]
 struct MediaRecord {
@@ -41,7 +43,7 @@ pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
             .ok_or_else(|| anyhow::Error::msg("missing library"))?;
 
         rdb.put(
-            format!("library_{library_uuid}"),
+            format!("{LIBRARY_PREFIX}{library_uuid}"),
             serde_json::to_vec(&library)?,
         )?;
     }
@@ -77,7 +79,6 @@ pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
     }
 
     // media
-
     let media_uuids = db.get_media_uuids().await?;
 
     for media_uuid in media_uuids.into_iter() {
@@ -99,5 +100,33 @@ pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
 }
 
 pub async fn undump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
+    let db: Box<dyn DbBackend> = match config.db_backend {
+        common::config::DbBackend::MariaDB => {
+            let backend = MariaDBBackend::new(config).await?;
+            Box::new(backend)
+        }
+        _ => todo!(),
+    };
+
+    let mut opts = rocksdb::Options::default();
+    opts.create_if_missing(true);
+
+    let rdb = DB::open(&opts, &filename)?;
+
+    // libraries
+    let mut library_map = HashMap::new();
+
+    let library_iter = rdb.prefix_iterator(LIBRARY_PREFIX);
+
+    for item in library_iter {
+        let (key, value) = item?;
+
+        let library_uuid = db.add_library(serde_json::from_slice(&value)?).await?;
+
+        library_map
+            .insert(library_uuid, key)
+            .ok_or_else(|| anyhow::Error::msg("duplicate library_uuid"))?;
+    }
+
     todo!()
 }

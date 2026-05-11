@@ -2,11 +2,11 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid, search::SearchFilter};
+use crate::{http_endpoint, uuid_newtype, media::MediaUuid, search::SearchFilter};
 
-// structs and types
+// structs
 
-pub type CollectionUuid = u64;
+uuid_newtype!(Collection);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Collection {
@@ -108,7 +108,7 @@ pub struct RmMediaFromCollectionResp {}
 // defaults to ""
 http_endpoint!(SearchCollections);
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
     pub filter: SearchFilter,
 }
@@ -121,7 +121,7 @@ pub struct SearchCollectionsResp {
 // search media inside a particular collection
 http_endpoint!(SearchMediaInCollection);
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionReq {
     pub collection_uuid: CollectionUuid,
     pub filter: SearchFilter,

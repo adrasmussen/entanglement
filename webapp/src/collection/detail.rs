@@ -16,11 +16,7 @@ use crate::{
     },
 };
 use api::{
-    collection::*,
-    fold_set,
-    media::MediaUuid,
-    search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
-    sort::SortMethod,
+    UuidSource, collection::*, fold_set, media::MediaUuid, search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort}, sort::SortMethod
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -72,11 +68,13 @@ struct CollectionInnerProps {
     collection_uuid: String,
 }
 
+impl UuidSource for CollectionInnerProps {}
+
 #[component]
 fn CollectionInner(props: CollectionInnerProps) -> Element {
     let update_signal = props.update_signal;
 
-    let collection_uuid = props.collection_uuid.parse::<CollectionUuid>().show(|_| {
+    let collection_uuid = CollectionUuid::try_parse(&props, &props.collection_uuid).show(|_| {
         let message = "The collection_uuid could not be parsed".to_string();
         rsx! {
             CollectionError { message }

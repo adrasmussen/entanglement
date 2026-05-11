@@ -19,6 +19,8 @@ use crate::{auth::AuthzProvider, config::ESConfig};
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct LdapConfig {
     // url in normal ldap form ldaps://host:port
+    //
+    // TODO -- use a Url and make gssapi fqdn optional
     pub url: String,
     // cert used to verify server connection
     pub ca_cert: PathBuf,
@@ -101,7 +103,6 @@ impl AuthzProvider for LdapAuthz {
 
         ldap3::drive!(conn);
 
-        // TODO -- the gssapi bind uses blocking calls
         match &self.config.auth {
             LdapClientAuth::X509Cert { .. } => ldap.sasl_external_bind().await?,
             LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,

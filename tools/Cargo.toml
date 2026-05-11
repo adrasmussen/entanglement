@@ -25,13 +25,13 @@ api = { path = "../api" }
 common = { path = "../common" }
 
 anyhow = { workspace = true }
-axum = { workspace =  true }
+axum = { workspace = true }
 clap = { workspace = true }
-futures = { workspace =  true }
-futures-util = { workspace =  true }
-hyper = { workspace =  true }
-hyper-rustls = { workspace =  true }
-hyper-util = { workspace =  true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+hyper = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
 libgssapi = { workspace = true }
 rocksdb = { workspace = true }
 rustls = { workspace = true }
@@ -40,8 +40,9 @@ rustls-webpki = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
-tokio-rustls = { workspace =  true }
-tokio-util = { workspace =  true }
-tower = { workspace =  true }
-tower-http = { workspace =  true }
-x509-certificate = { workspace =  true }
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+uuid = { workspace = true }
+x509-certificate = { workspace = true }

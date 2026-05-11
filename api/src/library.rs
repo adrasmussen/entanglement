@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid, search::SearchFilter};
+use crate::{http_endpoint, media::MediaUuid, search::SearchFilter, uuid_newtype};
 
-// structs and types
-
-pub type LibraryUuid = u64;
+// structs
+uuid_newtype!(Library);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Library {
