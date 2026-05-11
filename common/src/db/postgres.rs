@@ -80,7 +80,7 @@ impl DbBackend for PostgresBackend {
         ";
 
         let data = conn
-            .query_scalar::<String, str>(statement, &[&(media_uuid as i64)])
+            .query_scalar::<String, str>(statement, &[&media_uuid.to_string()])
             .await?
             .into_iter()
             .collect();

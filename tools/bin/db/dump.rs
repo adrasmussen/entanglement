@@ -21,10 +21,7 @@ struct MediaRecord {
 
 pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
     let db: Box<dyn DbBackend> = match config.db_backend {
-        common::config::DbBackend::MariaDB => {
-            let backend = MariaDBBackend::new(config).await?;
-            Box::new(backend)
-        }
+        common::config::DbBackend::MariaDB => Box::new(MariaDBBackend::new(config).await?),
         _ => todo!(),
     };
 
@@ -101,10 +98,7 @@ pub async fn dump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
 
 pub async fn undump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
     let db: Box<dyn DbBackend> = match config.db_backend {
-        common::config::DbBackend::MariaDB => {
-            let backend = MariaDBBackend::new(config).await?;
-            Box::new(backend)
-        }
+        common::config::DbBackend::MariaDB => Box::new(MariaDBBackend::new(config).await?),
         _ => todo!(),
     };
 

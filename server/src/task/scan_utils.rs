@@ -253,7 +253,7 @@ impl ScanContext {
         media_uuid: MediaUuid,
         mut files: Vec<KnownFile>,
     ) -> Result<()> {
-        debug!({media_uuid, file_count = files.len()}, "resolving duplicates");
+        debug!({%media_uuid, file_count = files.len()}, "resolving duplicates");
 
         let context = self.clone();
 
@@ -282,7 +282,7 @@ impl ScanContext {
             // this corresponds to the trivial update, i.e. touched mtime
             for file in files.iter() {
                 if media.chash == file.hash && media.path == file.path {
-                    debug!({media_uuid, path = file.path}, "matched original file");
+                    debug!({%media_uuid, path = file.path}, "matched original file");
                     return Ok(file.clone());
                 }
             }
@@ -301,7 +301,7 @@ impl ScanContext {
             }
 
             if let Some(file) = real {
-                debug!({media_uuid, path = file.path}, "matched oldest moved file");
+                debug!({%media_uuid, path = file.path}, "matched oldest moved file");
                 return Ok(file.clone());
             }
 
@@ -311,7 +311,7 @@ impl ScanContext {
             // this corresponds to mutating the original file
             for file in files.iter() {
                 if media.path == file.path {
-                    debug!({media_uuid, path = file.path}, "matched original path");
+                    debug!({%media_uuid, path = file.path}, "matched original path");
                     return Ok(file.clone());
                 }
             }
@@ -344,7 +344,7 @@ impl ScanContext {
             .collect::<Vec<_>>()
             .pop()
         {
-            debug!({ media_uuid }, "updating media record");
+            debug!({ %media_uuid }, "updating media record");
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             context
@@ -388,7 +388,7 @@ impl ScanContext {
             //
             // in that case, we simply add the clone tag and leave it, as there is no programatic
             // way to determine if the new record is newer or older than the original record
-            debug!({media_uuid, path = real_file.path}, "updating original path after matching moved hash");
+            debug!({%media_uuid, path = real_file.path}, "updating original path after matching moved hash");
 
             let new_uuid = match context.get_media_by_chash(&file.hash).await? {
                 Some(media) => media.media_uuid,
@@ -491,7 +491,7 @@ impl ScanFile {
             if media.mtime >= mtime {
                 return Ok(FileStatus::Skip);
             } else {
-                debug!({media_uuid = media.media_uuid, path = pathstr}, "known media found via path");
+                debug!({media_uuid = %media.media_uuid, path = pathstr}, "known media found via path");
 
                 return Ok(FileStatus::Exists(KnownFile {
                     media_uuid: media.media_uuid,
@@ -557,7 +557,7 @@ impl ScanFile {
         let exists = self.context.get_media_by_chash(&self.hash).await?;
 
         if let Some(media) = exists {
-            debug!({media_uuid = media.media_uuid, path = media.path}, "known media found via hash");
+            debug!({media_uuid = %media.media_uuid, path = media.path}, "known media found via hash");
 
             self.context.known_files.insert(KnownFile {
                 media_uuid: media.media_uuid,

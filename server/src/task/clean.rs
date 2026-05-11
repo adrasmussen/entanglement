@@ -122,7 +122,7 @@ pub async fn clean_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid))
+            .instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid.to_string()))
         });
     }
 

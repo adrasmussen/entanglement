@@ -21,7 +21,7 @@ use crate::{
     service::{ESMRegistry, ServiceType},
     task::scan_utils::get_path_and_metadata,
 };
-use api::{LINK_PATH, THUMBNAIL_PATH, media::MediaUuid};
+use api::{LINK_PATH, THUMBNAIL_PATH, UuidSource, media::MediaUuid};
 use common::config::ESConfig;
 
 #[instrument(skip_all)]
@@ -87,8 +87,12 @@ async fn remove_path(path: &Path, metadata: &Metadata) -> Result<()> {
     Ok(())
 }
 
+struct PathUuidParser;
+
+impl UuidSource for PathUuidParser {}
+
 fn valid_uuid(path: &Path, media_uuids: &HashSet<MediaUuid>) -> bool {
-    match path.file_name().map(|s| s.to_string_lossy().parse::<u64>()) {
+    match path.file_name().map(|s| MediaUuid::try_parse(&PathUuidParser, &s.to_string_lossy())) {
         Some(Ok(v)) => media_uuids.contains(&v),
         _ => false,
     }

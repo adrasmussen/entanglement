@@ -200,7 +200,7 @@ pub async fn scan_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "dedup_media", media_uuid)),
+            .instrument(span!(Level::INFO, "dedup_media", %media_uuid)),
         );
     }
 

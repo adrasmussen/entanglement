@@ -40,6 +40,11 @@ pub const SLICE_PATH: &str = "slices";
 pub const HTTP_URL_ROOT: &str = "entanglement";
 
 // uuids
+//
+// newtypes for the various uuids helps guard against confusion, which is especially
+// important when ensuring that we are searching the correct objects.  the trait
+// allows us to constrain the places that uuids are cast from untyped inputs, such as
+// database responses and the ui router
 pub trait UuidSource {}
 
 #[macro_export]
@@ -64,21 +69,13 @@ macro_rules! uuid_newtype {
                 }
             }
 
-            // impl std::ops::Deref for [<$name Uuid>] {
-            //     type Target = uuid::Uuid;
-
-            //     fn deref(&self) -> &Self::Target {
-            //         &self.0
-            //     }
-            // }
-
             impl std::fmt::Display for [<$name Uuid>] {
                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                     write!(f, "{}", self.0)
                 }
             }
         }
-    };
+    }
 }
 
 // set folding
