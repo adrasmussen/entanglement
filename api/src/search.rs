@@ -152,9 +152,9 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("'{s}'")).join(" | ");
+                let ts_query = filter.iter().map(|s| format!("{s}")).join(" | ");
 
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}'")
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
 
             Self::SubstringAll { filter } => {
@@ -162,9 +162,9 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("'{s}'")).join(" & ");
+                let ts_query = filter.iter().map(|s| format!("{s}")).join(" & ");
 
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}'")
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
 
             Self::Fulltext { filter } => {
@@ -172,7 +172,7 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}'")
+                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
             }
 
             // use the fulltext search as keywords, which expects a comma-separated list
@@ -181,9 +181,9 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("'{s}'")).join(" | ");
+                let ts_query = filter.iter().map(|s| format!("{s}")).join(" | ");
 
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}'")
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
         }
     }

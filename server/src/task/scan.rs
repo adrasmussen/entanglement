@@ -1,8 +1,10 @@
 use std::{
-    path::PathBuf, sync::{
+    path::PathBuf,
+    sync::{
         Arc,
         atomic::{AtomicI64, Ordering},
-    }, time::Duration
+    },
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -78,7 +80,7 @@ pub async fn scan_library(
     // after possibly waiting for some of previous tasks to clear up
     if PathBuf::from(&library.path).is_absolute() {
         error!("invalid absolute library path");
-        return Err(anyhow::Error::msg("invalid absolute library path"))
+        return Err(anyhow::Error::msg("invalid absolute library path"));
     }
 
     let library_root = config.fs.media_srcdir.clone().join(library.path);
@@ -124,8 +126,9 @@ pub async fn scan_library(
             tasks.spawn({
                 let context = context.clone();
 
-                let file =
-                    match ScanFile::from_path(context.clone(), path.clone(), metadata).await? {
+                let file = match ScanFile::from_path(context.clone(), path.clone(), metadata).await
+                {
+                    Ok(ok) => match ok {
                         FileStatus::Register(v) => v,
                         FileStatus::Exists(file) => {
                             context.known_files.insert(file);
@@ -136,7 +139,13 @@ pub async fn scan_library(
                             continue;
                         }
                         FileStatus::Unknown => continue,
-                    };
+                    },
+                    Err(err) => {
+                        warn!("scan error: {err:?}");
+                        context.warnings.fetch_add(1, Ordering::Relaxed);
+                        continue
+                    }
+                };
 
                 async move {
                     match timeout(scan_timeout, file.register())

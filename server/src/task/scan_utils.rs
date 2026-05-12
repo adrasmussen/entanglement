@@ -477,7 +477,7 @@ impl ScanFile {
         let mtype = match get_mtype(&path) {
             Ok(v) => v,
             Err(err) => {
-                debug!({ path = pathstr }, "{err}");
+                debug!("{err}");
                 return Ok(FileStatus::Unknown);
             }
         };
@@ -492,9 +492,11 @@ impl ScanFile {
 
         if let Some(media) = current {
             if media.mtime >= mtime {
+                debug!("record up to date");
+
                 return Ok(FileStatus::Skip);
             } else {
-                debug!({media_uuid = %media.media_uuid, path = pathstr}, "known media found via path");
+                debug!({media_uuid = %media.media_uuid}, "known media found via path");
 
                 return Ok(FileStatus::Exists(KnownFile {
                     media_uuid: media.media_uuid,
@@ -511,7 +513,7 @@ impl ScanFile {
 
         let scratch_dir = create_scratch_dir(context.clone(), &chash).await?;
 
-        debug!({ path = pathstr }, "scanning file");
+        debug!("new file to register");
 
         Ok(FileStatus::Register(ScanFile {
             context,

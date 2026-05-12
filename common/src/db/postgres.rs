@@ -439,7 +439,7 @@ impl DbBackend for PostgresBackend {
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
                 media.hidden = FALSE
-                AND bit_count((SELECT phash FROM media WHERE media_uuid = $2) & media.phash) < $3
+                AND bit_count(('x' || (SELECT phash FROM media WHERE media_uuid = $2))::bit & ('x' || media.phash)::bit) < $3
         "#;
 
         let media = conn
@@ -466,7 +466,7 @@ impl DbBackend for PostgresBackend {
         let conn = self.pool.get().await?;
 
         let statement = r#"-- add_comment
-            INSERT INTO comments (comment_uuid, media_uuid, uid, mtime, text)
+            INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
             VALUES (uuidv7(), $1, $2, $3, $4)
             RETURNING comment_uuid
         "#;
@@ -540,7 +540,7 @@ impl DbBackend for PostgresBackend {
             DELETE FROM comments WHERE comment_uuid = $1
         "#;
 
-        conn.query_one(statement, &[&comment_uuid]).await?;
+        conn.query(statement, &[&comment_uuid]).await?;
 
         Ok(())
     }
@@ -657,7 +657,7 @@ impl DbBackend for PostgresBackend {
             DELETE FROM collections WHERE collection_uuid = $1
         "#;
 
-        conn.query_one(statement, &[&collection_uuid]).await?;
+        conn.query(statement, &[&collection_uuid]).await?;
 
         Ok(())
     }
@@ -677,7 +677,7 @@ impl DbBackend for PostgresBackend {
                 name = COALESCE($1, name),
                 note = COALESCE($2, note),
                 tags = COALESCE($3, tags)
-            WHERE collection_uuid = $5
+            WHERE collection_uuid = $4
         "#;
 
         conn.query(
