@@ -748,4 +748,45 @@ td {
   color: var(--text-primary);
   margin: 0;
 }
+
+/* ── Reusable advanced-tab utilities ── */
+
+/* Light-background info/help box used in advanced sidebar tabs */
+.info-box {
+  padding: var(--space-3);
+  background-color: var(--neutral-50);
+  border-radius: var(--radius-md);
+}
+
+.info-box p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.info-box p + p {
+  margin-top: var(--space-2);
+  color: var(--text-tertiary);
+}
+
+/* Sub-section heading inside sidebar/advanced tabs */
+.tab-section-title {
+  margin-bottom: var(--space-3);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Selection count / summary strip */
+.summary-box {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background-color: var(--neutral-50);
+  border-radius: var(--radius-md);
+}
+
+.summary-box p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
 "#;
