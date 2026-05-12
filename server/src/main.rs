@@ -15,7 +15,7 @@ mod service;
 mod task;
 
 use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH};
-use common::{config::read_config, db::MariaDBBackend};
+use common::{config::read_config, db::PostgresBackend};
 use service::{ESMRegistry, EntanglementService};
 
 #[derive(Parser, Debug)]
@@ -61,7 +61,7 @@ async fn main() -> anyhow::Result<()> {
     let registry = ESMRegistry::new();
 
     let auth_svc = auth::svc::AuthService::create(config.clone(), &registry);
-    let db_svc = db::svc::DbService::<MariaDBBackend>::create(config.clone(), &registry);
+    let db_svc = db::svc::DbService::<PostgresBackend>::create(config.clone(), &registry);
     let http_svc = http::svc::HttpService::create(config.clone(), &registry);
     let task_svc = task::svc::TaskService::create(config.clone(), &registry);
 

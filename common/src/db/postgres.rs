@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::Arc, time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -11,9 +10,9 @@ use bb8_postgres::PostgresConnectionManager;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs::load_native_certs;
 use serde::{Deserialize, Serialize};
+
 use tokio_postgres_rustls::MakeRustlsConnect;
-use tracing::{debug, error, info, instrument};
-use uuid::Uuid;
+use tracing::{debug, info, instrument};
 
 use crate::{
     config::ESConfig,
@@ -24,12 +23,16 @@ use api::{
     collection::{Collection, CollectionUpdate, CollectionUuid},
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
-    media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
+    media::{Media, MediaUpdate, MediaUuid},
     search::SearchFilter,
 };
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
     set.into_iter().map(|s| (s, None)).collect()
+}
+
+fn hstore_to_set(hstore: HashMap<String, Option<String>>) -> HashSet<String> {
+    hstore.into_keys().collect()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -147,33 +150,164 @@ impl DbBackend for PostgresBackend {
         Ok(media_uuid)
     }
 
+    #[instrument(skip(self))]
     async fn get_media(
         &self,
         media_uuid: MediaUuid,
     ) -> Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>> {
-        todo!()
+        debug!("finding media details");
+        let conn = self.pool.get_owned().await?;
+
+        let media_statement = r#"-- get_media
+            SELECT library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = $1
+        "#;
+
+        let media_res = conn.query(media_statement, &[&media_uuid]).await?;
+
+        let media_row = match media_res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        let media = Media {
+            library_uuid: media_row.try_get("library_uuid")?,
+            path: media_row.try_get("path")?,
+            size: media_row.try_get::<&str, i64>("size")? as u64,
+            chash: media_row.try_get("chash")?,
+            phash: media_row.try_get("phash")?,
+            mtime: media_row.try_get::<&str, i64>("mtime")? as u64,
+            hidden: media_row.try_get("hidden")?,
+            date: media_row.try_get("date")?,
+            note: media_row.try_get("note")?,
+            tags: hstore_to_set(media_row.try_get("tags")?),
+            metadata: media_row.try_get("media_type")?,
+        };
+
+        let collection_statement = r#"-- get_media
+            SELECT collection_uuid FROM collection_contents WHERE media_uuid = $1
+        "#;
+
+        let collections = conn
+            .query_scalar(collection_statement, &[&media_uuid])
+            .await?;
+
+        let comment_statement = r#"-- get_media
+            SELECT comment_uuid FROM comments WHERE media_uuid = $1
+        "#;
+
+        let comments = conn.query_scalar(comment_statement, &[&media_uuid]).await?;
+
+        debug!("found media details");
+
+        Ok(Some((media, collections, comments)))
     }
 
+    #[instrument(skip(self))]
     async fn get_media_uuids(&self) -> Result<Vec<MediaUuid>> {
-        todo!()
+        debug!("finding all media uuids");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_media_uuids
+            SELECT media_uuid FROM media
+        "#;
+
+        let media_uuids = conn.query_scalar(statement, &[]).await?;
+
+        debug!({ count = media_uuids.len() }, "found media");
+
+        Ok(media_uuids)
     }
 
+    #[instrument(skip(self))]
     async fn get_media_by_path(&self, path: String) -> Result<Option<MediaByPath>> {
-        todo!()
+        debug!("finding media by path");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_media_by_path
+            SELECT media_uuid, chash, mtime FROM media WHERE path = $1
+        "#;
+
+        let res = conn.query(statement, &[&path]).await?;
+
+        let row = match res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        debug!("found media");
+
+        Ok(Some(MediaByPath {
+            media_uuid: row.try_get("media_uuid")?,
+            hash: row.try_get("chash")?,
+            mtime: row.try_get::<&str, i64>("mtime")? as u64,
+        }))
     }
 
+    #[instrument(skip(self))]
     async fn get_media_by_chash(
         &self,
         library_uuid: LibraryUuid,
         chash: String,
     ) -> Result<Option<MediaByCHash>> {
-        todo!()
+        debug!("finding media by content hash");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_media_by_chash
+            SELECT media_uuid, path, mtime FROM media WHERE library_uuid = $1 AND chash = $2
+        "#;
+
+        let res = conn.query(statement, &[&library_uuid, &chash]).await?;
+
+        let row = match res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        debug!("found media");
+
+        Ok(Some(MediaByCHash {
+            media_uuid: row.try_get("media_uuid")?,
+            path: row.try_get("path")?,
+            mtime: row.try_get::<&str, i64>("mtime")? as u64,
+        }))
     }
 
+    #[instrument(skip(self, update))]
     async fn update_media(&self, media_uuid: MediaUuid, update: MediaUpdate) -> Result<()> {
-        todo!()
+        debug!("updating media details");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- update_media
+            UPDATE media SET
+                hidden = COALESCE($1, hidden),
+                date = COALESCE($2, date),
+                note = COALESCE($3, note),
+                tags = COALESCE($4, tags)
+            WHERE media_uuid = $5
+        "#;
+
+        conn.query_one(
+            statement,
+            &[
+                &update.hidden,
+                &update.date,
+                &update.note,
+                &update.tags.map(set_to_hstore),
+                &media_uuid,
+            ],
+        )
+        .await?;
+
+        debug!("updated media");
+
+        Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn replace_media_path(
         &self,
         media_uuid: MediaUuid,
@@ -181,24 +315,147 @@ impl DbBackend for PostgresBackend {
         hash: String,
         mtime: u64,
     ) -> Result<()> {
-        todo!()
+        debug!("replacing media path");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- replace_media_path
+            UPDATE media SET path = $1, chash = $2, mtime = $3 WHERE media_uuid = $4
+        "#;
+
+        conn.query_one(statement, &[&path, &hash, &(mtime as i64), &media_uuid])
+            .await?;
+
+        debug!("replaced media path");
+
+        Ok(())
     }
 
+    #[instrument(skip(self, filter))]
     async fn search_media(
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
-        todo!()
+        debug!("searching for media");
+
+        let conn = self.pool.get().await?;
+
+        let ts_search_sql = filter.format_postgres("media.ts_vec");
+
+        // for a given uid and filter, find all media that match either:
+        //  * is in a library owned by a group containing the uid
+        //  * if the media is not hidden, is in an collection owned
+        //    by a group containing the uid
+
+        let mut statement = r#"-- search_media
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                gid = ANY($1)
+                        ) AS t1
+                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
+                    UNION
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                library_uuid
+                            FROM
+                                libraries
+                            WHERE
+                                gid = ANY($1)
+                        ) AS t2
+                        INNER JOIN media ON t2.library_uuid = media.library_uuid
+                ) AS t3
+                INNER JOIN media ON t3.media_uuid = media.media_uuid
+            WHERE
+                media.hidden = FALSE"#.to_owned();
+
+        statement.push_str(&ts_search_sql);
+
+        let media = conn
+            .query_scalar(&statement, &[&gid.into_iter().collect::<Vec<String>>()])
+            .await?;
+
+        debug!({ count = media.len() }, "found media");
+
+        Ok(media)
     }
 
+    #[instrument(skip(self))]
     async fn similar_media(
         &self,
         gid: HashSet<String>,
         media_uuid: MediaUuid,
         distance: i64,
     ) -> Result<Vec<MediaUuid>> {
-        todo!()
+        debug!("searching for similar media");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- similar_media
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                gid = ANY($1)
+                        ) AS t1
+                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
+                    UNION
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                library_uuid
+                            FROM
+                                libraries
+                            WHERE
+                                gid = ANY($1)
+                        ) AS t2
+                        INNER JOIN media ON t2.library_uuid = media.library_uuid
+                ) AS t3
+                INNER JOIN media ON t3.media_uuid = media.media_uuid
+            WHERE
+                media.hidden = FALSE
+                AND bit_count((SELECT phash FROM media WHERE media_uuid = $2) & media.phash) < $3
+        "#;
+
+        let media = conn
+            .query_scalar(
+                statement,
+                &[
+                    &gid.into_iter().collect::<Vec<String>>(),
+                    &media_uuid,
+                    &distance,
+                ],
+            )
+            .await?;
+
+        debug!({ count = media.len() }, "found similar media");
+
+        Ok(media)
     }
 
     // comment functions
@@ -209,7 +466,7 @@ impl DbBackend for PostgresBackend {
         let conn = self.pool.get().await?;
 
         let statement = r#"-- add_comment
-            INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
+            INSERT INTO comments (comment_uuid, media_uuid, uid, mtime, text)
             VALUES (uuidv7(), $1, $2, $3, $4)
             RETURNING comment_uuid
         "#;
@@ -220,31 +477,95 @@ impl DbBackend for PostgresBackend {
                 &[
                     &comment.media_uuid,
                     &comment.uid,
-                    &(comment.date as i64),
+                    &(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64),
                     &comment.text,
                 ],
             )
             .await?;
 
-            debug!({ media_uuid = %comment.media_uuid, %comment_uuid }, "added comment");
+        debug!({ media_uuid = %comment.media_uuid, %comment_uuid }, "added comment");
 
         Ok(comment_uuid)
     }
 
+    #[instrument(skip(self))]
     async fn get_comment(&self, comment_uuid: CommentUuid) -> Result<Option<Comment>> {
-        todo!()
+        debug!("finding comment");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_comment
+            SELECT media_uuid, uid, date, text FROM comments WHERE comment_uuid = $1
+        "#;
+
+        let res = conn.query(statement, &[&comment_uuid]).await?;
+
+        let row = match res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        Ok(Some(Comment {
+            media_uuid: row.try_get("media_uuid")?,
+            uid: row.try_get("uid")?,
+            date: row.try_get::<&str, i64>("date")? as u64,
+            text: row.try_get("text")?,
+        }))
     }
 
+    #[instrument(skip(self))]
     async fn get_comment_uuids(&self) -> Result<Vec<CommentUuid>> {
-        todo!()
+        debug!("finding all comment uuids");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_comment_uuids
+            SELECT comment_uuid from comments
+        "#;
+
+        let comment_uuids = conn.query_scalar(statement, &[]).await?;
+
+        debug!({ count = comment_uuids.len() }, "found comments");
+
+        Ok(comment_uuids)
     }
 
+    #[instrument(skip(self))]
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
-        todo!()
+        debug!("deleting comment");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- delete_comment
+            DELETE FROM comments WHERE comment_uuid = $1
+        "#;
+
+        conn.query_one(statement, &[&comment_uuid]).await?;
+
+        Ok(())
     }
 
-    async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
-        todo!()
+    #[instrument(skip(self, update))]
+    async fn update_comment(
+        &self,
+        comment_uuid: CommentUuid,
+        update: Option<String>,
+    ) -> Result<()> {
+        debug!("updating comment");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- update_comment
+            UPDATE comments SET
+                text = COALESCE($1, text)
+            WHERE comment_uuid = $2
+        "#;
+
+        conn.query_one(statement, &[&update, &comment_uuid]).await?;
+
+        debug!("updated comment");
+
+        Ok(())
     }
 
     // collection functions
@@ -258,7 +579,7 @@ impl DbBackend for PostgresBackend {
             INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
             VALUES (uuidv7(), $1, $2, $3, $4, $5, $6)
             ON CONFLICT (uid, name) DO NOTHING
-            RETURNING media_uuid
+            RETURNING collection_uuid
         ";
 
         let collection_uuid: CollectionUuid = conn
@@ -280,24 +601,99 @@ impl DbBackend for PostgresBackend {
         Ok(collection_uuid)
     }
 
+    #[instrument(skip(self))]
     async fn get_collection(&self, collection_uuid: CollectionUuid) -> Result<Option<Collection>> {
-        todo!()
+        debug!("finding collection");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_collection
+            SELECT uid, gid, name, note, tags, cover FROM collections WHERE collection_uuid = $1
+        "#;
+
+        let res = conn.query(statement, &[&collection_uuid]).await?;
+
+        let row = match res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        debug!("found collection");
+
+        Ok(Some(Collection {
+            uid: row.try_get("uid")?,
+            gid: row.try_get("gid")?,
+            name: row.try_get("name")?,
+            note: row.try_get("note")?,
+            tags: hstore_to_set(row.try_get("tags")?),
+            cover: row.try_get("cover")?,
+        }))
     }
 
+    #[instrument(skip(self))]
     async fn get_collection_uuids(&self) -> Result<Vec<CollectionUuid>> {
-        todo!()
+        debug!("finding all collection uuids");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_collection_uuids
+            SELECT collection_uuid from collections
+        "#;
+
+        let collection_uuids = conn.query_scalar(statement, &[]).await?;
+
+        debug!({ count = collection_uuids.len() }, "found collections");
+
+        Ok(collection_uuids)
     }
 
+    #[instrument(skip(self))]
     async fn delete_collection(&self, collection_uuid: CollectionUuid) -> Result<()> {
-        todo!()
+        debug!("deleting collection");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- delete_collection
+            DELETE FROM collections WHERE collection_uuid = $1
+        "#;
+
+        conn.query_one(statement, &[&collection_uuid]).await?;
+
+        Ok(())
     }
 
+    #[instrument(skip(self, update))]
     async fn update_collection(
         &self,
         collection_uuid: CollectionUuid,
         update: CollectionUpdate,
     ) -> Result<()> {
-        todo!()
+        debug!("updating collection details");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- update_collection
+            UPDATE collections SET
+                name = COALESCE($1, name),
+                note = COALESCE($2, note),
+                tags = COALESCE($3, tags)
+            WHERE collection_uuid = $5
+        "#;
+
+        conn.query_one(
+            statement,
+            &[
+                &update.name,
+                &update.note,
+                &update.tags.map(set_to_hstore),
+                &collection_uuid,
+            ],
+        )
+        .await?;
+
+        debug!("updated collection");
+
+        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -318,41 +714,122 @@ impl DbBackend for PostgresBackend {
 
         "#;
 
-        let data: i64 = conn
-            .query_one_scalar(
-                statement,
-                &[&media_uuid, &collection_uuid],
-            )
+        let id: i64 = conn
+            .query_one_scalar(statement, &[&media_uuid, &collection_uuid])
             .await?;
 
-        debug!({ id = data }, "added media to collection");
+        debug!({ id }, "added media to collection");
 
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn rm_media_from_collection(
         &self,
         media_uuid: MediaUuid,
         collection_uuid: CollectionUuid,
     ) -> Result<()> {
-        todo!()
+        debug!("removing media from collection");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- add_media_to_collection
+            DELETE FROM collection_contents WHERE media_uuid = $1 AND collection_uuid = $2
+        "#;
+
+        conn.query_one(statement, &[&media_uuid, &collection_uuid])
+            .await?;
+
+        debug!("removed media from collection");
+
+        Ok(())
     }
 
+    #[instrument(skip(self, filter))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
         filter: SearchFilter,
     ) -> Result<Vec<CollectionUuid>> {
-        todo!()
+        debug!("searching for collections");
+
+        let conn = self.pool.get().await?;
+
+        let ts_search_sql = filter.format_postgres("collections.ts_vec");
+
+        // for a given uid and filter, find all media that match either:
+        //  * is in a library owned by a group containing the uid
+        //  * if the media is not hidden, is in an collection owned
+        //    by a group containing the uid
+
+        let mut statement = r#"-- search_collections
+            SELECT
+                collection_uuid
+            FROM
+                collections
+            WHERE
+                gid = ANY($1)"#
+            .to_owned();
+
+        statement.push_str(&ts_search_sql);
+
+        let collections = conn
+            .query_scalar(&statement, &[&gid.into_iter().collect::<Vec<String>>()])
+            .await?;
+
+        debug!({ count = collections.len() }, "found collections");
+
+        Ok(collections)
     }
 
+    #[instrument(skip(self, filter))]
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
-        todo!()
+        debug!("searching for media in collection");
+
+        let conn = self.pool.get().await?;
+
+        let ts_search_sql = filter.format_postgres("media.ts_vec");
+
+        let mut statement = r#"-- search_media_in_collection
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                    SELECT
+                        media_uuid
+                    FROM
+                        (
+                            SELECT
+                                collection_uuid
+                            FROM
+                                collections
+                            WHERE
+                                gid = ANY($1) AND collection_uuid = $2
+                        ) AS t2
+                        INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
+                ) AS t3
+                INNER JOIN media ON t3.media_uuid = media.media_uuid
+            WHERE
+                media.hidden = FALSE
+        "#.to_owned();
+
+        statement.push_str(&ts_search_sql);
+
+        let media = conn
+            .query_scalar(
+                &statement,
+                &[&gid.into_iter().collect::<Vec<String>>(), &collection_uuid],
+            )
+            .await?;
+
+        debug!({ count = media.len() }, "found media in collection");
+
+        Ok(media)
     }
 
     // library functions
@@ -378,16 +855,68 @@ impl DbBackend for PostgresBackend {
         Ok(library_uuid)
     }
 
+    #[instrument(skip(self))]
     async fn get_library(&self, library_uuid: LibraryUuid) -> Result<Option<Library>> {
-        todo!()
+        debug!("finding library");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_library
+            SELECT path, uid, gid, count FROM libraries WHERE library_uuid = $1
+        "#;
+
+        let res = conn.query(statement, &[&library_uuid]).await?;
+
+        let row = match res.first() {
+            Some(ok) => ok,
+            None => return Ok(None),
+        };
+
+        debug!("found collection");
+
+        Ok(Some(Library {
+            path: row.try_get("path")?,
+            uid: row.try_get("uid")?,
+            gid: row.try_get("gid")?,
+            count: row.try_get("count")?,
+        }))
     }
 
+    #[instrument(skip(self))]
     async fn get_library_uuids(&self) -> Result<Vec<LibraryUuid>> {
-        todo!()
+        debug!("finding all library uuids");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- get_library_uuids
+            SELECT library_uuid from libraries
+        "#;
+
+        let library_uuids = conn.query_scalar(statement, &[]).await?;
+
+        debug!({ count = library_uuids.len() }, "found libraries");
+
+        Ok(library_uuids)
     }
 
+    #[instrument(skip(self, update))]
     async fn update_library(&self, library_uuid: LibraryUuid, update: LibraryUpdate) -> Result<()> {
-        todo!()
+        debug!("updating library details");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- update_library
+            UPDATE libraries SET
+                count = COALESCE($1, count)
+            WHERE library_uuid = $2
+        "#;
+
+        conn.query_one(statement, &[&update.count, &library_uuid])
+            .await?;
+
+        debug!("updated library");
+
+        Ok(())
     }
 
     async fn search_libraries(
@@ -395,16 +924,75 @@ impl DbBackend for PostgresBackend {
         gid: HashSet<String>,
         filter: String,
     ) -> Result<Vec<LibraryUuid>> {
-        todo!()
+        debug!("searching for libraries");
+
+        let conn = self.pool.get().await?;
+
+        let statement = r#"-- search_libraries
+            SELECT
+                library_uuid
+            FROM
+                libraries
+            WHERE
+                gid = ANY($1) AND path LIKE $2
+        "#;
+
+        let libraries = conn
+            .query_scalar(
+                statement,
+                &[
+                    &gid.into_iter().collect::<Vec<String>>(),
+                    &format!("%{}%", filter),
+                ],
+            )
+            .await?;
+
+        debug!({ count = libraries.len() }, "found libraries");
+
+        Ok(libraries)
     }
 
+    #[instrument(skip(self))]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
-        uuid: LibraryUuid,
+        library_uuid: LibraryUuid,
         hidden: Option<bool>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>> {
-        todo!()
+        debug!("searching for media in library");
+
+        let conn = self.pool.get().await?;
+
+        let ts_search_sql = filter.format_postgres("media.ts_vec");
+
+        let mut statement = r#"-- search_media_in_collection
+            SELECT
+                media.media_uuid
+            FROM
+                (
+                    SELECT
+                        library_uuid
+                    FROM
+                        libraries
+                    WHERE
+                        gid = ANY($1) AND library_uuid = $2
+                ) AS t1
+                INNER JOIN media ON t1.library_uuid = media.library_uuid
+            WHERE
+                media.hidden = $3"#.to_owned();
+
+        statement.push_str(&ts_search_sql);
+
+        let media = conn
+            .query_scalar(
+                &statement,
+                &[&gid.into_iter().collect::<Vec<String>>(), &library_uuid, &hidden.unwrap_or(true)],
+            )
+            .await?;
+
+        debug!({ count = media.len() }, "found media in collection");
+
+        Ok(media)
     }
 }

@@ -745,13 +745,10 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    // TODO -- find a simple way to get the media_uuid so that we can bump the timestamp
-
     #[instrument(skip(self))]
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()> {
         debug!("deleting comment");
 
-        // let _mw = self.locks.media.write().await;
         let _yw = self.locks.comment.write().await;
 
         r"
@@ -771,7 +768,6 @@ impl DbBackend for MariaDBBackend {
     async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()> {
         debug!("updating comment");
 
-        // let _mw = self.locks.media.write().await;
         let _yw = self.locks.comment.write().await;
 
         if let Some(val) = text {

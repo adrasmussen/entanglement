@@ -79,7 +79,7 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()>;
 
-    async fn update_comment(&self, comment_uuid: CommentUuid, text: Option<String>) -> Result<()>;
+    async fn update_comment(&self, comment_uuid: CommentUuid, update: Option<String>) -> Result<()>;
 
     // collection functions
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid>;
@@ -139,7 +139,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
-        uuid: LibraryUuid,
+        library_uuid: LibraryUuid,
         hidden: Option<bool>,
         filter: SearchFilter,
     ) -> Result<Vec<MediaUuid>>;

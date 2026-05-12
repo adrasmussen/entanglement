@@ -27,6 +27,7 @@ pub struct Media {
 }
 
 #[derive(Clone, Debug, Deserialize, FromSql, PartialEq, Serialize, strum::Display, strum::EnumString, ToSql)]
+#[postgres(name = "media_type")]
 pub enum MediaMetadata {
     Image,
     Video,
