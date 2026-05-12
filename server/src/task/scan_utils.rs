@@ -453,12 +453,14 @@ impl Drop for ScanFile {
 }
 
 impl ScanFile {
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(?path))]
     pub async fn from_path(
         context: Arc<ScanContext>,
         path: PathBuf,
         metadata: Metadata,
     ) -> Result<FileStatus> {
+        debug!("scanning file");
+
         let context = context.clone();
 
         if !metadata.is_file() {
@@ -525,8 +527,10 @@ impl ScanFile {
 
     // in certain scenarios, we have to create a new media record for a file already
     // linked to another database record, and so we avoid recalculating hashes
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(path = known.path))]
     async fn from_known(context: Arc<ScanContext>, known: KnownFile) -> Result<Self> {
+        debug!("found known file");
+
         let path = PathBuf::from(&known.path);
         let metadata = metadata(&path).await?;
         let mtype = get_mtype(&path)?;
@@ -545,7 +549,7 @@ impl ScanFile {
         })
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(path = self.pathstr))]
     pub async fn register(&self) -> Result<Option<MediaUuid>> {
         debug!("processing media");
 

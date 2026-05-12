@@ -12,7 +12,7 @@ use tokio::{
     task::{JoinHandle, spawn},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, instrument};
+use tracing::{Instrument, Level, debug, error, info, instrument, span};
 
 use crate::{
     db::msg::DbMsg,
@@ -483,7 +483,7 @@ fn watch_task(
                 Ok(_) => {}
                 Err(err) => error!("failed to send/receive completion message: {err}"),
             }
-        };
+        }.instrument(span!(Level::INFO, "watch_task", start, %library));
 
         spawn(task)
     };

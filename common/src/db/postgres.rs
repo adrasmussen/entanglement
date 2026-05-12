@@ -290,7 +290,7 @@ impl DbBackend for PostgresBackend {
             WHERE media_uuid = $5
         "#;
 
-        conn.query_one(
+        conn.query(
             statement,
             &[
                 &update.hidden,
@@ -561,7 +561,7 @@ impl DbBackend for PostgresBackend {
             WHERE comment_uuid = $2
         "#;
 
-        conn.query_one(statement, &[&update, &comment_uuid]).await?;
+        conn.query(statement, &[&update, &comment_uuid]).await?;
 
         debug!("updated comment");
 
@@ -680,7 +680,7 @@ impl DbBackend for PostgresBackend {
             WHERE collection_uuid = $5
         "#;
 
-        conn.query_one(
+        conn.query(
             statement,
             &[
                 &update.name,
@@ -911,7 +911,7 @@ impl DbBackend for PostgresBackend {
             WHERE library_uuid = $2
         "#;
 
-        conn.query_one(statement, &[&update.count, &library_uuid])
+        conn.query(statement, &[&update.count, &library_uuid])
             .await?;
 
         debug!("updated library");
@@ -980,14 +980,14 @@ impl DbBackend for PostgresBackend {
                 ) AS t1
                 INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                media.hidden = $3"#.to_owned();
+                media.hidden = COALESCE($3, media.hidden)"#.to_owned();
 
         statement.push_str(&ts_search_sql);
 
         let media = conn
             .query_scalar(
                 &statement,
-                &[&gid.into_iter().collect::<Vec<String>>(), &library_uuid, &hidden.unwrap_or(true)],
+                &[&gid.into_iter().collect::<Vec<String>>(), &library_uuid, &hidden],
             )
             .await?;
 

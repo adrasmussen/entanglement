@@ -1,9 +1,8 @@
 use std::{
-    sync::{
+    path::PathBuf, sync::{
         Arc,
         atomic::{AtomicI64, Ordering},
-    },
-    time::Duration,
+    }, time::Duration
 };
 
 use anyhow::Result;
@@ -77,6 +76,12 @@ pub async fn scan_library(
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
+    if PathBuf::from(&library.path).is_absolute() {
+        error!("invalid absolute library path");
+        return Err(anyhow::Error::msg("invalid absolute library path"))
+    }
+
+    let library_root = config.fs.media_srcdir.clone().join(library.path);
 
     //
     // scan phase one
@@ -87,9 +92,9 @@ pub async fn scan_library(
     //
     // everything else is skipped, incrementing the counter if it was a file
     // whose path is known and hasn't been modified
-    info!("library scan phase one: filesystem walk and adding new media");
+    info!({?library_root}, "library scan phase one: filesystem walk and adding new media");
 
-    for entry in WalkDir::new(config.fs.media_srcdir.clone().join(library.path))
+    for entry in WalkDir::new(library_root)
         .same_file_system(true)
         .contents_first(true)
         .into_iter()
@@ -148,7 +153,6 @@ pub async fn scan_library(
                         }
                     }
                 }
-                .instrument(span!(Level::INFO, "register_media", ?path))
             });
         }
     }
