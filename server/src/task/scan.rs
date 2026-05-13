@@ -1,4 +1,5 @@
 use std::{
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicI64, Ordering},
@@ -77,6 +78,12 @@ pub async fn scan_library(
 
     // for each entry in the directory tree, we will launch a new processing task into the joinset
     // after possibly waiting for some of previous tasks to clear up
+    if PathBuf::from(&library.path).is_absolute() {
+        error!("invalid absolute library path");
+        return Err(anyhow::Error::msg("invalid absolute library path"));
+    }
+
+    let library_root = config.fs.media_srcdir.clone().join(library.path);
 
     //
     // scan phase one
@@ -87,9 +94,9 @@ pub async fn scan_library(
     //
     // everything else is skipped, incrementing the counter if it was a file
     // whose path is known and hasn't been modified
-    info!("library scan phase one: filesystem walk and adding new media");
+    info!({?library_root}, "library scan phase one: filesystem walk and adding new media");
 
-    for entry in WalkDir::new(config.fs.media_srcdir.clone().join(library.path))
+    for entry in WalkDir::new(library_root)
         .same_file_system(true)
         .contents_first(true)
         .into_iter()
@@ -119,8 +126,9 @@ pub async fn scan_library(
             tasks.spawn({
                 let context = context.clone();
 
-                let file =
-                    match ScanFile::from_path(context.clone(), path.clone(), metadata).await? {
+                let file = match ScanFile::from_path(context.clone(), path.clone(), metadata).await
+                {
+                    Ok(ok) => match ok {
                         FileStatus::Register(v) => v,
                         FileStatus::Exists(file) => {
                             context.known_files.insert(file);
@@ -131,7 +139,13 @@ pub async fn scan_library(
                             continue;
                         }
                         FileStatus::Unknown => continue,
-                    };
+                    },
+                    Err(err) => {
+                        warn!("scan error: {err:?}");
+                        context.warnings.fetch_add(1, Ordering::Relaxed);
+                        continue
+                    }
+                };
 
                 async move {
                     match timeout(scan_timeout, file.register())
@@ -148,7 +162,6 @@ pub async fn scan_library(
                         }
                     }
                 }
-                .instrument(span!(Level::INFO, "register_media", path = ?path))
             });
         }
     }
@@ -179,8 +192,6 @@ pub async fn scan_library(
             return Err(anyhow::Error::msg("database esm channel dropped"));
         };
 
-        // we allow this to be configurable so that we don't swamp the media server when registering
-        // a large collection of media
         while tasks.len() > config.task.scan_threads {
             tasks.join_next().await;
         }
@@ -200,7 +211,7 @@ pub async fn scan_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "dedup_media", media_uuid)),
+            .instrument(span!(Level::INFO, "dedup_media", %media_uuid)),
         );
     }
 

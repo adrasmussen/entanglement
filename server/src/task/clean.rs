@@ -13,7 +13,7 @@ use tokio::{
     sync::oneshot::channel,
     task::JoinSet,
 };
-use tracing::{Instrument, Level, debug, instrument, span, warn};
+use tracing::{Level, debug, instrument, span, warn};
 
 use crate::{
     db::msg::DbMsg,
@@ -102,7 +102,10 @@ pub async fn clean_library(
     // TODO -- rename or use separate name
     let clean_threads = config.task.scan_threads;
 
-    debug!("library clean beginning database walk");
+    debug!(
+        { count = media_in_library.len() },
+        "library clean beginning database walk"
+    );
 
     for media_uuid in media_in_library {
         while tasks.len() > clean_threads {
@@ -122,7 +125,6 @@ pub async fn clean_library(
                     }
                 }
             }
-            .instrument(span!(Level::INFO, "clean_media", media_uuid = media_uuid))
         });
     }
 
@@ -205,6 +207,8 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
         relink = true;
     }
 
+    debug!({ relink });
+
     if relink {
         match remove_file(&link_path).await {
             Ok(()) => {}
@@ -235,7 +239,9 @@ async fn clean_media(context: Arc<CleanContext>, media_uuid: MediaUuid) -> Resul
     }
 
     if regen {
-        remove_file(&thumbnail_path).await?;
+        if try_exists(&thumbnail_path).await? {
+            remove_file(&thumbnail_path).await?
+        };
 
         let scratch_dir = context.scratch_base.join(media_uuid.to_string());
 

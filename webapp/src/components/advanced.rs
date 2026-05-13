@@ -187,6 +187,14 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
 
     rsx! {
         div { class: "bulk-edit-options",
+            // Header: matches CollectionColorTab's form-group + label + description pattern
+            div { class: "form-group",
+                label { class: "form-label", "Bulk Edit" }
+                p { style: "margin-bottom: var(--space-4); color: var(--text-secondary); font-size: 0.875rem;",
+                    "Select multiple media items and apply changes to all of them at once. Enable bulk edit mode, then click items in the gallery to select them."
+                }
+            }
+
             div {
                 class: "bulk-edit-controls",
                 style: "margin-bottom: var(--space-4);",
@@ -260,23 +268,13 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
                     BulkEditButton { bulk_edit_signal, mode }
                 }
             }
-            div {
-                class: "bulk-edit-instructions",
-                style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                p { style: "margin: 0; color: var(--text-secondary);",
-                    "Click on media items in the gallery to select them. Click again to deselect."
-                }
-                p { style: "margin-top: var(--space-2); color: var(--text-tertiary);",
-                    "Selected items will be highlighted with a blue border."
-                }
+            div { class: "info-box", style: "margin-top: var(--space-4);",
+                p { "Click on media items in the gallery to select them. Click again to deselect." }
+                p { "Selected items will be highlighted with a blue border." }
             }
         } else {
-            div {
-                class: "bulk-edit-disabled",
-                style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                p { style: "margin: 0; color: var(--text-secondary);",
-                    "Enable bulk edit mode to modify many media at the same time."
-                }
+            div { class: "info-box", style: "margin-top: var(--space-4);",
+                p { "Enable bulk edit mode to modify many media at the same time." }
             }
         }
     }
@@ -340,9 +338,7 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
 
             // Add new collection color section
             div { class: "add-collection-color",
-                h4 { style: "margin-bottom: var(--space-3); font-size: 1rem; color: var(--text-primary);",
-                    "Add Collection Color"
-                }
+                h4 { class: "tab-section-title", "Add Collection Color" }
 
                 CompactSearchBar {
                     search_signal: collection_search_signal,
@@ -351,10 +347,8 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
 
                 if let Some(collections) = available_collections {
                     if collections.is_empty() {
-                        div {
-                            class: "empty-state",
-                            style: "padding: var(--space-4); text-align: center; color: var(--text-tertiary); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                            "No more collections available to color. All matching collections are already colored."
+                        div { class: "info-box", style: "text-align: center;",
+                            p { "No more collections available to color. All matching collections are already colored." }
                         }
                     } else {
                         div {
@@ -398,9 +392,7 @@ fn ColoredCollectionList(props: ColoredCollectionListProps) -> Element {
             div {
                 class: "colored-collections-list",
                 style: "margin-bottom: var(--space-6);",
-                h4 { style: "margin-bottom: var(--space-3); font-size: 1rem; color: var(--text-primary);",
-                    "Colored Collections"
-                }
+                h4 { class: "tab-section-title", "Colored Collections" }
                 div { style: "display: flex; flex-direction: column; gap: var(--space-3);",
                     for (collection_uuid , color) in collection_color_signal().iter() {
                         ColoredCollectionItem {

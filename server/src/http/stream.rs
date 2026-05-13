@@ -1,4 +1,7 @@
-use std::{io::SeekFrom, str::FromStr, sync::Arc};
+use std::{
+    io::{ErrorKind, SeekFrom},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use axum::{
@@ -18,13 +21,13 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{BytesCodec, FramedRead};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
     auth::check::AuthCheck,
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
 };
-use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH, media::MediaUuid};
+use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH, UuidSource, media::MediaUuid};
 
 // media stream/download
 //
@@ -34,6 +37,10 @@ use api::{LINK_PATH, SLICE_PATH, THUMBNAIL_PATH, media::MediaUuid};
 // of the http streaming logic (range, mime, etc) that depends on the filesystem
 const READ_BUF_SIZE: usize = 1024 * 1024;
 
+struct StreamUuidParser;
+
+impl UuidSource for StreamUuidParser {}
+
 #[instrument(skip_all)]
 pub(super) async fn stream_media(
     headers: HeaderMap,
@@ -41,14 +48,14 @@ pub(super) async fn stream_media(
     Extension(current_user): Extension<CurrentUser>,
     Path((dir, media_uuid_str)): Path<(String, String)>,
 ) -> Result<Response, AppError> {
-    debug!({ media_uuid_str }, "serving media");
+    debug!({ dir, media_uuid_str }, "serving media");
 
-    // instead of having axum parse the u64, we avoid an allocation by doing a
+    // instead of having axum parse the uuid, we avoid an allocation by doing a
     // conversion here
     //
     // this has the benefit of checking the input string for validity; e.g. no
     // path separators
-    let media_uuid: MediaUuid = match u64::from_str(&media_uuid_str) {
+    let media_uuid = match MediaUuid::try_parse(&StreamUuidParser, &media_uuid_str) {
         Ok(v) => v,
         Err(_) => return Ok(StatusCode::BAD_REQUEST.into_response()),
     };
@@ -71,7 +78,7 @@ pub(super) async fn stream_media(
         return Ok(StatusCode::BAD_REQUEST.into_response());
     }
 
-    let mut filename = state.config.fs.media_srvdir.join(dir);
+    let mut filename = state.config.fs.media_srvdir.join(&dir);
 
     filename.push(&media_uuid_str);
 
@@ -79,7 +86,23 @@ pub(super) async fn stream_media(
     // so that we don't block the server threads
     let mut file_handle = match File::open(&filename).await {
         Ok(f) => f,
-        Err(err) => return Ok((StatusCode::NOT_FOUND, err.to_string()).into_response()),
+        Err(err) => {
+            match err.kind() {
+                ErrorKind::NotFound => debug!({ dir, media_uuid_str }, "media not found: {err}"),
+
+                ErrorKind::PermissionDenied => {
+                    error!({ dir, media_uuid_str }, "permission denied: {err}")
+                }
+
+                ErrorKind::StaleNetworkFileHandle => {
+                    error!({ dir, media_uuid_str }, "stale NFS handle: {err}")
+                }
+
+                _ => warn!({ dir, media_uuid_str }, "io error: {err}"),
+            }
+
+            return Ok((StatusCode::NOT_FOUND, err.to_string()).into_response());
+        }
     };
 
     let file_metadata = file_handle.metadata().await?;
@@ -109,7 +132,7 @@ pub(super) async fn stream_media(
         ),
     };
 
-    debug!({ media_uuid }, "streaming {} bytes", end - start);
+    debug!({ dir, media_uuid_str }, "streaming {} bytes", end - start);
 
     // http response headers
     //
@@ -151,7 +174,7 @@ pub(super) async fn stream_media(
             headers.insert(CONTENT_TYPE, HeaderValue::from_str(mime.essence_str())?);
         }
         None => {
-            warn!({ media_uuid }, "failed to guess mime type")
+            warn!({ dir, media_uuid_str }, "failed to guess mime type")
         }
     }
 

@@ -7,7 +7,7 @@ use tracing::{Level, debug, instrument};
 
 use crate::{
     auth::{gss::GssConfig, ldap::LdapConfig, proxy::ProxyHeaderConfig, tomlfile::TomlFileConfig},
-    db::mariadb::MariaDbConfig,
+    db::{mariadb::MariaDbConfig, postgres::PostgresConfig},
     server::{FsConfig, HttpConfig, TaskConfig},
 };
 
@@ -29,22 +29,25 @@ pub struct ESConfig {
     pub gss: Option<GssConfig>,
     pub ldap: Option<LdapConfig>,
     pub mariadb: Option<MariaDbConfig>,
+    pub postgres: Option<PostgresConfig>,
     pub tomlfile: Option<TomlFileConfig>,
     pub proxyheader: Option<ProxyHeaderConfig>,
 }
 
 // backends
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthnBackend {
     // header set by reverse proxy
     ProxyHeader,
-    // a toml file with usernames and passwords
-    TomlFile,
     // subject cn data in certificate
     X509Cert,
+    // a toml file with usernames and passwords
+    TomlFile,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthzBackend {
     // standard ldap3 auth
     Ldap,
@@ -53,8 +56,10 @@ pub enum AuthzBackend {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DbBackend {
     MariaDB,
+    Postgres,
 }
 
 // in order to extract the config table from a larger document, we need to specify it
@@ -73,12 +78,14 @@ pub async fn read_config(filename: PathBuf) -> Arc<ESConfig> {
         Err(err) => panic!("failed to read config file: {err}"),
     };
 
-    // hamfisted way to prevent sensitive info in the config file
-    // from being printed to logs
-    let data: TomlConfigFile = match from_str(&doc) {
-        Ok(val) => val,
-        Err(err) => panic!("failed to parse config file: {err}"),
-    };
+    // avoid printing the input to the logs
+    let data: TomlConfigFile = from_str(&doc)
+        .map_err(|err| {
+            let message = err.message().to_owned();
+
+            anyhow::Error::msg(message)
+        })
+        .expect("failed to parse config file");
 
     debug!("successfully parsed config file");
     Arc::new(data.config)

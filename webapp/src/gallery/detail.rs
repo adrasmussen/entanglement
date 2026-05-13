@@ -6,7 +6,7 @@ use crate::{
     components::modal::{MODAL_STACK, Modal, ModalBox},
     gallery::{collections::CollectionTable, comments::CommentList, similar::SimilarMedia},
 };
-use api::{fold_set, full_link, media::*, unfold_set};
+use api::{UuidSource, fold_set, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct GalleryDetailProps {
@@ -57,12 +57,14 @@ struct GalleryInnerProps {
     media_uuid: String,
 }
 
+impl UuidSource for GalleryInnerProps {}
+
 #[component]
 fn GalleryInner(props: GalleryInnerProps) -> Element {
     let mut update_signal = props.update_signal;
 
     // annoying parse step because the Router is String-only
-    let media_uuid = props.media_uuid.parse::<MediaUuid>().show(|_| {
+    let media_uuid = MediaUuid::try_parse(&props, &props.media_uuid).show(|_| {
         let message = "The media_uuid could not be parsed".to_string();
         rsx! {
             GalleryError { message }

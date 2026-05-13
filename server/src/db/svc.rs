@@ -47,7 +47,7 @@ impl<B: DbBackend> EntanglementService for DbService<B> {
         info!("starting db service");
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(DbRunner::<B>::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(DbRunner::<B>::new(self.config.clone(), registry.clone()).await?);
 
         let serve = {
             async move {
@@ -83,10 +83,10 @@ pub struct DbRunner<B: DbBackend> {
 
 #[async_trait]
 impl<B: DbBackend> ESInner for DbRunner<B> {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
         Ok(DbRunner {
             registry: registry.clone(),
-            backend: B::new(config.clone())?,
+            backend: B::new(config.clone()).await?,
         })
     }
 

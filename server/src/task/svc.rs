@@ -12,7 +12,7 @@ use tokio::{
     task::{JoinHandle, spawn},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, instrument};
+use tracing::{Instrument, Level, debug, error, info, instrument, span};
 
 use crate::{
     db::msg::DbMsg,
@@ -62,7 +62,7 @@ impl EntanglementService for TaskService {
         info!("starting task service");
 
         let receiver = Arc::clone(&self.receiver);
-        let state = Arc::new(TaskRunner::new(self.config.clone(), registry.clone())?);
+        let state = Arc::new(TaskRunner::new(self.config.clone(), registry.clone()).await?);
 
         let serve = {
             async move {
@@ -110,7 +110,7 @@ struct RunningTask {
 
 #[async_trait]
 impl ESInner for TaskRunner {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self> {
         Ok(TaskRunner {
             config: config.clone(),
             registry: registry.clone(),
@@ -257,7 +257,7 @@ impl ESTaskService for TaskRunner {
         info!({ start }, "starting task");
 
         // spawn the future inside of the infalliable watcher and send the result back via ESM
-        let (_handle, cancel) = watch_task(start, library, task_svc_sender, task_future);
+        let (_handle, cancel) = watch_task(library, task_svc_sender, task_future);
 
         // we still have the write lock on the currently running task, but in principle the task
         // may have already completed and sent the message to complete_task().  thus, even if we
@@ -405,9 +405,7 @@ impl ESTaskService for TaskRunner {
 // this function ensures that our falliable tasks can be cancelled, and that
 // the results are all correctly accounted for when sending the completion
 // message back to the task service.
-#[instrument(skip(task_future, sender))]
 fn watch_task(
-    start: u64,
     library: TaskLibrary,
     sender: EsmSender,
     task_future: Pin<Box<dyn Future<Output = Result<i64>> + Send>>,
@@ -483,7 +481,7 @@ fn watch_task(
                 Ok(_) => {}
                 Err(err) => error!("failed to send/receive completion message: {err}"),
             }
-        };
+        }.instrument(span!(Level::INFO, "watch_task"));
 
         spawn(task)
     };

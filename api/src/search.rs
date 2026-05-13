@@ -3,6 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
+use itertools::Itertools;
 use regex::escape;
 use serde::{Deserialize, Serialize};
 
@@ -17,11 +18,6 @@ use crate::{
 
 // this struct is a first attempt at making a more generalized search mechanism that is
 // still agnostic to the particular database backend
-//
-// as of this writing, we only support mariadb -- and its fulltext search is not very
-// useful to us since it doesn't match partial words.  it is very likely that we will
-// need to have more fine-grained control over both the queries and the structure, so
-// all of this should be considered work-in-progress
 //
 // note that several places rely on an empty filter (of any sort) matching everything
 //
@@ -137,6 +133,52 @@ impl SearchFilter {
                     format!(" AND MATCH({cols}) AGAINST(:filter IN NATURAL LANGUAGE MODE)"),
                     keywords,
                 )
+            }
+        }
+    }
+
+    // postgres formatting for  queries
+    //
+    // https://www.postgresql.org/docs/current/textsearch-controls.html
+    pub fn format_postgres(&self, ts_col: &str) -> String {
+        match self {
+            Self::SubstringAny { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+            }
+
+            Self::SubstringAll { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" & ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+            }
+
+            Self::Fulltext { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
+            }
+
+            // use the fulltext search as keywords
+            Self::Keyword { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
         }
     }

@@ -16,10 +16,7 @@ use crate::{
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
 };
 use api::{
-    library::*,
-    media::MediaUuid,
-    search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
-    sort::SortMethod,
+    UuidSource, library::*, media::MediaUuid, search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort}, sort::SortMethod
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -71,11 +68,13 @@ struct LibraryInnerProps {
     library_uuid: String,
 }
 
+impl UuidSource for LibraryInnerProps {}
+
 #[component]
 fn LibraryInner(props: LibraryInnerProps) -> Element {
     let update_signal = props.update_signal;
 
-    let library_uuid = props.library_uuid.parse::<LibraryUuid>().show(|_| {
+    let library_uuid = LibraryUuid::try_parse(&props, &props.library_uuid).show(|_| {
         let message = "The library_uuid could not be parsed".to_string();
         rsx! {
             LibraryError { message }

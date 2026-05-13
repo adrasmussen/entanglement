@@ -1,14 +1,15 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
+use postgres_types::{ToSql, FromSql};
 
 use crate::{
     collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
-    search::SearchFilter,
+    search::SearchFilter, uuid_newtype,
 };
 
-// structs and types
-pub type MediaUuid = u64;
+// structs
+uuid_newtype!(Media);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Media {
@@ -25,7 +26,8 @@ pub struct Media {
     pub metadata: MediaMetadata,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, FromSql, PartialEq, Serialize, strum::Display, strum::EnumString, ToSql)]
+#[postgres(name = "media_type")]
 pub enum MediaMetadata {
     Image,
     Video,
@@ -89,7 +91,7 @@ pub struct SearchMediaResp {
 // find similar media
 http_endpoint!(SimilarMedia);
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SimilarMediaReq {
     pub media_uuid: MediaUuid,
     pub distance: i64,

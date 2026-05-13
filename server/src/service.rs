@@ -99,7 +99,7 @@ pub trait EntanglementService: Send + Sync + 'static {
 // rpc function.  services may respond to external messages on other channels (http) as well.
 #[async_trait]
 pub trait ESInner: Sized + Send + Sync + 'static {
-    fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self>;
+    async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> Result<Self>;
 
     fn registry(&self) -> ESMRegistry;
 

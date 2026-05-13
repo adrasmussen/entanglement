@@ -39,6 +39,54 @@ pub const SLICE_PATH: &str = "slices";
 // when running behind a reverse proxy, the upstream settings must also match.
 pub const HTTP_URL_ROOT: &str = "entanglement";
 
+// uuids
+//
+// newtypes for the various uuids helps guard against confusion, which is especially
+// important when ensuring that we are searching the correct objects.  the trait
+// allows us to constrain the places that uuids are cast from untyped inputs, such as
+// database responses and the ui router
+pub trait UuidSource {}
+
+#[macro_export]
+macro_rules! uuid_newtype {
+    ($name:tt) => {
+        pastey::paste!{
+            #[derive(Clone, Copy, Debug, Deserialize, Eq, postgres_types::FromSql, Hash, PartialEq, PartialOrd, Ord, Serialize, postgres_types::ToSql)]
+            #[postgres(transparent)]
+            pub struct [<$name Uuid>](uuid::Uuid);
+
+            impl [<$name Uuid>]{
+                pub fn try_parse<S: $crate::UuidSource>(_src: &S, input: &str) -> Result<Self, uuid::Error> {
+                    Ok(Self(uuid::Uuid::try_parse(input)?))
+                }
+
+                pub fn from_value<S: $crate::UuidSource>(_src: &S, input: uuid::Uuid) -> Self {
+                    Self(input)
+                }
+
+                pub fn value(&self) -> uuid::Uuid {
+                    self.0
+                }
+
+                // TODO -- remove
+                pub fn from_u64<S: $crate::UuidSource>(_src: &S, input: u64) -> Self {
+                    Self(uuid::Uuid::from_u64_pair(0, input))
+                }
+
+                pub fn to_u64(&self) -> u64 {
+                    self.0.as_u64_pair().1
+                }
+            }
+
+            impl std::fmt::Display for [<$name Uuid>] {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
+        }
+    }
+}
+
 // set folding
 //
 // some databases do not support a column type of set/vec/list, so we need a consistent

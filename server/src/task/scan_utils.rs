@@ -253,7 +253,7 @@ impl ScanContext {
         media_uuid: MediaUuid,
         mut files: Vec<KnownFile>,
     ) -> Result<()> {
-        debug!({media_uuid, file_count = files.len()}, "resolving duplicates");
+        debug!({%media_uuid, file_count = files.len()}, "resolving duplicates");
 
         let context = self.clone();
 
@@ -282,7 +282,7 @@ impl ScanContext {
             // this corresponds to the trivial update, i.e. touched mtime
             for file in files.iter() {
                 if media.chash == file.hash && media.path == file.path {
-                    debug!({media_uuid, path = file.path}, "matched original file");
+                    debug!({%media_uuid, path = file.path}, "matched original file");
                     return Ok(file.clone());
                 }
             }
@@ -301,7 +301,7 @@ impl ScanContext {
             }
 
             if let Some(file) = real {
-                debug!({media_uuid, path = file.path}, "matched oldest moved file");
+                debug!({%media_uuid, path = file.path}, "matched oldest moved file");
                 return Ok(file.clone());
             }
 
@@ -311,7 +311,7 @@ impl ScanContext {
             // this corresponds to mutating the original file
             for file in files.iter() {
                 if media.path == file.path {
-                    debug!({media_uuid, path = file.path}, "matched original path");
+                    debug!({%media_uuid, path = file.path}, "matched original path");
                     return Ok(file.clone());
                 }
             }
@@ -344,7 +344,7 @@ impl ScanContext {
             .collect::<Vec<_>>()
             .pop()
         {
-            debug!({ media_uuid }, "updating media record");
+            debug!({ %media_uuid }, "updating media record");
             let (tx, rx) = tokio::sync::oneshot::channel();
 
             context
@@ -388,7 +388,7 @@ impl ScanContext {
             //
             // in that case, we simply add the clone tag and leave it, as there is no programatic
             // way to determine if the new record is newer or older than the original record
-            debug!({media_uuid, path = real_file.path}, "updating original path after matching moved hash");
+            debug!({%media_uuid, path = real_file.path}, "updating original path after matching moved hash");
 
             let new_uuid = match context.get_media_by_chash(&file.hash).await? {
                 Some(media) => media.media_uuid,
@@ -453,11 +453,14 @@ impl Drop for ScanFile {
 }
 
 impl ScanFile {
+    #[instrument(skip_all, fields(?path))]
     pub async fn from_path(
         context: Arc<ScanContext>,
         path: PathBuf,
         metadata: Metadata,
     ) -> Result<FileStatus> {
+        debug!("scanning file");
+
         let context = context.clone();
 
         if !metadata.is_file() {
@@ -474,7 +477,7 @@ impl ScanFile {
         let mtype = match get_mtype(&path) {
             Ok(v) => v,
             Err(err) => {
-                debug!({ path = pathstr }, "{err}");
+                debug!("{err}");
                 return Ok(FileStatus::Unknown);
             }
         };
@@ -489,9 +492,11 @@ impl ScanFile {
 
         if let Some(media) = current {
             if media.mtime >= mtime {
+                debug!("record up to date");
+
                 return Ok(FileStatus::Skip);
             } else {
-                debug!({media_uuid = media.media_uuid, path = pathstr}, "known media found via path");
+                debug!({media_uuid = %media.media_uuid}, "known media found via path");
 
                 return Ok(FileStatus::Exists(KnownFile {
                     media_uuid: media.media_uuid,
@@ -508,7 +513,7 @@ impl ScanFile {
 
         let scratch_dir = create_scratch_dir(context.clone(), &chash).await?;
 
-        debug!({ path = pathstr }, "scanning file");
+        debug!("new file to register");
 
         Ok(FileStatus::Register(ScanFile {
             context,
@@ -524,7 +529,10 @@ impl ScanFile {
 
     // in certain scenarios, we have to create a new media record for a file already
     // linked to another database record, and so we avoid recalculating hashes
+    #[instrument(skip_all, fields(path = known.path))]
     async fn from_known(context: Arc<ScanContext>, known: KnownFile) -> Result<Self> {
+        debug!("found known file");
+
         let path = PathBuf::from(&known.path);
         let metadata = metadata(&path).await?;
         let mtype = get_mtype(&path)?;
@@ -543,7 +551,7 @@ impl ScanFile {
         })
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(path = self.pathstr))]
     pub async fn register(&self) -> Result<Option<MediaUuid>> {
         debug!("processing media");
 
@@ -557,7 +565,7 @@ impl ScanFile {
         let exists = self.context.get_media_by_chash(&self.hash).await?;
 
         if let Some(media) = exists {
-            debug!({media_uuid = media.media_uuid, path = media.path}, "known media found via hash");
+            debug!({media_uuid = %media.media_uuid, path = media.path}, "known media found via hash");
 
             self.context.known_files.insert(KnownFile {
                 media_uuid: media.media_uuid,

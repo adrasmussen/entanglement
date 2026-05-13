@@ -63,7 +63,7 @@ fn CommentListInner(props: CommentListInnerProps) -> Element {
             }
 
             // Sort comments by timestamp (newest first)
-            comments.sort_by(|a, b| b.1.date.cmp(&a.1.date));
+            comments.sort_by_key(|b| std::cmp::Reverse(b.1.date));
             comments
         }
     });
