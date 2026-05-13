@@ -36,16 +36,18 @@ pub struct ESConfig {
 
 // backends
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthnBackend {
     // header set by reverse proxy
     ProxyHeader,
-    // a toml file with usernames and passwords
-    TomlFile,
     // subject cn data in certificate
     X509Cert,
+    // a toml file with usernames and passwords
+    TomlFile,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthzBackend {
     // standard ldap3 auth
     Ldap,
@@ -54,6 +56,7 @@ pub enum AuthzBackend {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DbBackend {
     MariaDB,
     Postgres,

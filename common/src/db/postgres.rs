@@ -1,6 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc, time::{SystemTime, UNIX_EPOCH},
+    collections::{HashMap, HashSet}, sync::Arc, time::{SystemTime, UNIX_EPOCH}
 };
 
 use anyhow::Result;
@@ -13,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::{debug, info, instrument};
+use url::Url;
 
 use crate::{
     config::ESConfig,
@@ -37,7 +37,7 @@ fn hstore_to_set(hstore: HashMap<String, Option<String>>) -> HashSet<String> {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PostgresConfig {
-    pub url: String,
+    pub url: Url,
 }
 
 pub struct PostgresBackend {
@@ -51,11 +51,14 @@ impl DbBackend for PostgresBackend {
     async fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("creating Postgres connection pool");
 
-        let url = config
+        let config = config
             .postgres
             .clone()
-            .expect("postgres config not present")
-            .url;
+            .ok_or_else(|| anyhow::Error::msg("postgres config not present"))?;
+
+        if config.url.scheme() != "postgres" {
+            return Err(anyhow::Error::msg("invalid postgres url"))
+        }
 
         let mut root_store = RootCertStore::empty();
 
@@ -67,9 +70,9 @@ impl DbBackend for PostgresBackend {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let tls = MakeRustlsConnect::new(tls_config);
+        let tls_config = MakeRustlsConnect::new(tls_config);
 
-        let manager = PostgresConnectionManager::new_from_stringlike(url, tls)?;
+        let manager = PostgresConnectionManager::new_from_stringlike(config.url.as_str(), tls_config)?;
 
         let pool = Pool::builder().build(manager).await?;
 

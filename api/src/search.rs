@@ -19,11 +19,6 @@ use crate::{
 // this struct is a first attempt at making a more generalized search mechanism that is
 // still agnostic to the particular database backend
 //
-// as of this writing, we only support mariadb -- and its fulltext search is not very
-// useful to us since it doesn't match partial words.  it is very likely that we will
-// need to have more fine-grained control over both the queries and the structure, so
-// all of this should be considered work-in-progress
-//
 // note that several places rely on an empty filter (of any sort) matching everything
 //
 // TODO -- to use the Substring filters more optimally, we need a better splitting
@@ -152,7 +147,7 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("{s}")).join(" | ");
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
 
                 format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
@@ -162,7 +157,7 @@ impl SearchFilter {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("{s}")).join(" & ");
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" & ");
 
                 format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }
@@ -175,13 +170,13 @@ impl SearchFilter {
                 format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
             }
 
-            // use the fulltext search as keywords, which expects a comma-separated list
+            // use the fulltext search as keywords
             Self::Keyword { filter } => {
                 if filter.is_empty() {
                     return String::new();
                 }
 
-                let ts_query = filter.iter().map(|s| format!("{s}")).join(" | ");
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
 
                 format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
             }

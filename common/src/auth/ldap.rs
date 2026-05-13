@@ -10,22 +10,22 @@ use anyhow::Result;
 use async_trait::async_trait;
 use ldap3::{LdapConnAsync, LdapConnSettings, Scope, SearchEntry};
 use rustls::{ClientConfig, RootCertStore};
+use rustls_native_certs::load_native_certs;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, warn};
+use url::Url;
 
 use crate::{auth::AuthzProvider, config::ESConfig};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct LdapConfig {
     // url in normal ldap form ldaps://host:port
-    //
-    // TODO -- use a Url and make gssapi fqdn optional
-    pub url: String,
-    // cert used to verify server connection
-    pub ca_cert: PathBuf,
+    pub url: Url,
     // attribute for uids, i.e. uid
-    pub uid_attr: String,
+    // pub uid_attr: String,
+    // ldap search base for users
+    // pub user_base: String,
     // attribute for group names, i.e. cn
     pub gid_attr: String,
     // ldap search base for groups
@@ -40,9 +40,10 @@ pub struct LdapConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LdapClientAuth {
     // pem-encoded tls cert and key to communicate with ldap server
-    X509Cert { key: PathBuf, cert: PathBuf },
+    X509 { key: PathBuf, cert: PathBuf },
     // gssapi with kerberos lib defaults
     //
     // currently, this more or less assumes gssproxy, or that the
@@ -60,21 +61,22 @@ impl AuthzProvider for LdapAuthz {
     #[instrument(skip_all)]
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("configuring ldap3 authz settings");
-        let config = config.ldap.clone().expect("ldap config not found");
+        let config = config.ldap.clone().ok_or_else(|| anyhow::Error::msg("ldap config not found"))?;
 
-        // set up tls for verifying ldaps server cert
-        let ca_cert: Vec<CertificateDer> =
-            CertificateDer::pem_file_iter(&config.ca_cert)?.collect::<Result<Vec<_>, _>>()?;
-
-        let mut ca_root_store = RootCertStore::empty();
-        for c in ca_cert {
-            ca_root_store.add(c)?
+        if config.url.scheme() != "ldaps" {
+            return Err(anyhow::Error::msg("ldap connector requires TLS"))
         }
 
-        let tls_config = ClientConfig::builder().with_root_certificates(ca_root_store);
+        let mut root_store = RootCertStore::empty();
+
+        for cert in load_native_certs().certs {
+            root_store.add(cert)?;
+        }
+
+        let tls_config = ClientConfig::builder().with_root_certificates(root_store);
 
         let tls_config = match config.clone().auth {
-            LdapClientAuth::X509Cert { key, cert } => {
+            LdapClientAuth::X509 { key, cert } => {
                 let key: PrivateKeyDer = PemObject::from_pem_file(key)?;
 
                 let cert: Vec<CertificateDer> =
@@ -99,12 +101,12 @@ impl AuthzProvider for LdapAuthz {
         let mut groups = HashSet::<String>::new();
 
         let (conn, mut ldap) =
-            LdapConnAsync::with_settings(self.settings.clone(), &self.config.url).await?;
+            LdapConnAsync::with_settings(self.settings.clone(), self.config.url.as_str()).await?;
 
         ldap3::drive!(conn);
 
         match &self.config.auth {
-            LdapClientAuth::X509Cert { .. } => ldap.sasl_external_bind().await?,
+            LdapClientAuth::X509 { .. } => ldap.sasl_external_bind().await?,
             LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,
         };
 
@@ -160,12 +162,12 @@ impl AuthzProvider for LdapAuthz {
         let mut users = HashSet::<String>::new();
 
         let (conn, mut ldap) =
-            LdapConnAsync::with_settings(self.settings.clone(), &self.config.url).await?;
+            LdapConnAsync::with_settings(self.settings.clone(), self.config.url.as_str()).await?;
 
         ldap3::drive!(conn);
 
         match &self.config.auth {
-            LdapClientAuth::X509Cert { .. } => ldap.sasl_external_bind().await?,
+            LdapClientAuth::X509 { .. } => ldap.sasl_external_bind().await?,
             LdapClientAuth::GssApi { fqdn } => ldap.sasl_gssapi_bind(fqdn).await?,
         };
 

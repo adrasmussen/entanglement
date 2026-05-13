@@ -10,6 +10,7 @@ use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument};
+use url::Url;
 
 use crate::{
     config::ESConfig,
@@ -52,7 +53,7 @@ use api::{
 // update_* can fail partway through
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MariaDbConfig {
-    pub url: String,
+    pub url: Url,
 }
 
 pub struct MariaDBBackend {
@@ -76,14 +77,17 @@ impl DbBackend for MariaDBBackend {
     async fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("creating MariaDB connection pool");
 
-        let url = config
+        let config = config
             .mariadb
             .clone()
-            .expect("mariadb config not present")
-            .url;
+            .ok_or_else(|| anyhow::Error::msg("mariadb config not present"))?;
+
+        if config.url.scheme() != "mysql" {
+            return Err(anyhow::Error::msg("invalid mariadb url"))
+        }
 
         Ok(Self {
-            pool: Pool::new(url.as_str()),
+            pool: Pool::new(config.url.as_str()),
             locks: TableLocks::default(),
         })
     }
