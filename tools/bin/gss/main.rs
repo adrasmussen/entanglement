@@ -27,12 +27,10 @@ async fn main() -> Result<()> {
 
     let sname = Name::new(
         "entg@bifrost.nonlocal.cloud".to_string().as_bytes(),
-        Some(&GSS_NT_HOSTBASED_SERVICE),
+        Some(GSS_NT_HOSTBASED_SERVICE),
     )?;
 
-    let mut mechs = OidSet::new()?;
-
-    mechs.add(&GSS_MECH_KRB5)?;
+    let mechs = OidSet::singleton(GSS_MECH_KRB5)?;
 
     let now = Instant::now();
 
@@ -50,7 +48,7 @@ async fn main() -> Result<()> {
         Some(client_cred),
         sname,
         CtxFlags::empty(),
-        Some(&GSS_MECH_KRB5),
+        Some(GSS_MECH_KRB5),
     );
 
     println!("client setup: {:#?}", Instant::now() - now);
@@ -65,7 +63,7 @@ async fn main() -> Result<()> {
 
     let now = Instant::now();
 
-    server_ctx.step(&token)?;
+    server_ctx.step(&token, None)?;
 
     println!("server step: {:#?}", Instant::now() - now);
 
