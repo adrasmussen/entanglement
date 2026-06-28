@@ -219,7 +219,7 @@ pub async fn undump(config: Arc<ESConfig>, filename: PathBuf) -> Result<()> {
             .get(&comment.media_uuid)
             .ok_or_else(|| anyhow::Error::msg("missing media_uuid"))?;
 
-        db.add_comment(serde_json::from_slice(&value)?).await?;
+        db.add_comment(comment).await?;
     }
     println!("  complete");
 

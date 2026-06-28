@@ -67,15 +67,6 @@ macro_rules! uuid_newtype {
                 pub fn value(&self) -> uuid::Uuid {
                     self.0
                 }
-
-                // TODO -- remove
-                pub fn from_u64<S: $crate::UuidSource>(_src: &S, input: u64) -> Self {
-                    Self(uuid::Uuid::from_u64_pair(0, input))
-                }
-
-                pub fn to_u64(&self) -> u64 {
-                    self.0.as_u64_pair().1
-                }
             }
 
             impl std::fmt::Display for [<$name Uuid>] {

@@ -843,14 +843,14 @@ impl DbBackend for PostgresBackend {
         let conn = self.pool.get().await?;
 
         let statement = r"-- add_library
-            INSERT INTO libraries (library_uuid, path, gid, count)
-            VALUES (uuidv7(), $1, $2, $3)
+            INSERT INTO libraries (library_uuid, path, uid, gid, count)
+            VALUES (uuidv7(), $1, $2, $3, $4)
             ON CONFLICT (path) DO NOTHING
             RETURNING library_uuid
         ";
 
         let library_uuid: LibraryUuid = conn
-            .query_one_scalar(statement, &[&library.path, &library.gid, &library.count])
+            .query_one_scalar(statement, &[&library.path, &library.uid, &library.gid, &library.count])
             .await?;
 
         debug!({ library_path = library.path , %library_uuid }, "added library");

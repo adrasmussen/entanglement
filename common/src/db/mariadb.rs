@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument};
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
@@ -122,7 +123,7 @@ impl DbBackend for MariaDBBackend {
             WHERE
                 media.media_uuid = :media_uuid"
             .with(params! {
-                "media_uuid" => media_uuid.to_u64(),
+                "media_uuid" => media_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -150,7 +151,7 @@ impl DbBackend for MariaDBBackend {
         let query = r"
             INSERT INTO media (media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type)
             SELECT
-                UUID_SHORT(),
+                UUID_v7(),
                 :library_uuid,
                 :path,
                 :size,
@@ -175,7 +176,7 @@ impl DbBackend for MariaDBBackend {
 
         let mut result = query
             .with(params! {
-                "library_uuid" => media.library_uuid.to_u64(),
+                "library_uuid" => media.library_uuid.value(),
                 "path" => media.path.clone(),
                 "size" => media.size,
                 "chash" => media.chash,
@@ -202,11 +203,11 @@ impl DbBackend for MariaDBBackend {
             anyhow::Error::msg("failed to add media")
         })?;
 
-        let media_uuid = from_row_opt::<u64>(row)?;
+        let media_uuid = from_row_opt::<Uuid>(row)?;
 
-        debug!({ media_path = media.path, media_uuid }, "added media");
+        debug!({ media_path = media.path, %media_uuid }, "added media");
 
-        Ok(MediaUuid::from_u64(self, media_uuid))
+        Ok(MediaUuid::from_value(self, media_uuid))
     }
 
     #[instrument(skip(self))]
@@ -223,7 +224,7 @@ impl DbBackend for MariaDBBackend {
         let mut media_result = r"
             SELECT library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type FROM media WHERE media_uuid = :media_uuid"
         .with(params! {
-            "media_uuid" => media_uuid.to_u64(),
+            "media_uuid" => media_uuid.value(),
         })
         .run(self.pool.get_conn().await?)
         .await?
@@ -232,7 +233,7 @@ impl DbBackend for MariaDBBackend {
 
         let media_data = match media_result.pop() {
             Some(row) => from_row_opt::<(
-                u64,
+                Uuid,
                 String,
                 u64,
                 String,
@@ -250,7 +251,7 @@ impl DbBackend for MariaDBBackend {
         let collection_result = r"
             SELECT collection_uuid FROM collection_contents WHERE media_uuid = :media_uuid"
             .with(params! {
-                "media_uuid" => media_uuid.to_u64(),
+                "media_uuid" => media_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -260,16 +261,16 @@ impl DbBackend for MariaDBBackend {
         let collection_data = collection_result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(CollectionUuid::from_u64(self, input))
+                Ok(CollectionUuid::from_value(self, input))
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
         let comment_result = r"
             SELECT comment_uuid FROM comments WHERE media_uuid = :media_uuid"
             .with(params! {
-                "media_uuid" => media_uuid.to_u64(),
+                "media_uuid" => media_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -279,9 +280,9 @@ impl DbBackend for MariaDBBackend {
         let comment_data = comment_result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(CommentUuid::from_u64(self, input))
+                Ok(CommentUuid::from_value(self, input))
             })
             .collect::<Result<Vec<CommentUuid>, FromRowError>>()?;
 
@@ -289,7 +290,7 @@ impl DbBackend for MariaDBBackend {
 
         Ok(Some((
             Media {
-                library_uuid: LibraryUuid::from_u64(self, media_data.0),
+                library_uuid: LibraryUuid::from_value(self, media_data.0),
                 path: media_data.1,
                 size: media_data.2,
                 chash: media_data.3,
@@ -333,9 +334,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(MediaUuid::from_u64(self, input))
+                Ok(MediaUuid::from_value(self, input))
             })
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
@@ -365,12 +366,12 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(u64, String, u64)>(row)?;
+        let data = from_row_opt::<(Uuid, String, u64)>(row)?;
 
-        debug!({ media_uuid = data.0 }, "found media");
+        debug!({ media_uuid = %data.0 }, "found media");
 
         Ok(Some(MediaByPath {
-            media_uuid: MediaUuid::from_u64(self, data.0),
+            media_uuid: MediaUuid::from_value(self, data.0),
             hash: data.1,
             mtime: data.2,
         }))
@@ -389,7 +390,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             SELECT media_uuid, path, mtime FROM media WHERE library_uuid = :library_uuid AND chash = :chash"
             .with(params! {
-                "library_uuid" => library_uuid.to_u64(),
+                "library_uuid" => library_uuid.value(),
                 "chash" => chash,
             })
             .run(self.pool.get_conn().await?)
@@ -402,12 +403,12 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(u64, String, u64)>(row)?;
+        let data = from_row_opt::<(Uuid, String, u64)>(row)?;
 
-        debug!({ media_uuid = data.0 }, "found media");
+        debug!({ media_uuid = %data.0 }, "found media");
 
         Ok(Some(MediaByCHash {
-            media_uuid: MediaUuid::from_u64(self, data.0),
+            media_uuid: MediaUuid::from_value(self, data.0),
             path: data.1,
             mtime: data.2,
         }))
@@ -424,7 +425,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE media SET hidden = :hidden WHERE media_uuid = :media_uuid"
                 .with(params! {
                     "hidden" => val,
-                    "media_uuid" => media_uuid.to_u64(),
+                    "media_uuid" => media_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -435,7 +436,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE media SET date = :date WHERE media_uuid = :media_uuid"
                 .with(params! {
                     "date" => val.clone(),
-                    "media_uuid" => media_uuid.to_u64(),
+                    "media_uuid" => media_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -446,7 +447,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE media SET note = :note WHERE media_uuid = :media_uuid"
                 .with(params! {
                     "note" => val.clone(),
-                    "media_uuid" => media_uuid.to_u64(),
+                    "media_uuid" => media_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -457,7 +458,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE media SET tags = :tags WHERE media_uuid = :media_uuid"
                 .with(params! {
                     "tags" => fold_set(val.clone())?,
-                    "media_uuid" => media_uuid.to_u64(),
+                    "media_uuid" => media_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -483,7 +484,7 @@ impl DbBackend for MariaDBBackend {
         r"
         UPDATE media SET path = :path, chash = :hash, mtime = :mtime WHERE media_uuid = :media_uuid"
             .with(params! {
-                "media_uuid" => media_uuid.to_u64(),
+                "media_uuid" => media_uuid.value(),
                 "path" => path,
                 "hash" => hash,
                 "mtime" => mtime,
@@ -565,9 +566,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(MediaUuid::from_u64(self, input))
+                Ok(MediaUuid::from_value(self, input))
             })
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
@@ -632,7 +633,7 @@ impl DbBackend for MariaDBBackend {
                 AND BIG_HAM((SELECT phash FROM media WHERE media_uuid = :media_uuid), media.phash) < :distance"
         .with(params! {
             "gid" => fold_set(gid)?,
-            "media_uuid" => media_uuid.to_u64(),
+            "media_uuid" => media_uuid.value(),
             "distance" => distance,
         })
         .run(self.pool.get_conn().await?)
@@ -643,9 +644,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(MediaUuid::from_u64(self, input))
+                Ok(MediaUuid::from_value(self, input))
             })
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
@@ -657,17 +658,17 @@ impl DbBackend for MariaDBBackend {
     // comment queries
     #[instrument(skip(self, comment))]
     async fn add_comment(&self, comment: Comment) -> Result<CommentUuid> {
-        debug!({ media_uuid = comment.media_uuid.to_u64() }, "adding comment");
+        debug!({ media_uuid = %comment.media_uuid }, "adding comment");
 
         let _mw = self.locks.media.write().await;
         let _yw = self.locks.comment.write().await;
 
         let mut result = r"
             INSERT INTO comments (comment_uuid, media_uuid, uid, date, text)
-            VALUES (UUID_SHORT(), :media_uuid, :uid, :date, :text)
+            VALUES (UUID_v7(), :media_uuid, :uid, :date, :text)
             RETURNING comment_uuid"
             .with(params! {
-                "media_uuid" => comment.media_uuid.to_u64(),
+                "media_uuid" => comment.media_uuid.value(),
                 "uid" => comment.uid,
                 "date" => SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                 "text" => comment.text,
@@ -682,11 +683,11 @@ impl DbBackend for MariaDBBackend {
             anyhow::Error::msg("failed to add comment")
         })?;
 
-        let data = from_row_opt::<u64>(row)?;
+        let data = from_row_opt::<Uuid>(row)?;
 
-        debug!({media_uuid = comment.media_uuid.to_u64(), comment_uuid = data}, "added comment");
+        debug!({media_uuid = %comment.media_uuid, comment_uuid = %data}, "added comment");
 
-        Ok(CommentUuid::from_u64(self, data))
+        Ok(CommentUuid::from_value(self, data))
     }
 
     #[instrument(skip(self))]
@@ -698,7 +699,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             SELECT media_uuid, uid, date, text FROM comments WHERE comment_uuid = :comment_uuid"
             .with(params! {
-                "comment_uuid" => comment_uuid.to_u64(),
+                "comment_uuid" => comment_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -710,12 +711,12 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data = from_row_opt::<(u64, String, u64, String)>(row)?;
+        let data = from_row_opt::<(Uuid, String, u64, String)>(row)?;
 
         debug!("found comment details");
 
         Ok(Some(Comment {
-            media_uuid: MediaUuid::from_u64(self, data.0),
+            media_uuid: MediaUuid::from_value(self, data.0),
             uid: data.1,
             date: data.2,
             text: data.3,
@@ -738,9 +739,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(CommentUuid::from_u64(self, input))
+                Ok(CommentUuid::from_value(self, input))
             })
             .collect::<Result<Vec<CommentUuid>, FromRowError>>()?;
 
@@ -758,7 +759,7 @@ impl DbBackend for MariaDBBackend {
         r"
         DELETE FROM comments WHERE (comment_uuid = :comment_uuid)"
             .with(params! {
-                "comment_uuid" => comment_uuid.to_u64(),
+                "comment_uuid" => comment_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?;
@@ -779,7 +780,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE comments SET text = :text WHERE comment_uuid = :comment_uuid"
                 .with(params! {
                     "text" => val.clone(),
-                    "comment_uuid" => comment_uuid.to_u64(),
+                    "comment_uuid" => comment_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -800,7 +801,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
             SELECT
-                UUID_SHORT(),
+                UUID_v7(),
                 :uid,
                 :gid,
                 :name,
@@ -823,7 +824,7 @@ impl DbBackend for MariaDBBackend {
                 "name" => collection.name.clone(),
                 "note" => collection.note,
                 "tags" => fold_set(collection.tags)?,
-                "cover" => collection.cover.map(|m| m.to_u64()),
+                "cover" => collection.cover.map(|m| m.value()),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -835,11 +836,11 @@ impl DbBackend for MariaDBBackend {
             anyhow::Error::msg("failed to add collection")
         })?;
 
-        let data = from_row_opt::<u64>(row)?;
+        let data = from_row_opt::<Uuid>(row)?;
 
-        debug!({ collection_name = collection.name, collection_uuid = data }, "added collection");
+        debug!({ collection_name = collection.name, collection_uuid = %data }, "added collection");
 
-        Ok(CollectionUuid::from_u64(self, data))
+        Ok(CollectionUuid::from_value(self, data))
     }
 
     #[instrument(skip(self))]
@@ -851,7 +852,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             SELECT uid, gid, name, note, tags, cover FROM collections WHERE collection_uuid = :collection_uuid"
         .with(params! {
-            "collection_uuid" => collection_uuid.to_u64(),
+            "collection_uuid" => collection_uuid.value(),
         })
         .run(self.pool.get_conn().await?)
         .await?
@@ -864,7 +865,7 @@ impl DbBackend for MariaDBBackend {
         };
 
         let data =
-            from_row_opt::<(String, String, String, String, String, Option<u64>)>(row)?;
+            from_row_opt::<(String, String, String, String, String, Option<Uuid>)>(row)?;
 
         debug!("found collection details");
 
@@ -876,7 +877,7 @@ impl DbBackend for MariaDBBackend {
             name: data.2,
             note: data.3,
             tags: unfold_set(&tags),
-            cover: data.5.map(|m| MediaUuid::from_u64(self, m)),
+            cover: data.5.map(|m| MediaUuid::from_value(self, m)),
         }))
     }
 
@@ -896,9 +897,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(CollectionUuid::from_u64(self, input))
+                Ok(CollectionUuid::from_value(self, input))
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
@@ -917,7 +918,7 @@ impl DbBackend for MariaDBBackend {
         r"
             DELETE FROM collection_contents WHERE collection_uuid = :collection_uuid"
             .with(params! {
-                "collection_uuid" => collection_uuid.to_u64(),
+                "collection_uuid" => collection_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?;
@@ -927,7 +928,7 @@ impl DbBackend for MariaDBBackend {
         r"
             DELETE FROM collections WHERE collection_uuid = :collection_uuid"
             .with(params! {
-                "collection_uuid" => collection_uuid.to_u64(),
+                "collection_uuid" => collection_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?;
@@ -952,7 +953,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE collections SET name = :name WHERE collection_uuid = :collection_uuid"
                 .with(params! {
                     "name" => val.clone(),
-                    "collection_uuid" => collection_uuid.to_u64(),
+                    "collection_uuid" => collection_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -963,7 +964,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE collections SET note = :note WHERE collection_uuid = :collection_uuid"
                 .with(params! {
                     "note" => val.clone(),
-                    "collection_uuid" => collection_uuid.to_u64(),
+                    "collection_uuid" => collection_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -974,7 +975,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE collections SET tags = :tags WHERE collection_uuid = :collection_uuid"
                 .with(params! {
                     "tags" => fold_set(val.clone())?,
-                    "collection_uuid" => collection_uuid.to_u64(),
+                    "collection_uuid" => collection_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -1011,8 +1012,8 @@ impl DbBackend for MariaDBBackend {
             )
             RETURNING id"
             .with(params! {
-                "media_uuid" => media_uuid.to_u64(),
-                "collection_uuid" => collection_uuid.to_u64(),
+                "media_uuid" => media_uuid.value(),
+                "collection_uuid" => collection_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -1042,8 +1043,8 @@ impl DbBackend for MariaDBBackend {
         r"
         DELETE FROM collection_contents WHERE (media_uuid = :media_uuid AND collection_uuid = :collection_uuid)"
         .with(params! {
-            "media_uuid" => media_uuid.to_u64(),
-            "collection_uuid" => collection_uuid.to_u64(),
+            "media_uuid" => media_uuid.value(),
+            "collection_uuid" => collection_uuid.value(),
         })
         .run(self.pool.get_conn().await?)
         .await?;
@@ -1091,9 +1092,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(CollectionUuid::from_u64(self, input))
+                Ok(CollectionUuid::from_value(self, input))
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
@@ -1146,7 +1147,7 @@ impl DbBackend for MariaDBBackend {
         let result = query
             .with(params! {
                 "gid" => fold_set(gid)?,
-                "collection_uuid" => collection_uuid.to_u64(),
+                "collection_uuid" => collection_uuid.value(),
                 "filter" => filter,
             })
             .run(self.pool.get_conn().await?)
@@ -1157,9 +1158,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(MediaUuid::from_u64(self, input))
+                Ok(MediaUuid::from_value(self, input))
             })
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
@@ -1178,7 +1179,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             INSERT INTO libraries (library_uuid, path, gid, count)
             SELECT
-                UUID_SHORT()
+                UUID_v7()
                 :path,
                 :gid,
                 :count
@@ -1206,11 +1207,11 @@ impl DbBackend for MariaDBBackend {
             anyhow::Error::msg("failed to add library")
         })?;
 
-        let data = from_row_opt::<u64>(row)?;
+        let data = from_row_opt::<Uuid>(row)?;
 
-        debug!({ library_path = library.path, library_uuid = data }, "adding library");
+        debug!({ library_path = library.path, library_uuid = %data }, "adding library");
 
-        Ok(LibraryUuid::from_u64(self, data))
+        Ok(LibraryUuid::from_value(self, data))
     }
 
     #[instrument(skip(self))]
@@ -1222,7 +1223,7 @@ impl DbBackend for MariaDBBackend {
         let mut result = r"
             SELECT path, uid, gid, count FROM libraries WHERE library_uuid = :library_uuid"
             .with(params! {
-                "library_uuid" => library_uuid.to_u64(),
+                "library_uuid" => library_uuid.value(),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -1262,9 +1263,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(LibraryUuid::from_u64(self, input))
+                Ok(LibraryUuid::from_value(self, input))
             })
             .collect::<Result<Vec<LibraryUuid>, anyhow::Error>>()?;
 
@@ -1284,7 +1285,7 @@ impl DbBackend for MariaDBBackend {
             UPDATE libraries SET count = :count WHERE library_uuid = :library_uuid"
                 .with(params! {
                     "count" => val,
-                    "library_uuid" => library_uuid.to_u64(),
+                    "library_uuid" => library_uuid.value(),
                 })
                 .run(self.pool.get_conn().await?)
                 .await?;
@@ -1324,9 +1325,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(LibraryUuid::from_u64(self, input))
+                Ok(LibraryUuid::from_value(self, input))
             })
             .collect::<Result<Vec<LibraryUuid>, anyhow::Error>>()?;
 
@@ -1384,7 +1385,7 @@ impl DbBackend for MariaDBBackend {
         let result = query
             .with(params! {
                 "gid" => fold_set(gid)?,
-                "library_uuid" => library_uuid.to_u64(),
+                "library_uuid" => library_uuid.value(),
                 "hidden" => hidden,
                 "filter" => filter,
             })
@@ -1396,9 +1397,9 @@ impl DbBackend for MariaDBBackend {
         let data = result
             .into_iter()
             .map(|row| {
-                let input = from_row_opt::<u64>(row)?;
+                let input = from_row_opt::<Uuid>(row)?;
 
-                Ok(MediaUuid::from_u64(self, input))
+                Ok(MediaUuid::from_value(self, input))
             })
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
