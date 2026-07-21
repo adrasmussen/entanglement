@@ -10,7 +10,7 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
-    search::SearchFilter,
+    search::SearchOptions,
 };
 
 pub mod mariadb;
@@ -60,7 +60,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_media(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>>;
 
     async fn similar_media(
@@ -79,7 +79,8 @@ pub trait DbBackend: Send + Sync + 'static {
 
     async fn delete_comment(&self, comment_uuid: CommentUuid) -> Result<()>;
 
-    async fn update_comment(&self, comment_uuid: CommentUuid, update: Option<String>) -> Result<()>;
+    async fn update_comment(&self, comment_uuid: CommentUuid, update: Option<String>)
+    -> Result<()>;
 
     // collection functions
     async fn add_collection(&self, collection: Collection) -> Result<CollectionUuid>;
@@ -111,14 +112,14 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<CollectionUuid>>;
 
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>>;
 
     // library functions
@@ -141,7 +142,7 @@ pub trait DbBackend: Send + Sync + 'static {
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>>;
 }
 

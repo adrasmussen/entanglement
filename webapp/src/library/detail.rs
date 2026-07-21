@@ -16,7 +16,13 @@ use crate::{
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
 };
 use api::{
-    UuidSource, library::*, media::MediaUuid, search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort}, sort::SortMethod
+    UuidSource,
+    library::*,
+    media::MediaUuid,
+    search::{
+        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
+        batch_search_and_sort,
+    },
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -110,9 +116,13 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             req: SearchRequest::Library(SearchMediaInLibraryReq {
                 library_uuid,
                 hidden: Some(hidden),
-                filter: SearchFilter::SubstringAny { filter },
+                opts: SearchOptions {
+                    filter: SearchFilter::SubstringAny { filter },
+                    order: SortMethod::DateDesc,
+                    limit: None,
+                    offset: 0,
+                },
             }),
-            sort: SortMethod::Date,
         })
         .await
     });

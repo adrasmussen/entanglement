@@ -21,7 +21,7 @@ use crate::{
     service::{ESMRegistry, EsmSender, ServiceType},
     task::scan_utils::add_tag_to_media,
 };
-use api::{library::LibraryUuid, media::MediaUuid, search::SearchFilter};
+use api::{library::LibraryUuid, media::MediaUuid, search::{SearchOptions}};
 use common::{config::ESConfig, media::create_thumbnail};
 
 #[derive(Debug)]
@@ -75,7 +75,7 @@ pub async fn clean_library(
                 gid: HashSet::from([library.gid]),
                 library_uuid,
                 hidden: None,
-                filter: SearchFilter::default(),
+                opts: SearchOptions::default(),
             }
             .into(),
         )

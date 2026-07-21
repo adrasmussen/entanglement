@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid, search::SearchFilter, uuid_newtype};
+use crate::{http_endpoint, media::MediaUuid, search::SearchOptions, uuid_newtype};
 
 // structs
 uuid_newtype!(Library);
@@ -65,7 +65,7 @@ http_endpoint!(SearchMediaInLibrary);
 pub struct SearchMediaInLibraryReq {
     pub library_uuid: LibraryUuid,
     pub hidden: Option<bool>,
-    pub filter: SearchFilter,
+    pub opts: SearchOptions,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

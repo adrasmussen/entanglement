@@ -13,8 +13,49 @@ use crate::{
     http_endpoint,
     library::SearchMediaInLibraryReq,
     media::{Media, MediaUuid, SearchMediaReq},
-    sort::SortMethod,
 };
+
+// search options
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SearchOptions {
+    pub filter: SearchFilter,
+    pub order: SortMethod,
+    pub limit: Option<u64>,
+    pub offset: u64,
+}
+
+impl SearchOptions {
+    pub fn format_postgres(&self, ts_col: &str) -> String {
+        let filter = self.filter.format_postgres(ts_col);
+
+        let order = match self.order {
+            SortMethod::DateAsc => "ORDER BY media.date ASC",
+            SortMethod::DateDesc => "ORDER BY media.date DESC",
+            SortMethod::Path => "ORDER by media.path ASC",
+        };
+
+        let limit = self.limit.map_or("".to_owned(), |l| format!("LIMIT {l}"));
+
+        format!(" {filter} {order} {limit} OFFSET {};", self.offset)
+    }
+
+    pub fn format_mariadb(&self, cols: &str) -> (String, String) {
+        let (sql, param) = self.filter.format_mariadb(cols);
+
+        let order = match self.order {
+            SortMethod::DateAsc => "ORDER BY media.date ASC",
+            SortMethod::DateDesc => "ORDER BY media.date DESC",
+            SortMethod::Path => "ORDER by media.path ASC",
+        };
+
+        let limit = self.limit.map_or("".to_owned(), |l| format!("LIMIT {l}"));
+
+        (
+            format!(" {sql} {order} {limit} OFFSET {};", self.offset),
+            param,
+        )
+    }
+}
 
 // this struct is a first attempt at making a more generalized search mechanism that is
 // still agnostic to the particular database backend
@@ -59,11 +100,57 @@ impl Display for SearchFilter {
 }
 
 impl SearchFilter {
+    // postgres formatting for  queries
+    //
+    // https://www.postgresql.org/docs/current/textsearch-controls.html
+    fn format_postgres(&self, ts_col: &str) -> String {
+        match self {
+            Self::SubstringAny { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+            }
+
+            Self::SubstringAll { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" & ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+            }
+
+            Self::Fulltext { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
+            }
+
+            // use the fulltext search as keywords
+            Self::Keyword { filter } => {
+                if filter.is_empty() {
+                    return String::new();
+                }
+
+                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
+
+                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+            }
+        }
+    }
+
     // mariadb formatting for mysql_async queries
     //
     // returns (sql, filter) where 'sql' is a fragment of an sql query
     // and filter is the named parameter
-    pub fn format_mariadb(&self, cols: &str) -> (String, String) {
+    fn format_mariadb(&self, cols: &str) -> (String, String) {
         match self {
             // match any of the strings using the normal regex logical OR |
             // (?i) enables case-insensitive matching
@@ -136,52 +223,14 @@ impl SearchFilter {
             }
         }
     }
+}
 
-    // postgres formatting for  queries
-    //
-    // https://www.postgresql.org/docs/current/textsearch-controls.html
-    pub fn format_postgres(&self, ts_col: &str) -> String {
-        match self {
-            Self::SubstringAny { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
-            }
-
-            Self::SubstringAll { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" & ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
-            }
-
-            Self::Fulltext { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
-            }
-
-            // use the fulltext search as keywords
-            Self::Keyword { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
-            }
-        }
-    }
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub enum SortMethod {
+    DateAsc,
+    #[default]
+    DateDesc,
+    Path,
 }
 
 // batch searching
@@ -213,7 +262,6 @@ http_endpoint!(BatchSearchAndSort);
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BatchSearchAndSortReq {
     pub req: SearchRequest,
-    pub sort: SortMethod,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

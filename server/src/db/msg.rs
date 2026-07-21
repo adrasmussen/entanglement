@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use api::{collection::*, comment::*, library::*, media::*, search::SearchFilter};
+use api::{collection::*, comment::*, library::*, media::*, search::SearchOptions};
 use common::db::{MediaByCHash, MediaByPath};
 
 use crate::service::*;
@@ -50,7 +50,7 @@ pub enum DbMsg {
     SearchMedia {
         resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     },
     SimilarMedia {
         resp: EsmResp<Vec<MediaUuid>>,
@@ -109,13 +109,13 @@ pub enum DbMsg {
     SearchCollections {
         resp: EsmResp<Vec<CollectionUuid>>,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     },
     SearchMediaInCollection {
         resp: EsmResp<Vec<MediaUuid>>,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: SearchFilter,
+        opts: SearchOptions,
     },
 
     // library messages
@@ -142,7 +142,7 @@ pub enum DbMsg {
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     },
 }
 

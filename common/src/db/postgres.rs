@@ -1,5 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet}, sync::Arc, time::{SystemTime, UNIX_EPOCH}
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
@@ -24,7 +26,7 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
-    search::SearchFilter,
+    search::SearchOptions,
 };
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
@@ -57,7 +59,7 @@ impl DbBackend for PostgresBackend {
             .ok_or_else(|| anyhow::Error::msg("postgres config not present"))?;
 
         if config.url.scheme() != "postgres" {
-            return Err(anyhow::Error::msg("invalid postgres url"))
+            return Err(anyhow::Error::msg("invalid postgres url"));
         }
 
         let mut root_store = RootCertStore::empty();
@@ -72,7 +74,8 @@ impl DbBackend for PostgresBackend {
 
         let tls_config = MakeRustlsConnect::new(tls_config);
 
-        let manager = PostgresConnectionManager::new_from_stringlike(config.url.as_str(), tls_config)?;
+        let manager =
+            PostgresConnectionManager::new_from_stringlike(config.url.as_str(), tls_config)?;
 
         let pool = Pool::builder().build(manager).await?;
 
@@ -334,17 +337,17 @@ impl DbBackend for PostgresBackend {
         Ok(())
     }
 
-    #[instrument(skip(self, filter))]
+    #[instrument(skip(self, opts))]
     async fn search_media(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching for media");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = filter.format_postgres("media.ts_vec");
+        let ts_search_sql = opts.format_postgres("media.ts_vec");
 
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
@@ -748,17 +751,17 @@ impl DbBackend for PostgresBackend {
         Ok(())
     }
 
-    #[instrument(skip(self, filter))]
+    #[instrument(skip(self, opts))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<CollectionUuid>> {
         debug!("searching for collections");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = filter.format_postgres("collections.ts_vec");
+        let ts_search_sql = opts.format_postgres("collections.ts_vec");
 
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
@@ -785,18 +788,18 @@ impl DbBackend for PostgresBackend {
         Ok(collections)
     }
 
-    #[instrument(skip(self, filter))]
+    #[instrument(skip(self, opts))]
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching for media in collection");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = filter.format_postgres("media.ts_vec");
+        let ts_search_sql = opts.format_postgres("media.ts_vec");
 
         let mut statement = r#"-- search_media_in_collection
             SELECT
@@ -818,8 +821,7 @@ impl DbBackend for PostgresBackend {
                 ) AS t3
                 INNER JOIN media ON t3.media_uuid = media.media_uuid
             WHERE
-                media.hidden = FALSE
-        "#.to_owned();
+                media.hidden = FALSE"#.to_owned();
 
         statement.push_str(&ts_search_sql);
 
@@ -850,7 +852,10 @@ impl DbBackend for PostgresBackend {
         ";
 
         let library_uuid: LibraryUuid = conn
-            .query_one_scalar(statement, &[&library.path, &library.uid, &library.gid, &library.count])
+            .query_one_scalar(
+                statement,
+                &[&library.path, &library.uid, &library.gid, &library.count],
+            )
             .await?;
 
         debug!({ library_path = library.path , %library_uuid }, "added library");
@@ -922,6 +927,7 @@ impl DbBackend for PostgresBackend {
         Ok(())
     }
 
+    #[instrument(skip(self, filter))]
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
@@ -955,21 +961,21 @@ impl DbBackend for PostgresBackend {
         Ok(libraries)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching for media in library");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = filter.format_postgres("media.ts_vec");
+        let ts_search_sql = opts.format_postgres("media.ts_vec");
 
-        let mut statement = r#"-- search_media_in_collection
+        let mut statement = r#"-- search_media_in_library
             SELECT
                 media.media_uuid
             FROM
@@ -983,14 +989,19 @@ impl DbBackend for PostgresBackend {
                 ) AS t1
                 INNER JOIN media ON t1.library_uuid = media.library_uuid
             WHERE
-                media.hidden = COALESCE($3, media.hidden)"#.to_owned();
+                media.hidden = COALESCE($3, media.hidden)"#
+            .to_owned();
 
         statement.push_str(&ts_search_sql);
 
         let media = conn
             .query_scalar(
                 &statement,
-                &[&gid.into_iter().collect::<Vec<String>>(), &library_uuid, &hidden],
+                &[
+                    &gid.into_iter().collect::<Vec<String>>(),
+                    &library_uuid,
+                    &hidden,
+                ],
             )
             .await?;
 

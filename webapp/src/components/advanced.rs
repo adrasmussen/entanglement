@@ -305,7 +305,12 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
             .collect();
 
         search_collections(&SearchCollectionsReq {
-            filter: SearchFilter::SubstringAny { filter },
+            opts: SearchOptions {
+                filter: SearchFilter::SubstringAny { filter },
+                order: SortMethod::DateDesc,
+                limit: None,
+                offset: 0,
+            },
         })
         .await
     });

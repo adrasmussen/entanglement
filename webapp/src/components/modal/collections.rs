@@ -9,8 +9,7 @@ use crate::components::{
     search::CompactSearchBar,
 };
 use api::{
-    FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::SearchFilter,
-    unfold_set,
+    FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::{SearchFilter, SearchOptions, SortMethod}, unfold_set,
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -538,7 +537,12 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
             .collect();
 
         search_collections(&SearchCollectionsReq {
-            filter: SearchFilter::SubstringAny { filter },
+            opts: SearchOptions {
+                filter: SearchFilter::SubstringAny { filter },
+                order: SortMethod::DateDesc,
+                limit: None,
+                offset: 0,
+            },
         })
         .await
     });
@@ -746,7 +750,12 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
             .collect();
 
         search_collections(&SearchCollectionsReq {
-            filter: SearchFilter::SubstringAny { filter },
+            opts: SearchOptions {
+                filter: SearchFilter::SubstringAny { filter },
+                order: SortMethod::DateDesc,
+                limit: None,
+                offset: 0,
+            },
         })
         .await
     });
@@ -772,8 +781,13 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 // figure out what is already in the collection
                 let current_media = match search_media_in_collection(&SearchMediaInCollectionReq {
                     collection_uuid,
-                    filter: SearchFilter::SubstringAny {
-                        filter: HashSet::new(),
+                    opts: SearchOptions {
+                        filter: SearchFilter::SubstringAny {
+                            filter: HashSet::new(),
+                        },
+                        order: SortMethod::DateDesc,
+                        limit: None,
+                        offset: 0,
                     },
                 })
                 .await

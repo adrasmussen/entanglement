@@ -15,8 +15,10 @@ use crate::{
 };
 use api::{
     media::*,
-    search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort},
-    sort::SortMethod,
+    search::{
+        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
+        batch_search_and_sort,
+    },
 };
 
 #[component]
@@ -38,9 +40,13 @@ pub fn GallerySearch() -> Element {
 
         batch_search_and_sort(&BatchSearchAndSortReq {
             req: SearchRequest::Media(SearchMediaReq {
-                filter: SearchFilter::SubstringAny { filter },
+                opts: SearchOptions {
+                    filter: SearchFilter::SubstringAny { filter },
+                    order: SortMethod::DateDesc,
+                    limit: None,
+                    offset: 0,
+                },
             }),
-            sort: SortMethod::Date,
         })
         .await
     });

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, uuid_newtype, media::MediaUuid, search::SearchFilter};
+use crate::{http_endpoint, media::MediaUuid, search::SearchOptions, uuid_newtype};
 
 // structs
 
@@ -110,7 +110,7 @@ http_endpoint!(SearchCollections);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
-    pub filter: SearchFilter,
+    pub opts: SearchOptions,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -124,7 +124,7 @@ http_endpoint!(SearchMediaInCollection);
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionReq {
     pub collection_uuid: CollectionUuid,
-    pub filter: SearchFilter,
+    pub opts: SearchOptions,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use postgres_types::{ToSql, FromSql};
 
 use crate::{
     collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
-    search::SearchFilter, uuid_newtype,
+    search::SearchOptions, uuid_newtype,
 };
 
 // structs
@@ -26,7 +26,17 @@ pub struct Media {
     pub metadata: MediaMetadata,
 }
 
-#[derive(Clone, Debug, Deserialize, FromSql, PartialEq, Serialize, strum::Display, strum::EnumString, ToSql)]
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    FromSql,
+    PartialEq,
+    Serialize,
+    strum::Display,
+    strum::EnumString,
+    ToSql,
+)]
 #[postgres(name = "media_type")]
 pub enum MediaMetadata {
     Image,
@@ -80,7 +90,7 @@ http_endpoint!(SearchMedia);
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchMediaReq {
-    pub filter: SearchFilter,
+    pub opts: SearchOptions,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]

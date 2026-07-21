@@ -16,7 +16,14 @@ use crate::{
     },
 };
 use api::{
-    UuidSource, collection::*, fold_set, media::MediaUuid, search::{BatchSearchAndSortReq, SearchFilter, SearchRequest, batch_search_and_sort}, sort::SortMethod
+    UuidSource,
+    collection::*,
+    fold_set,
+    media::MediaUuid,
+    search::{
+        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
+        batch_search_and_sort,
+    },
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -107,9 +114,13 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         batch_search_and_sort(&BatchSearchAndSortReq {
             req: SearchRequest::Collection(SearchMediaInCollectionReq {
                 collection_uuid,
-                filter: SearchFilter::SubstringAny { filter },
+                opts: SearchOptions {
+                    filter: SearchFilter::SubstringAny { filter },
+                    order: SortMethod::DateDesc,
+                    limit: None,
+                    offset: 0,
+                },
             }),
-            sort: SortMethod::Date,
         })
         .await
     });

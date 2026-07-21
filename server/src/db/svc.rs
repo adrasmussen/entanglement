@@ -147,8 +147,8 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                DbMsg::SearchMedia { resp, gid, filter } => {
-                    self.respond(resp, self.backend.search_media(gid, filter))
+                DbMsg::SearchMedia { resp, gid, opts } => {
+                    self.respond(resp, self.backend.search_media(gid, opts))
                         .await
                 }
                 DbMsg::SimilarMedia {
@@ -236,20 +236,20 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                DbMsg::SearchCollections { resp, gid, filter } => {
-                    self.respond(resp, self.backend.search_collections(gid, filter))
+                DbMsg::SearchCollections { resp, gid, opts } => {
+                    self.respond(resp, self.backend.search_collections(gid, opts))
                         .await
                 }
                 DbMsg::SearchMediaInCollection {
                     resp,
                     gid,
                     collection_uuid,
-                    filter,
+                    opts,
                 } => {
                     self.respond(
                         resp,
                         self.backend
-                            .search_media_in_collection(gid, collection_uuid, filter),
+                            .search_media_in_collection(gid, collection_uuid, opts),
                     )
                     .await
                 }
@@ -279,12 +279,12 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     gid,
                     library_uuid,
                     hidden,
-                    filter,
+                    opts,
                 } => {
                     self.respond(
                         resp,
                         self.backend
-                            .search_media_in_library(gid, library_uuid, hidden, filter),
+                            .search_media_in_library(gid, library_uuid, hidden, opts),
                     )
                     .await
                 }

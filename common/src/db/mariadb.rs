@@ -24,7 +24,7 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
-    search::SearchFilter,
+    search::SearchOptions,
     unfold_set,
 };
 
@@ -84,7 +84,7 @@ impl DbBackend for MariaDBBackend {
             .ok_or_else(|| anyhow::Error::msg("mariadb config not present"))?;
 
         if config.url.scheme() != "mysql" {
-            return Err(anyhow::Error::msg("invalid mariadb url"))
+            return Err(anyhow::Error::msg("invalid mariadb url"));
         }
 
         Ok(Self {
@@ -497,11 +497,11 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, opts))]
     async fn search_media(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching for media");
 
@@ -510,7 +510,7 @@ impl DbBackend for MariaDBBackend {
         let _xr = self.locks.contents.read().await;
         let _cr = self.locks.collection.read().await;
 
-        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+        let (sql, filter) = opts.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid and filter, find all media that match either:
         //  * is in a library owned by a group containing the uid
@@ -864,8 +864,7 @@ impl DbBackend for MariaDBBackend {
             None => return Ok(None),
         };
 
-        let data =
-            from_row_opt::<(String, String, String, String, String, Option<Uuid>)>(row)?;
+        let data = from_row_opt::<(String, String, String, String, String, Option<Uuid>)>(row)?;
 
         debug!("found collection details");
 
@@ -1054,18 +1053,18 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, opts))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<CollectionUuid>> {
         debug!("searching for collections");
 
         let _cr = self.locks.collection.read().await;
 
         let (sql, filter) =
-            filter.format_mariadb("collections.name, collections.note, collections.tags");
+            opts.format_mariadb("collections.name, collections.note, collections.tags");
 
         // for a given uid and filter, find all collections owned by groups that contain that uid
         let mut query = r"
@@ -1103,12 +1102,12 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, opts))]
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching media in collection");
 
@@ -1116,7 +1115,7 @@ impl DbBackend for MariaDBBackend {
         let _xr = self.locks.contents.read().await;
         let _cr = self.locks.collection.read().await;
 
-        let (sql, filter) = filter.format_mariadb("media.path, media.date, media.note, media.tags");
+        let (sql, filter) = opts.format_mariadb("media.path, media.date, media.note, media.tags");
 
         // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
         // provided that the collection is owned by a group containing the uid
@@ -1296,7 +1295,7 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, filter))]
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
@@ -1336,13 +1335,13 @@ impl DbBackend for MariaDBBackend {
         Ok(data)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
-        filter: SearchFilter,
+        opts: SearchOptions,
     ) -> Result<Vec<MediaUuid>> {
         debug!("searching media in library");
 
@@ -1350,7 +1349,7 @@ impl DbBackend for MariaDBBackend {
         let _lr = self.locks.library.read().await;
 
         let (filter_sql, filter) =
-            filter.format_mariadb("media.path, media.date, media.note, media.tags");
+            opts.format_mariadb("media.path, media.date, media.note, media.tags");
 
         let (hidden_sql, hidden) = match hidden {
             Some(v) => (String::from("media.hidden = :hidden"), v),

@@ -8,7 +8,10 @@ use crate::{
         search::SearchBar,
     },
 };
-use api::{collection::*, search::SearchFilter};
+use api::{
+    collection::*,
+    search::{SearchFilter, SearchOptions, SortMethod},
+};
 
 #[component]
 pub fn CollectionSearch() -> Element {
@@ -26,7 +29,12 @@ pub fn CollectionSearch() -> Element {
             .collect();
 
         search_collections(&SearchCollectionsReq {
-            filter: SearchFilter::SubstringAny { filter },
+            opts: SearchOptions {
+                filter: SearchFilter::SubstringAny { filter },
+                order: SortMethod::DateDesc,
+                limit: None,
+                offset: 0,
+            },
         })
         .await
     });

@@ -23,7 +23,6 @@ ldap3 = { workspace = true }
 mysql_async = { workspace = true }
 pastey = { workspace = true }
 regex = { workspace = true }
-rocksdb = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }

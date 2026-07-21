@@ -148,7 +148,7 @@ pub(super) async fn search_media(
             DbMsg::SearchMedia {
                 resp: tx,
                 gid,
-                filter: message.filter,
+                opts: message.opts,
             }
             .into(),
         )
@@ -568,7 +568,7 @@ pub(super) async fn search_collections(
             DbMsg::SearchCollections {
                 resp: tx,
                 gid,
-                filter: message.filter,
+                opts: message.opts,
             }
             .into(),
         )
@@ -601,7 +601,7 @@ pub(super) async fn search_media_in_collection(
                 resp: tx,
                 gid,
                 collection_uuid: message.collection_uuid,
-                filter: message.filter,
+                opts: message.opts,
             }
             .into(),
         )
@@ -694,7 +694,7 @@ pub(super) async fn search_media_in_library(
                 gid,
                 library_uuid: message.library_uuid,
                 hidden: message.hidden,
-                filter: message.filter,
+                opts: message.opts,
             }
             .into(),
         )
@@ -832,7 +832,7 @@ pub(super) async fn batch_search_and_sort(
                     DbMsg::SearchMedia {
                         resp: tx,
                         gid,
-                        filter: request.filter,
+                        opts: request.opts,
                     }
                     .into(),
                 )
@@ -846,7 +846,7 @@ pub(super) async fn batch_search_and_sort(
                         resp: tx,
                         gid,
                         collection_uuid: request.collection_uuid,
-                        filter: request.filter,
+                        opts: request.opts,
                     }
                     .into(),
                 )
@@ -861,7 +861,7 @@ pub(super) async fn batch_search_and_sort(
                         gid,
                         library_uuid: request.library_uuid,
                         hidden: request.hidden,
-                        filter: request.filter,
+                        opts: request.opts,
                     }
                     .into(),
                 )

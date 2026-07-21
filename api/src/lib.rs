@@ -10,7 +10,6 @@ pub mod comment;
 pub mod library;
 pub mod media;
 pub mod search;
-pub mod sort;
 pub mod task;
 
 // entanglment api
