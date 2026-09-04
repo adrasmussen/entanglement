@@ -10,7 +10,7 @@ use crate::{
         search::CompactSearchBar,
     },
 };
-use api::{WebError, collection::*, media::MediaUuid, search::*};
+use api::{WebError, collection::*, media::MediaUuid};
 
 // TODO -- use show_signal for consistent cleanup... or move to a button?
 #[derive(Clone, PartialEq, Props)]
@@ -140,7 +140,7 @@ pub fn AdvancedSearchTab(props: AdvancedSearchTabProps) -> Element {
 pub enum BulkEditMode {
     EditTags,
     AddToCollection,
-    //RmFromCollection,
+    RmFromCollection(CollectionUuid),
     //Hide,
 }
 #[derive(Clone, PartialEq, Props)]
@@ -158,6 +158,10 @@ fn BulkEditButton(props: BulkEditButtonProps) -> Element {
         BulkEditMode::AddToCollection => (
             "Add to Collection",
             Modal::BulkAddToCollection(bulk_edit_signal()),
+        ),
+        BulkEditMode::RmFromCollection(collection_uuid) => (
+            "Remove from Collection",
+            Modal::BulkRmFromCollectionModal(bulk_edit_signal(), collection_uuid),
         ),
     };
 
@@ -187,7 +191,6 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
 
     rsx! {
         div { class: "bulk-edit-options",
-            // Header: matches CollectionColorTab's form-group + label + description pattern
             div { class: "form-group",
                 label { class: "form-label", "Bulk Edit" }
                 p { style: "margin-bottom: var(--space-4); color: var(--text-secondary); font-size: 0.875rem;",

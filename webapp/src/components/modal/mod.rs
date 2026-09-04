@@ -11,8 +11,8 @@ use comments::DeleteCommentModal;
 
 mod collections;
 use collections::{
-    AddMediaToCollectionModal, BulkAddToCollectionModal, CreateCollectionModal,
-    DeleteCollectionModal, EditCollectionModal, RmFromCollectionModal,
+    AddMediaToCollectionModal, BulkAddToCollectionModal, BulkRmFromCollectionModal,
+    CreateCollectionModal, DeleteCollectionModal, EditCollectionModal, RmFromCollectionModal,
 };
 
 mod library;
@@ -42,6 +42,7 @@ pub enum Modal {
     AddMediaToCollection(MediaUuid),
     RmMediaFromCollection(MediaUuid, CollectionUuid),
     BulkAddToCollection(Option<HashSet<MediaUuid>>),
+    BulkRmFromCollectionModal(Option<HashSet<MediaUuid>>, CollectionUuid),
     BulkEditTags(Option<HashSet<MediaUuid>>),
     StartTask(LibraryUuid),
     StopTask(LibraryUuid),
@@ -105,6 +106,11 @@ pub fn ModalBox(props: ModalBoxProps) -> Element {
             Modal::BulkAddToCollection(ref media_uuids) => {
                 rsx! {
                     BulkAddToCollectionModal { update_signal, media_uuids: media_uuids.clone() }
+                }
+            }
+            Modal::BulkRmFromCollectionModal(ref media_uuids, collection_uuid) => {
+                rsx! {
+                    BulkRmFromCollectionModal { update_signal, media_uuids: media_uuids.clone(), collection_uuid }
                 }
             }
             Modal::BulkEditTags(ref media_uuids) => {

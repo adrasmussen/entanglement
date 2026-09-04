@@ -728,6 +728,8 @@ pub struct BulkAddToCollectionModalProps {
 
 #[component]
 pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element {
+    // TODO -- this technically causes a hook determinism error if media_uuids
+    // can change inside of this modal (same in other bulk modals)
     let media_uuids = match props.media_uuids {
         None => {
             MODAL_STACK.with_mut(|v| v.pop());
@@ -911,6 +913,186 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                                 });
                         },
                         "Create New Collection"
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct BulkRmFromCollectionModalProps {
+    update_signal: Signal<()>,
+    media_uuids: Option<HashSet<MediaUuid>>,
+    collection_uuid: CollectionUuid,
+}
+
+#[component]
+pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Element {
+    let media_uuids = match props.media_uuids {
+        None => {
+            MODAL_STACK.with_mut(|v| v.pop());
+            return rsx! {};
+        }
+        Some(v) => v,
+    };
+
+    let mut update_signal = props.update_signal;
+
+    let collection_uuid = props.collection_uuid;
+
+    let collection_future =
+        use_resource(
+            move || async move { get_collection(&GetCollectionReq { collection_uuid }).await },
+        );
+
+    // TODO -- we may want a general ModalError here instead of just skipping the failure
+    let collection_name = match &*collection_future.read() {
+        Some(Ok(result)) => result.collection.name.clone(),
+        _ => format!("Collection #{}", collection_uuid),
+    };
+
+    let mut status_signal = use_signal(String::new);
+
+    let mut processing_count = use_signal(|| 0);
+    let mut success_count = use_signal(|| 0);
+    let mut error_count = use_signal(|| 0);
+    let media_count = media_uuids.len() as i64;
+
+    let handle_submit = move |_| {
+        let media_uuids = media_uuids.clone();
+        async move {
+            // figure out what is actually in the collection, so that media which
+            // is already absent doesn't get counted as a failure
+            let current_media = match search_media_in_collection(&SearchMediaInCollectionReq {
+                collection_uuid,
+                opts: SearchOptions {
+                    filter: SearchFilter::SubstringAny {
+                        filter: HashSet::new(),
+                    },
+                    order: SortMethod::DateDesc,
+                    limit: None,
+                    offset: 0,
+                },
+            })
+            .await
+            {
+                Ok(v) => v.media.into_iter().collect::<HashSet<MediaUuid>>(),
+                Err(err) => {
+                    status_signal.set(format!("Error fetching collection: {err}"));
+                    return;
+                }
+            };
+
+            status_signal.set(format!(
+                "Removing {} media items from collection...",
+                media_count
+            ));
+
+            processing_count.set(0);
+            success_count.set(0);
+            error_count.set(0);
+
+            // Process each media item
+            for media_uuid in media_uuids {
+                processing_count.set(processing_count() + 1);
+
+                if !current_media.contains(&media_uuid) {
+                    continue;
+                }
+
+                match rm_media_from_collection(&RmMediaFromCollectionReq {
+                    collection_uuid,
+                    media_uuid,
+                })
+                .await
+                {
+                    Ok(_) => {
+                        success_count.set(success_count() + 1);
+                    }
+                    Err(err) => {
+                        error!("failed to remove media from collection while bulk removing: {err}");
+                        error_count.set(error_count() + 1);
+                    }
+                }
+            }
+
+            // Update overall status
+            if error_count() == 0 {
+                status_signal.set(format!(
+                    "Successfully removed all {} items from collection",
+                    success_count()
+                ));
+            } else {
+                status_signal.set(format!(
+                    "Removed {} items, {} failed; see browser console",
+                    success_count(),
+                    error_count()
+                ));
+            }
+
+            update_signal.set(());
+
+            // Close the modal after a delay if successful
+            if error_count() == 0 {
+                let task = Timeout::new(1500, move || {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                });
+                task.forget();
+            }
+        }
+    };
+
+    let footer = rsx! {
+        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        div {
+            class: "modal-buttons",
+            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    MODAL_STACK.with_mut(|v| v.pop());
+                },
+                "Cancel"
+            }
+            button { class: "btn btn-danger", onclick: handle_submit, "Remove from Collection" }
+        }
+    };
+
+    rsx! {
+        ModalInner {
+            title: format!("Remove {} Items from Collection", media_count),
+            size: ModalSize::Medium,
+            footer,
+            div {
+                ProgressBar {
+                    processing_count,
+                    success_count,
+                    error_count,
+                    media_count,
+                }
+
+                div { class: "confirmation-content",
+                    p {
+                        class: "confirmation-message",
+                        style: "margin-bottom: var(--space-4);",
+                        "Are you sure you want to remove {media_count} media items from \"{collection_name}\"? Items that are not currently in the collection will be skipped."
+                    }
+
+                    div {
+                        class: "warning-message",
+                        style: " padding: var(--space-3); background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--error); border-radius: var(--radius-md); color: var(--text-secondary);",
+                        "Note: The media files will remain in your library."
+                    }
+                }
+
+                // Collection summary
+                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
+                        "{media_count} items selected for bulk operation"
+                    }
+                    p { style: "margin: 0; color: var(--text-tertiary); font-size: 0.875rem;",
+                        "Collection: {collection_name} (ID: {collection_uuid})"
                     }
                 }
             }

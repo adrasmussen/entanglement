@@ -10,7 +10,6 @@ use crate::{
 };
 use api::{
     collection::*,
-    search::{SearchFilter, SearchOptions, SortMethod},
 };
 
 #[component]

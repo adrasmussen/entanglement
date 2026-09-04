@@ -258,7 +258,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                             BulkEditTab {
                                 bulk_edit_signal,
                                 media_uuids,
-                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::RmFromCollection(collection_uuid())]),
                             }
                         }),
                         ("Collection Labels".to_owned(), rsx! {
