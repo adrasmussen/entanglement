@@ -236,8 +236,8 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                DbMsg::SearchCollections { resp, gid, opts } => {
-                    self.respond(resp, self.backend.search_collections(gid, opts))
+                DbMsg::SearchCollections { resp, gid, filter } => {
+                    self.respond(resp, self.backend.search_collections(gid, filter))
                         .await
                 }
                 DbMsg::SearchMediaInCollection {

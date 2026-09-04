@@ -296,7 +296,7 @@ impl DbBackend for PostgresBackend {
             WHERE media_uuid = $5
         "#;
 
-        conn.query(
+        conn.execute(
             statement,
             &[
                 &update.hidden,
@@ -329,7 +329,7 @@ impl DbBackend for PostgresBackend {
             UPDATE media SET path = $1, chash = $2, mtime = $3 WHERE media_uuid = $4
         "#;
 
-        conn.query_one(statement, &[&path, &hash, &(mtime as i64), &media_uuid])
+        conn.execute(statement, &[&path, &hash, &(mtime as i64), &media_uuid])
             .await?;
 
         debug!("replaced media path");
@@ -546,7 +546,7 @@ impl DbBackend for PostgresBackend {
             DELETE FROM comments WHERE comment_uuid = $1
         "#;
 
-        conn.query(statement, &[&comment_uuid]).await?;
+        conn.execute(statement, &[&comment_uuid]).await?;
 
         Ok(())
     }
@@ -567,7 +567,7 @@ impl DbBackend for PostgresBackend {
             WHERE comment_uuid = $2
         "#;
 
-        conn.query(statement, &[&update, &comment_uuid]).await?;
+        conn.execute(statement, &[&update, &comment_uuid]).await?;
 
         debug!("updated comment");
 
@@ -663,7 +663,7 @@ impl DbBackend for PostgresBackend {
             DELETE FROM collections WHERE collection_uuid = $1
         "#;
 
-        conn.query(statement, &[&collection_uuid]).await?;
+        conn.execute(statement, &[&collection_uuid]).await?;
 
         Ok(())
     }
@@ -686,7 +686,7 @@ impl DbBackend for PostgresBackend {
             WHERE collection_uuid = $4
         "#;
 
-        conn.query(
+        conn.execute(
             statement,
             &[
                 &update.name,
@@ -743,7 +743,7 @@ impl DbBackend for PostgresBackend {
             DELETE FROM collection_contents WHERE media_uuid = $1 AND collection_uuid = $2
         "#;
 
-        conn.query_one(statement, &[&media_uuid, &collection_uuid])
+        conn.execute(statement, &[&media_uuid, &collection_uuid])
             .await?;
 
         debug!("removed media from collection");
@@ -751,36 +751,33 @@ impl DbBackend for PostgresBackend {
         Ok(())
     }
 
-    #[instrument(skip(self, opts))]
+    #[instrument(skip(self, filter))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        opts: SearchOptions,
+        filter: String,
     ) -> Result<Vec<CollectionUuid>> {
         debug!("searching for collections");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = opts.format_postgres("collections.ts_vec");
-
-        // for a given uid and filter, find all media that match either:
-        //  * is in a library owned by a group containing the uid
-        //  * if the media is not hidden, is in an collection owned
-        //    by a group containing the uid
-
-        let mut statement = r#"-- search_collections
+        let statement = r#"-- search_collections
             SELECT
                 collection_uuid
             FROM
                 collections
             WHERE
-                gid = ANY($1)"#
-            .to_owned();
-
-        statement.push_str(&ts_search_sql);
+                gid = ANY($1) AND name LIKE $2
+        "#;
 
         let collections = conn
-            .query_scalar(&statement, &[&gid.into_iter().collect::<Vec<String>>()])
+            .query_scalar(
+                statement,
+                &[
+                    &gid.into_iter().collect::<Vec<String>>(),
+                    &format!("%{}%", filter),
+                ],
+            )
             .await?;
 
         debug!({ count = collections.len() }, "found collections");
@@ -919,7 +916,7 @@ impl DbBackend for PostgresBackend {
             WHERE library_uuid = $2
         "#;
 
-        conn.query(statement, &[&update.count, &library_uuid])
+        conn.execute(statement, &[&update.count, &library_uuid])
             .await?;
 
         debug!("updated library");

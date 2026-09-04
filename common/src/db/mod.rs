@@ -112,7 +112,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        opts: SearchOptions,
+        filter: String,
     ) -> Result<Vec<CollectionUuid>>;
 
     async fn search_media_in_collection(

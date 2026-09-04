@@ -302,10 +302,12 @@ impl ESAuthService for AuthCache {
         Ok(groups.clone())
     }
 
+    #[instrument(skip(self))]
     async fn users_in_group(&self, gid: String) -> anyhow::Result<HashSet<String>> {
         self.authz_provider.users_in_group(gid).await
     }
 
+    #[instrument(skip(self))]
     async fn is_group_member(&self, uid: String, gid: HashSet<String>) -> anyhow::Result<bool> {
         Ok(gid.intersection(&self.groups_for_user(uid).await?).count() > 0)
     }
@@ -313,7 +315,7 @@ impl ESAuthService for AuthCache {
     // CACHE LOOKUP FUNCTION
     //
     // this is the primary access method for the media AwaitCache
-    #[instrument(skip_all)]
+    #[instrument(skip(self))]
     async fn can_access_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let access_cache = self.access_cache.clone();
 
@@ -340,6 +342,7 @@ impl ESAuthService for AuthCache {
 
     // this should be a relatively uncommon operation, so having three independent database messages
     // is worth being able to use the existing messages to get the information
+    #[instrument(skip(self))]
     async fn owns_media(&self, uid: String, media_uuid: MediaUuid) -> anyhow::Result<bool> {
         let db_svc_sender = self.registry.get(&ServiceType::Db)?;
         let (media_tx, media_rx) = tokio::sync::oneshot::channel();

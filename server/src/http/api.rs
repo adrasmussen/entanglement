@@ -568,7 +568,7 @@ pub(super) async fn search_collections(
             DbMsg::SearchCollections {
                 resp: tx,
                 gid,
-                opts: message.opts,
+                filter: message.filter,
             }
             .into(),
         )

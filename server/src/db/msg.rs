@@ -109,7 +109,7 @@ pub enum DbMsg {
     SearchCollections {
         resp: EsmResp<Vec<CollectionUuid>>,
         gid: HashSet<String>,
-        opts: SearchOptions,
+        filter: String,
     },
     SearchMediaInCollection {
         resp: EsmResp<Vec<MediaUuid>>,

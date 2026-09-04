@@ -9,7 +9,13 @@ use crate::components::{
     search::CompactSearchBar,
 };
 use api::{
-    FOLDING_SEPARATOR, auth::*, collection::*, fold_set, media::MediaUuid, search::{SearchFilter, SearchOptions, SortMethod}, unfold_set,
+    FOLDING_SEPARATOR,
+    auth::*,
+    collection::*,
+    fold_set,
+    media::MediaUuid,
+    search::{SearchFilter, SearchOptions, SortMethod},
+    unfold_set,
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -536,15 +542,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq {
-            opts: SearchOptions {
-                filter: SearchFilter::SubstringAny { filter },
-                order: SortMethod::DateDesc,
-                limit: None,
-                offset: 0,
-            },
-        })
-        .await
+        search_collections(&SearchCollectionsReq { filter }).await
     });
 
     // TODO -- better error handling when collections cannot be searched
@@ -749,15 +747,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq {
-            opts: SearchOptions {
-                filter: SearchFilter::SubstringAny { filter },
-                order: SortMethod::DateDesc,
-                limit: None,
-                offset: 0,
-            },
-        })
-        .await
+        search_collections(&SearchCollectionsReq { filter }).await
     });
 
     // TODO -- better error handling when collections cannot be searched

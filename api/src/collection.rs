@@ -110,7 +110,7 @@ http_endpoint!(SearchCollections);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
-    pub opts: SearchOptions,
+    pub filter: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

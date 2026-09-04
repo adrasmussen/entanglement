@@ -28,15 +28,7 @@ pub fn CollectionSearch() -> Element {
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq {
-            opts: SearchOptions {
-                filter: SearchFilter::SubstringAny { filter },
-                order: SortMethod::DateDesc,
-                limit: None,
-                offset: 0,
-            },
-        })
-        .await
+        search_collections(&SearchCollectionsReq { filter }).await
     });
 
     let action_button = rsx! {

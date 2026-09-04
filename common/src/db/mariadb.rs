@@ -1053,35 +1053,26 @@ impl DbBackend for MariaDBBackend {
         Ok(())
     }
 
-    #[instrument(skip(self, opts))]
+    #[instrument(skip(self, filter))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        opts: SearchOptions,
+        filter: String,
     ) -> Result<Vec<CollectionUuid>> {
         debug!("searching for collections");
 
         let _cr = self.locks.collection.read().await;
 
-        let (sql, filter) =
-            opts.format_mariadb("collections.name, collections.note, collections.tags");
-
-        // for a given uid and filter, find all collections owned by groups that contain that uid
-        let mut query = r"
+        let result = r"
             SELECT
                 collection_uuid
             FROM
                 collections
             WHERE
-                INSTR(:gid, gid) > 0"
-            .to_owned();
-
-        query.push_str(&sql);
-
-        let result = query
+                INSTR(:gid, gid) > 0 AND name LIKE :filter"
             .with(params! {
                 "gid" => fold_set(gid)?,
-                "filter" => filter,
+                "filter" => format!("%{}%", filter),
             })
             .run(self.pool.get_conn().await?)
             .await?
