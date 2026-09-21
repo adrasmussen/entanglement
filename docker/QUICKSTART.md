@@ -108,6 +108,50 @@ sudo security add-trusted-cert -d -r trustRoot \
 When your browser is prompted for a client certificate, pick the one with
 subject `entanglement-dev` / CN `dev`.
 
+## Inspecting the database
+
+Postgres has no `ports:` mapping in `docker-compose.yml` — it's deliberately
+unreachable from the host or LAN, only from other containers on the `entg-net`
+network (see `docker/NOTES.md`). There's no `localhost:5432` to point a
+regular Postgres client at.
+
+**From inside the container** (easiest — `local` connections over the
+container's own Unix socket are `trust`-authenticated, no password needed):
+
+```sh
+docker exec -it entanglement-postgres-1 psql -U entanglement -d entanglement
+```
+
+```sql
+-- e.g.
+SELECT library_uuid, path, uid, gid, count FROM libraries;
+SELECT media_uuid, path, media_type FROM media;
+```
+
+**Connection string entanglement/dbtool use internally** (only resolves inside
+the `entg-net` Docker network — `postgres` is a Compose service DNS name, not
+a host you can reach from outside the network, and it requires TLS against the
+dev CA):
+
+```
+postgres://entanglement:entanglement_dev_password@postgres/entanglement
+```
+
+**If you want a GUI client (TablePlus, pgAdmin, etc.) or `psql` from the host**,
+temporarily publish the port by adding this under the `postgres` service in
+`docker-compose.yml`, then `docker compose up -d postgres`:
+
+```yaml
+    ports:
+      - "127.0.0.1:5432:5432"
+```
+
+You'll still need TLS (the client will need `sslmode=require` or stronger) and
+either the `entanglement`/`entanglement_dev_password` credentials or a trust
+rule added to `docker/postgres/pg_hba.conf` for host connections — the
+existing `hostssl` rules already there use `scram-sha-256`, so
+username/password over TLS from `127.0.0.1` will work as-is.
+
 ## Resetting everything
 
 ```sh
