@@ -52,7 +52,78 @@ docker compose --profile tools run --rm dbtool entg-db \
 the `dev` user (the client cert's CN) is a member of, or you won't see the
 library through the API.
 
-## 5. Import the client certificate
+## 5. Uploading media
+
+Copying files into `media-src/<library>/` alone doesn't make them show up in
+the app — entanglement only indexes a library when you tell it to scan.
+Two things to know:
+
+- **A directory created under `media-src/` after the `server` container is
+  already running doesn't always show up inside the container immediately**
+  on Docker Desktop's bind-mount implementation (observed on macOS). Restarting
+  the container (`docker compose restart server`) forces it to pick up the
+  change — this is a local Docker quirk, not an entanglement bug.
+- **Scanning is triggered over the API** (`StartTask` with `task_type:
+  "ScanLibrary"`), using the same client mTLS cert as everything else, not a
+  CLI command.
+
+**Helper script** (does the copy + restart + scan + confirms the media landed,
+all in one step):
+
+```sh
+docker/scripts/upload-media.sh testlib ~/Pictures/vacation/*.jpg
+```
+
+```
+usage: docker/scripts/upload-media.sh <library-path> <file-or-dir> [more files/dirs...]
+```
+
+`<library-path>` must already be registered (step 4's `add-library`). Sample
+output:
+
+```
+copied into .../media-src/testlib
+restarting server container to pick up the new files...
+found library 01a0c50e-279e-7212-881e-f3c05ac94d5f, starting scan...
+StartTask HTTP status: 200
+task history:
+{"tasks":[{"task_type":"ScanLibrary",...,"status":"Success","warnings":0,...}]}
+media now in library:
+{"media":["01a0c545-...","01a0c544-..."]}
+```
+
+**Doing it by hand**, if you'd rather not use the script:
+
+```sh
+# 1. copy files into the library's folder under media-src/
+mkdir -p media-src/testlib
+cp ~/Pictures/vacation/*.jpg media-src/testlib/
+
+# 2. restart so the server container's view of media-src/ is current
+docker compose restart server
+
+# 3. look up the library's uuid
+LIBRARY_UUID=$(docker exec entanglement-postgres-1 psql -U entanglement -d entanglement \
+  -t -A -c "SELECT library_uuid FROM libraries WHERE path = 'testlib';")
+
+# 4. trigger a scan
+curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
+  -X POST https://127.0.0.1:8443/entanglement/api/StartTask \
+  -H "Content-Type: application/json" \
+  -d "{\"library_uuid\":\"$LIBRARY_UUID\",\"task_type\":\"ScanLibrary\"}"
+
+# 5. check what got indexed
+curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
+  -X POST https://127.0.0.1:8443/entanglement/api/SearchMediaInLibrary \
+  -H "Content-Type: application/json" \
+  -d "{\"library_uuid\":\"$LIBRARY_UUID\",\"hidden\":null,\"opts\":{\"filter\":{\"SubstringAny\":{\"filter\":[]}},\"order\":\"DateDesc\",\"limit\":null,\"offset\":0}}"
+```
+
+A scan with `"status":"Failure"` almost always means the path doesn't exist
+inside the container yet — go back to the restart step. Check
+`docker compose logs server` for the specific error either way.
+
+## 6. Import the client certificate
 
 The app uses mutual TLS: identity comes from a client certificate, not a
 password (see `docker/NOTES.md`). Your browser needs `docker/dev-certs/client.p12`
@@ -91,7 +162,7 @@ curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
   -H "Content-Type: application/json" -d '{"filter":""}'
 ```
 
-## 6. Open the app
+## 7. Open the app
 
 Visit `https://127.0.0.1:8443/entanglement/app`. The server's own TLS cert is
 self-signed (separate from the client cert above), so your browser will warn
