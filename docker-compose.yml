@@ -1,0 +1,106 @@
+networks:
+  entg-net:
+    driver: bridge
+
+volumes:
+  pg-data:
+  media-srv:
+
+services:
+  # one-shot: generates a throwaway dev CA + server cert/key (shared by postgres
+  # and server) and a client cert (CN=dev, for mTLS -- see docker/NOTES.md for
+  # why). bind-mounted (not a named volume) so client.p12 is easy to grab off
+  # the host filesystem for importing into a browser.
+  certgen:
+    image: alpine:3.20
+    entrypoint: ["sh"]
+    command: ["-c", "apk add --no-cache openssl >/dev/null && sh /scripts/generate.sh"]
+    volumes:
+      - ./docker/dev-certs:/certs
+      - ./docker/certgen:/scripts:ro
+    networks:
+      - entg-net
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: entanglement
+      POSTGRES_USER: entanglement
+      POSTGRES_PASSWORD: entanglement_dev_password
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    volumes:
+      # postgres 18+ images use pg_ctlcluster-style layout and expect a single
+      # mount at /var/lib/postgresql (not .../data) -- see docker-library/postgres#1259
+      - pg-data:/var/lib/postgresql
+      - ./docker/dev-certs:/certs:ro
+      - ./docker/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # applied automatically on first init by the official postgres entrypoint;
+      # this is the reverse-engineered schema from plan §3 gap #2 / db/schema.sql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
+    networks:
+      - entg-net
+    # not published to the host: only entanglement's own port is host-reachable
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U entanglement -d entanglement"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # server/src/main.rs: tracing_subscriber uses EnvFilter::from_default_env(),
+      # which is silent unless RUST_LOG is set
+      RUST_LOG: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      certgen:
+        condition: service_completed_successfully
+    volumes:
+      - ./docker/dev-certs:/certs:ro
+      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml:ro
+      - ./docker/entanglement/users.toml:/etc/entanglement/users.toml:ro
+      # point this at a host folder of test photos/video; read-only, matching
+      # server/src/main.rs's startup check that media_srcdir is NOT writable
+      - ./media-src:/media/src:ro
+      - media-srv:/media/srv
+    networks:
+      - entg-net
+    # host-local only, matching the "owned host, not public cloud" deployment model
+    ports:
+      - "127.0.0.1:8443:8443"
+
+  # one-off admin tool, not a long-running service -- invoke with e.g.:
+  #   docker compose --profile tools run --rm dbtool entg-db \
+  #     --config /etc/entanglement/config.toml \
+  #     add-library --path <subdir-of-media-src> --uid dev --gid devgroup
+  dbtool:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["/entrypoint.sh"]
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./docker/dev-certs:/certs:ro
+      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml:ro
+      - ./docker/entanglement/users.toml:/etc/entanglement/users.toml:ro
+    networks:
+      - entg-net
