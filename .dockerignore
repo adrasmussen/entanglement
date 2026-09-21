@@ -1,0 +1,7 @@
+target
+webapp/dist
+webapp/static
+webapp/.dioxus
+media-src
+docker/dev-certs
+.git
