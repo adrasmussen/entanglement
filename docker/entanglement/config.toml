@@ -1,0 +1,43 @@
+# local-dev config for entanglement, mounted into the `server`/`dbtool` containers
+# at /etc/entanglement/config.toml (the default --config path baked into every
+# binary). Shape matches common/src/config.rs's ESConfig, wrapped in a [config]
+# table per TomlConfigFile.
+#
+# tomlfile auth is used for both authn and authz to avoid needing LDAP/Kerberos/
+# client certs for local dev (see plan §3 gap #6).
+
+[config]
+# tomlfile authn is dead code over HTTP in this codebase (see docker/NOTES.md) --
+# x509cert (mTLS) is what's actually wired up. authz stays tomlfile: it's a
+# separate backend used for group-membership checks only, independent of authn.
+authn_backend = "x509cert"
+authz_backend = "tomlfile"
+db_backend = "postgres"
+
+[config.fs]
+# read-only source of media, bind-mounted from a host folder (see docker-compose.yml)
+media_srcdir = "/media/src"
+# read-write scratch area where the server creates originals/thumbnails/slices
+media_srvdir = "/media/srv"
+
+[config.http]
+# common/src/server.rs HttpConfig.socket is parsed strictly as SocketAddrV6
+socket = "[::]:8443"
+doc_root = "/srv/entanglement/webapp-dist"
+key = "/certs/server.key"
+cert = "/certs/server.crt"
+# required for x509cert auth: the CA that signed docker/dev-certs/client.crt
+client_ca_cert = "/certs/ca.crt"
+
+[config.task]
+scan_threads = 2
+scan_scratch = "/media/srv/scratch"
+scan_timeout = 60
+
+[config.postgres]
+url = "postgres://entanglement:entanglement_dev_password@postgres/entanglement"
+
+[config.tomlfile]
+# single file holds both [users.*] (authn) and [groups.*] (authz) tables --
+# common/src/auth/tomlfile.rs reads config.tomlfile.filename for both
+filename = "/etc/entanglement/users.toml"
