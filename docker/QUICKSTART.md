@@ -52,6 +52,11 @@ docker compose --profile tools run --rm dbtool entg-db \
 the `dev` user (the client cert's CN) is a member of, or you won't see the
 library through the API.
 
+Library registrations live in Postgres, not on disk: `docker compose down -v`
+(or anything else that drops the `pg-data` volume, e.g. reapplying
+`db/schema.sql`) wipes them along with the schema, even though the files
+under `media-src/` are untouched. Redo this step after any such reset.
+
 ## 5. Uploading media
 
 Copying files into `media-src/<library>/` alone doesn't make them show up in
