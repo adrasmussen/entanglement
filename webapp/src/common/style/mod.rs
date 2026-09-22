@@ -91,10 +91,12 @@ a:hover {
   color: var(--text-primary);
 }
 
+/* content below the sticky header now scrolls with the page itself (see
+   .container/.sticky-header) instead of in its own narrow inner box, so
+   a scroll gesture anywhere in the viewport -- not just over the ~60%-wide
+   .container column -- moves the page */
 .scrollable-content {
-  flex: 1;
-  overflow-y: auto;
-  padding-bottom: var(--space-4);
+  padding-bottom: var(--space-6);
 }
 "#
 );

@@ -184,6 +184,7 @@ pub const BASE_COMPONENTS: &str = r#"
   height: fit-content;
   max-height: calc(100vh - 140px);
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
 }
 
@@ -222,8 +223,30 @@ pub const BASE_COMPONENTS: &str = r#"
   flex-direction: column;
   gap: var(--space-6);
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: calc(100vh - 140px);
   padding-right: var(--space-2);
+  /* thin, always-visible scrollbar instead of the default OS one, so it
+     reads as "this column scrolls independently" rather than looking cut off */
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-300) transparent;
+}
+
+.media-detail-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-300);
+  border-radius: 20px;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-400);
 }
 
 /* Full size image in modal */
@@ -486,14 +509,14 @@ pub const BASE_COMPONENTS: &str = r#"
   width: 60%;
   /* max-width: var(--container-width) */
   margin: 0 auto;
-  padding: 0 var(--space-4);
+  /* top padding keeps content from sitting flush against the sticky app
+     header; with-sticky pages override this since .sticky-header supplies
+     its own top padding */
+  padding: var(--space-6) var(--space-4) 0;
 }
 
 .container.with-sticky {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--header-height));
-  padding-bottom: 0;
+  padding-top: 0;
 }
 
 /* Responsive media grid */
@@ -649,7 +672,9 @@ body:has(.modal-overlay) {
 
 .sticky-header {
   position: sticky;
-  top: 0;
+  /* sticks just below the app header once the page (not an inner box)
+     scrolls -- see .scrollable-content */
+  top: var(--header-height);
   z-index: 5;
   background-color: var(--background);
   padding-top: var(--space-4);
