@@ -184,6 +184,7 @@ pub const BASE_COMPONENTS: &str = r#"
   height: fit-content;
   max-height: calc(100vh - 140px);
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
 }
 
@@ -222,8 +223,30 @@ pub const BASE_COMPONENTS: &str = r#"
   flex-direction: column;
   gap: var(--space-6);
   overflow-y: auto;
+  overflow-x: hidden;
   max-height: calc(100vh - 140px);
   padding-right: var(--space-2);
+  /* thin, always-visible scrollbar instead of the default OS one, so it
+     reads as "this column scrolls independently" rather than looking cut off */
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-300) transparent;
+}
+
+.media-detail-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-300);
+  border-radius: 20px;
+}
+
+.media-detail-sidebar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-400);
 }
 
 /* Full size image in modal */
@@ -486,14 +509,14 @@ pub const BASE_COMPONENTS: &str = r#"
   width: 60%;
   /* max-width: var(--container-width) */
   margin: 0 auto;
-  padding: 0 var(--space-4);
+  /* top padding keeps content from sitting flush against the sticky app
+     header; with-sticky pages override this since .sticky-header supplies
+     its own top padding */
+  padding: var(--space-6) var(--space-4) 0;
 }
 
 .container.with-sticky {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - var(--header-height));
-  padding-bottom: 0;
+  padding-top: 0;
 }
 
 /* Responsive media grid */
@@ -551,6 +574,12 @@ td {
 }
 
 /* Modal styles */
+
+/* lock background scrolling while a modal is open */
+body:has(.modal-overlay) {
+  overflow: hidden;
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -573,6 +602,17 @@ td {
   max-height: 90%;
   overflow: auto;
   animation: slide-up var(--transition-normal) var(--easing-standard);
+}
+
+/* focused programmatically on open so Esc/Tab work immediately; only show
+   the ring if the user actually navigates with the keyboard afterward */
+.modal-content:focus {
+  outline: none;
+}
+
+.modal-content:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .modal-header {
@@ -632,7 +672,9 @@ td {
 
 .sticky-header {
   position: sticky;
-  top: 0;
+  /* sticks just below the app header once the page (not an inner box)
+     scrolls -- see .scrollable-content */
+  top: var(--header-height);
   z-index: 5;
   background-color: var(--background);
   padding-top: var(--space-4);
@@ -788,5 +830,38 @@ td {
   margin: 0;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+/* Inline async status text in modal footers (e.g. "Saving...", "Error: ...") */
+.status-message {
+  font-size: 0.875rem;
+  color: var(--primary);
+}
+
+/* Validation/help text under form-group inputs */
+.form-error {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.form-help {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* "Are you sure?" confirmation modal body text */
+.confirmation-message {
+  margin-bottom: var(--space-4);
+}
+
+/* Callout used for destructive-action caveats in confirmation modals */
+.warning-message {
+  padding: var(--space-3);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
 }
 "#;

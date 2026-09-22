@@ -1,9 +1,8 @@
 use dioxus::prelude::*;
-use gloo_timers::callback::Timeout;
 
 use crate::{
     common::local_time,
-    components::modal::{MODAL_STACK, ModalInner, ModalSize},
+    components::modal::{ModalInner, ModalSize, close_modal, close_modal_after},
 };
 
 use api::{library::LibraryUuid, task::*};
@@ -31,10 +30,7 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
             Ok(_) => {
                 status_message.set("Task started successfully".into());
                 update_signal.set(());
-                let timeout = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                timeout.forget();
+                close_modal_after(1500);
             }
             Err(err) => {
                 status_message.set(format!("Error: {}", err));
@@ -42,15 +38,12 @@ pub fn StartTaskModal(props: StartTaskModalProps) -> Element {
         }
     };
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_message}" }
+        span { class: "status-message", "{status_message}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-primary", onclick: handle_submit, "Start Task" }
@@ -203,9 +196,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                     show_cancel_button = true;
                     rsx! {
                         p { class: "confirmation-message", "Are you sure you want to stop this task?" }
-                        div {
-                            class: "media-info",
-                            style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                        div { class: "info-box", style: "margin-top: var(--space-4);",
                             p { "Type: {task.task_type}" }
                             p { "User: {task.uid}" }
                             p { "Start time: {local_time(task.start)}" }
@@ -232,14 +223,13 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
         span { class: "status-message", "{status_message}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
                     if !show_cancel_button {
                         update_signal.set(());
                     }
-                    MODAL_STACK.with_mut(|v| v.pop());
+                    close_modal();
                 },
                 "Cancel"
             }
@@ -251,13 +241,7 @@ pub fn StopTaskModal(props: StopTaskModalProps) -> Element {
                             Ok(_) => {
                                 status_message.set("Task stopped".into());
                                 update_signal.set(());
-                                let timeout = Timeout::new(
-                                    1500,
-                                    move || {
-                                        MODAL_STACK.with_mut(|v| v.pop());
-                                    },
-                                );
-                                timeout.forget();
+                                close_modal_after(1500);
                             }
                             Err(err) => {
                                 status_message.set(format!("Error: {}", err));
@@ -303,12 +287,9 @@ pub fn TaskHistoryModal(props: TaskHistoryModalProps) -> Element {
         span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-primary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Close"
             }
         }

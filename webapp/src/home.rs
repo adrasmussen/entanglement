@@ -1,37 +1,55 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
-use crate::Route;
+use crate::{
+    Route,
+    components::modal::{MODAL_STACK, Modal, ModalBox},
+};
+use api::{
+    collection::{SearchCollectionsReq, search_collections},
+    library::{SearchLibrariesReq, search_libraries},
+    media::{SearchMediaReq, search_media},
+    search::SearchOptions,
+};
 
 #[component]
 pub fn ModernHome() -> Element {
-    // Stats for the dashboard - in a real implementation,
-    // these would be fetched from your API
-    let media_count = use_signal(|| 0);
-    let collections_count = use_signal(|| 0);
-    let libraries_count = use_signal(|| 0);
+    // re-run on modal close, so creating a collection refreshes the count below
+    let update_signal = use_signal(|| ());
 
-    let stats_loaded = use_signal(|| false);
+    // dashboard stats, pulled from the same search endpoints the gallery/
+    // collection/library pages use, with an empty/default filter to match
+    // everything -- see SearchFilter's Default impl
+    let media_count = use_resource(|| async move {
+        search_media(&SearchMediaReq {
+            opts: SearchOptions::default(),
+        })
+        .await
+        .map(|resp| resp.media.len())
+    });
 
-    use_future(move || {
-        to_owned![
-            media_count,
-            collections_count,
-            libraries_count,
-            stats_loaded
-        ];
-        async move {
-            // Simulate an API call
-            // In a real implementation, you would fetch real data
-            media_count.set(3752);
-            collections_count.set(48);
-            libraries_count.set(5);
-            stats_loaded.set(true);
-        }
+    let collections_count = use_resource(move || async move {
+        update_signal();
+
+        search_collections(&SearchCollectionsReq {
+            filter: String::new(),
+        })
+        .await
+        .map(|resp| resp.collections.len())
+    });
+
+    let libraries_count = use_resource(|| async move {
+        search_libraries(&SearchLibrariesReq {
+            filter: String::new(),
+        })
+        .await
+        .map(|resp| resp.libraries.len())
     });
 
     rsx! {
         div { class: "home-container",
+            ModalBox { update_signal }
+
             // Hero section
             section { class: "hero",
                 div { class: "container",
@@ -65,13 +83,15 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon media-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    if media_count() > 0 {
-                                        "{media_count()}"
-                                    } else {
-                                        div {
-                                            class: "skeleton",
-                                            style: "width: 80px; height: 32px;",
-                                        }
+                                    match &*media_count.read() {
+                                        Some(Ok(count)) => rsx! { "{count}" },
+                                        Some(Err(_)) => rsx! { "—" },
+                                        None => rsx! {
+                                            div {
+                                                class: "skeleton",
+                                                style: "width: 80px; height: 32px;",
+                                            }
+                                        },
                                     }
                                 }
                                 p { class: "stat-label", "Media Items" }
@@ -88,13 +108,15 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon collection-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    if collections_count() > 0 {
-                                        "{collections_count()}"
-                                    } else {
-                                        div {
-                                            class: "skeleton",
-                                            style: "width: 80px; height: 32px;",
-                                        }
+                                    match &*collections_count.read() {
+                                        Some(Ok(count)) => rsx! { "{count}" },
+                                        Some(Err(_)) => rsx! { "—" },
+                                        None => rsx! {
+                                            div {
+                                                class: "skeleton",
+                                                style: "width: 80px; height: 32px;",
+                                            }
+                                        },
                                     }
                                 }
                                 p { class: "stat-label", "Collections" }
@@ -111,13 +133,15 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon library-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    if libraries_count() > 0 {
-                                        "{libraries_count()}"
-                                    } else {
-                                        div {
-                                            class: "skeleton",
-                                            style: "width: 80px; height: 32px;",
-                                        }
+                                    match &*libraries_count.read() {
+                                        Some(Ok(count)) => rsx! { "{count}" },
+                                        Some(Err(_)) => rsx! { "—" },
+                                        None => rsx! {
+                                            div {
+                                                class: "skeleton",
+                                                style: "width: 80px; height: 32px;",
+                                            }
+                                        },
                                     }
                                 }
                                 p { class: "stat-label", "Libraries" }
@@ -195,7 +219,11 @@ pub fn ModernHome() -> Element {
                             div { class: "quick-action-icon collections-icon" }
                             span { "View Collections" }
                         }
-                        button { class: "quick-action-card", onclick: move |_| {},
+                        button {
+                            class: "quick-action-card",
+                            onclick: move |_| {
+                                MODAL_STACK.with_mut(|v| v.push(Modal::CreateCollection));
+                            },
                             div { class: "quick-action-icon new-collection-icon" }
                             span { "Create Collection" }
                         }
