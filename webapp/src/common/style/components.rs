@@ -551,6 +551,12 @@ td {
 }
 
 /* Modal styles */
+
+/* lock background scrolling while a modal is open */
+body:has(.modal-overlay) {
+  overflow: hidden;
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -573,6 +579,17 @@ td {
   max-height: 90%;
   overflow: auto;
   animation: slide-up var(--transition-normal) var(--easing-standard);
+}
+
+/* focused programmatically on open so Esc/Tab work immediately; only show
+   the ring if the user actually navigates with the keyboard afterward */
+.modal-content:focus {
+  outline: none;
+}
+
+.modal-content:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .modal-header {
@@ -788,5 +805,38 @@ td {
   margin: 0;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+/* Inline async status text in modal footers (e.g. "Saving...", "Error: ...") */
+.status-message {
+  font-size: 0.875rem;
+  color: var(--primary);
+}
+
+/* Validation/help text under form-group inputs */
+.form-error {
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.form-help {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* "Are you sure?" confirmation modal body text */
+.confirmation-message {
+  margin-bottom: var(--space-4);
+}
+
+/* Callout used for destructive-action caveats in confirmation modals */
+.warning-message {
+  padding: var(--space-3);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
 }
 "#;

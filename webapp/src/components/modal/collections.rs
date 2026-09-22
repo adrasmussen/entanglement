@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
 use dioxus::prelude::*;
-use gloo_timers::callback::Timeout;
 use tracing::error;
 
 use crate::components::{
-    modal::{MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar},
+    modal::{MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after},
     search::CompactSearchBar,
 };
 use api::{
@@ -82,10 +81,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 update_signal.set(());
 
                 // Close the modal after a short delay to show success message
-                let task = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
             Err(err) => {
                 status_signal.set(format!("Error: {}", err));
@@ -120,15 +116,12 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-primary", onclick: handle_submit, "Create Collection" }
@@ -153,7 +146,6 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                     if !name_error().is_empty() {
                         div {
                             class: "form-error",
-                            style: "color: var(--error); font-size: 0.875rem; margin-top: 0.25rem;",
                             "{name_error}"
                         }
                     }
@@ -174,13 +166,11 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                     if !group_error().is_empty() {
                         div {
                             class: "form-error",
-                            style: "color: var(--error); font-size: 0.875rem; margin-top: 0.25rem;",
                             "{group_error}"
                         }
                     }
                     div {
                         class: "form-help",
-                        style: "color: var(--text-tertiary); font-size: 0.875rem; margin-top: 0.25rem;",
                         "Group ID determines who can access this collection"
                     }
                 }
@@ -336,10 +326,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
                 update_signal.set(());
 
                 // Close the modal after a short delay to show success message
-                let task = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
             Err(err) => {
                 status_signal.set(format!("Error: {}", err));
@@ -362,15 +349,12 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
     });
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-primary", onclick: handle_submit, "Save Changes" }
@@ -395,7 +379,6 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
                                 if !name_error().is_empty() {
                                     div {
                                         class: "form-error",
-                                        style: "color: var(--error); font-size: 0.875rem; margin-top: 0.25rem;",
                                         "{name_error}"
                                     }
                                 }
@@ -472,10 +455,7 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
             Ok(_) => {
                 status_signal.set("Collection deleted successfully".into());
                 update_signal.set(());
-                let task = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
             Err(err) => {
                 status_signal.set(format!("Error: {}", err));
@@ -487,12 +467,9 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
         span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-danger", onclick: handle_submit, "Delete Collection" }
@@ -508,13 +485,11 @@ pub fn DeleteCollectionModal(props: DeleteCollectionModalProps) -> Element {
             div { class: "confirmation-content",
                 p {
                     class: "confirmation-message",
-                    style: "margin-bottom: var(--space-4);",
                     "Are you sure you want to delete the collection \"{collection_name}\"? This action cannot be undone."
                 }
 
                 div {
                     class: "warning-message",
-                    style: " padding: var(--space-3); background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--error); border-radius: var(--radius-md); color: var(--text-secondary);",
                     "Note: This will only delete the collection. The media files within the collection will remain in your library."
                 }
             }
@@ -571,10 +546,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                     update_signal.set(());
 
                     // Close the modal after a short delay
-                    let task = Timeout::new(1500, move || {
-                        MODAL_STACK.with_mut(|v| v.pop());
-                    });
-                    task.forget();
+                    close_modal_after(1500);
                 }
                 Err(err) => {
                     status_signal.set(format!("Error: {}", err));
@@ -586,15 +558,12 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button {
@@ -674,10 +643,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
             Ok(_) => {
                 status_signal.set("Media removed from collection".into());
                 update_signal.set(());
-                let task = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
             Err(err) => {
                 status_signal.set(format!("Error: {}", err));
@@ -689,12 +655,9 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
         span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-danger", onclick: handle_submit, "Remove from Collection" }
@@ -709,9 +672,7 @@ pub fn RmFromCollectionModal(props: RmFromCollectionModalProps) -> Element {
                     "Are you sure you want to remove this media from \"{collection_name}\"? The media will still exist in your library."
                 }
 
-                div {
-                    class: "media-info",
-                    style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                div { class: "info-box", style: "margin-top: var(--space-4);",
                     p { "Media ID: {media_uuid}" }
                     p { "Collection: {collection_name} (ID: {collection_uuid})" }
                 }
@@ -732,7 +693,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     // can change inside of this modal (same in other bulk modals)
     let media_uuids = match props.media_uuids {
         None => {
-            MODAL_STACK.with_mut(|v| v.pop());
+            close_modal();
             return rsx! {};
         }
         Some(v) => v,
@@ -842,10 +803,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
 
                 // Close the modal after a delay if successful
                 if error_count() == 0 {
-                    let task = gloo_timers::callback::Timeout::new(1500, move || {
-                        MODAL_STACK.with_mut(|v| v.pop());
-                    });
-                    task.forget();
+                    close_modal_after(1500);
                 }
             } else {
                 status_signal.set("Please select a collection first".into());
@@ -854,15 +812,12 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button {
@@ -896,10 +851,8 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 CollectionSelectionList { collections, selected_collection }
 
                 // Media count summary
-                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
-                        "{media_count} items selected for bulk operation"
-                    }
+                div { class: "summary-box",
+                    p { "{media_count} items selected for bulk operation" }
                 }
 
                 // Create new collection button
@@ -931,7 +884,7 @@ pub struct BulkRmFromCollectionModalProps {
 pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Element {
     let media_uuids = match props.media_uuids {
         None => {
-            MODAL_STACK.with_mut(|v| v.pop());
+            close_modal();
             return rsx! {};
         }
         Some(v) => v,
@@ -1035,24 +988,18 @@ pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Eleme
 
             // Close the modal after a delay if successful
             if error_count() == 0 {
-                let task = Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
         }
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button { class: "btn btn-danger", onclick: handle_submit, "Remove from Collection" }
@@ -1075,22 +1022,18 @@ pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Eleme
                 div { class: "confirmation-content",
                     p {
                         class: "confirmation-message",
-                        style: "margin-bottom: var(--space-4);",
                         "Are you sure you want to remove {media_count} media items from \"{collection_name}\"? Items that are not currently in the collection will be skipped."
                     }
 
                     div {
                         class: "warning-message",
-                        style: " padding: var(--space-3); background-color: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--error); border-radius: var(--radius-md); color: var(--text-secondary);",
                         "Note: The media files will remain in your library."
                     }
                 }
 
                 // Collection summary
-                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
-                        "{media_count} items selected for bulk operation"
-                    }
+                div { class: "summary-box",
+                    p { "{media_count} items selected for bulk operation" }
                     p { style: "margin: 0; color: var(--text-tertiary); font-size: 0.875rem;",
                         "Collection: {collection_name} (ID: {collection_uuid})"
                     }

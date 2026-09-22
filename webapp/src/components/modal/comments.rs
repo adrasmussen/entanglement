@@ -1,7 +1,6 @@
 use dioxus::prelude::*;
-use gloo_timers::callback::Timeout;
 
-use crate::components::modal::{MODAL_STACK, ModalInner, ModalSize};
+use crate::components::modal::{ModalInner, ModalSize, close_modal, close_modal_after};
 use api::{
     comment::{CommentUuid, DeleteCommentReq, delete_comment},
     media::MediaUuid,
@@ -26,12 +25,9 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
         span { class: "status-message", "{status_message}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button {
@@ -41,13 +37,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
                         Ok(_) => {
                             status_message.set("Comment deleted".into());
                             update_signal.set(());
-                            let task = Timeout::new(
-                                1500,
-                                move || {
-                                    MODAL_STACK.with_mut(|v| v.pop());
-                                },
-                            );
-                            task.forget();
+                            close_modal_after(1500);
                         }
                         Err(err) => {
                             status_message.set(format!("Error: {}", err));
@@ -67,9 +57,7 @@ pub fn DeleteCommentModal(props: DeleteCommentModalProps) -> Element {
                     "Are you sure you want to delete this comment? This action cannot be undone."
                 }
 
-                div {
-                    class: "media-info",
-                    style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
+                div { class: "info-box", style: "margin-top: var(--space-4);",
                     p { "Media ID: {media_uuid}" }
                     p { "Comment ID: {comment_uuid}" }
                 }
