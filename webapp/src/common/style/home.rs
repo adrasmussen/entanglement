@@ -16,8 +16,12 @@ pub const HOME_STYLES: &str = r#"
   .hero {
     background: linear-gradient(135deg, var(--primary-dark), var(--accent));
     color: white;
-    padding: var(--space-16) 0;
     text-align: center;
+  }
+
+  .hero .container {
+    padding-top: var(--space-6);
+    padding-bottom: var(--space-16);
   }
 
   .hero-content {
