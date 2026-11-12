@@ -15,6 +15,9 @@ services:
     image: alpine:3.20
     entrypoint: ["sh"]
     command: ["-c", "apk add --no-cache openssl >/dev/null && sh /scripts/generate.sh"]
+    environment:
+      # export password for client.p12, from the gitignored ./.env
+      ENTG_CLIENT_P12_PASSWORD: ${ENTG_CLIENT_P12_PASSWORD:?ENTG_CLIENT_P12_PASSWORD is not set -- copy .env.example to .env and set it}
     volumes:
       - ./docker/dev-certs:/certs
       - ./docker/certgen:/scripts:ro
@@ -26,7 +29,10 @@ services:
     environment:
       POSTGRES_DB: entanglement
       POSTGRES_USER: entanglement
-      POSTGRES_PASSWORD: entanglement_dev_password
+      # from the gitignored ./.env (see .env.example); only applied when the
+      # pg-data volume is first initialised -- see QUICKSTART "Changing the
+      # database password" for existing volumes
+      POSTGRES_PASSWORD: ${ENTG_DB_PASSWORD:?ENTG_DB_PASSWORD is not set -- copy .env.example to .env and set it}
     command:
       - postgres
       - -c
@@ -51,7 +57,12 @@ services:
         condition: service_completed_successfully
     networks:
       - entg-net
-    # not published to the host: only entanglement's own port is host-reachable
+    # published for host-side GUI clients (pgAdmin, TablePlus, psql) -- loopback
+    # only, like the server port; override with ENTG_DB_PORT (see .env.example).
+    # pg_hba.conf still requires TLS + scram-sha-256 for every non-socket
+    # connection, so clients need sslmode=require and the dev password.
+    ports:
+      - "127.0.0.1:${ENTG_DB_PORT:-55433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U entanglement -d entanglement"]
       interval: 5s
@@ -59,6 +70,9 @@ services:
       retries: 10
 
   server:
+    # dbtool shares this image tag so the two can never drift apart (a stale
+    # separately-tagged dbtool image would miss entrypoint/config changes)
+    image: entanglement-server:dev
     build:
       context: .
       dockerfile: Dockerfile
@@ -66,6 +80,8 @@ services:
       # server/src/main.rs: tracing_subscriber uses EnvFilter::from_default_env(),
       # which is silent unless RUST_LOG is set
       RUST_LOG: info
+      # substituted into the config.toml template by docker/entrypoint.sh
+      ENTG_DB_PASSWORD: ${ENTG_DB_PASSWORD:?ENTG_DB_PASSWORD is not set -- copy .env.example to .env and set it}
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,7 +89,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./docker/dev-certs:/certs:ro
-      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml:ro
+      # template: entrypoint.sh renders /etc/entanglement/config.toml from it
+      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml.in:ro
       - ./docker/entanglement/users.toml:/etc/entanglement/users.toml:ro
       # point this at a host folder of test photos/video; read-only, matching
       # server/src/main.rs's startup check that media_srcdir is NOT writable
@@ -81,26 +98,34 @@ services:
       - media-srv:/media/srv
     networks:
       - entg-net
-    # host-local only, matching the "owned host, not public cloud" deployment model
+    # host-local only, matching the "owned host, not public cloud" deployment model.
+    # the bind address is deliberately hard-coded to 127.0.0.1 (never 0.0.0.0/[::])
+    # so that only the port can be overridden; ENTG_HTTPS_PORT (from the shell or
+    # ./.env, see .env.example) moves it off the default to avoid clashing with
+    # other local stacks.  8443 inside the container is config.toml's socket.
     ports:
-      - "127.0.0.1:8443:8443"
+      - "127.0.0.1:${ENTG_HTTPS_PORT:-8444}:8443"
 
   # one-off admin tool, not a long-running service -- invoke with e.g.:
   #   docker compose --profile tools run --rm dbtool entg-db \
   #     --config /etc/entanglement/config.toml \
   #     add-library --path <subdir-of-media-src> --uid dev --gid devgroup
   dbtool:
+    image: entanglement-server:dev
     build:
       context: .
       dockerfile: Dockerfile
     entrypoint: ["/entrypoint.sh"]
     profiles: ["tools"]
+    environment:
+      ENTG_DB_PASSWORD: ${ENTG_DB_PASSWORD:?ENTG_DB_PASSWORD is not set -- copy .env.example to .env and set it}
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./docker/dev-certs:/certs:ro
-      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml:ro
+      # template: entrypoint.sh renders /etc/entanglement/config.toml from it
+      - ./docker/entanglement/config.toml:/etc/entanglement/config.toml.in:ro
       - ./docker/entanglement/users.toml:/etc/entanglement/users.toml:ro
     networks:
       - entg-net

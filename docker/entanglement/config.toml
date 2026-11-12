@@ -35,7 +35,9 @@ scan_scratch = "/media/srv/scratch"
 scan_timeout = 60
 
 [config.postgres]
-url = "postgres://entanglement:entanglement_dev_password@postgres/entanglement"
+# __ENTG_DB_PASSWORD__ is replaced at container start by docker/entrypoint.sh with
+# ENTG_DB_PASSWORD from the gitignored ./.env -- never commit the real value
+url = "postgres://entanglement:__ENTG_DB_PASSWORD__@postgres/entanglement"
 
 [config.tomlfile]
 # single file holds both [users.*] (authn) and [groups.*] (authz) tables --
