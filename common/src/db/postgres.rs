@@ -12,13 +12,14 @@ use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs::load_native_certs;
 use serde::{Deserialize, Serialize};
 
+use tokio_postgres::{Row, types::ToSql};
 use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::{debug, info, instrument};
 use url::Url;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath},
+    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
 };
 use api::{
     UuidSource,
@@ -26,7 +27,7 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
-    search::SearchOptions,
+    search::{SearchOptions, escape_like},
 };
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
@@ -35,6 +36,22 @@ fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
 
 fn hstore_to_set(hstore: HashMap<String, Option<String>>) -> HashSet<String> {
     hstore.into_keys().collect()
+}
+
+fn media_from_row(row: &Row) -> Result<Media> {
+    Ok(Media {
+        library_uuid: row.try_get("library_uuid")?,
+        path: row.try_get("path")?,
+        size: row.try_get::<&str, i64>("size")? as u64,
+        chash: row.try_get("chash")?,
+        phash: row.try_get("phash")?,
+        mtime: row.try_get::<&str, i64>("mtime")? as u64,
+        hidden: row.try_get("hidden")?,
+        date: row.try_get("date")?,
+        note: row.try_get("note")?,
+        tags: hstore_to_set(row.try_get("tags")?),
+        metadata: row.try_get("media_type")?,
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -175,19 +192,7 @@ impl DbBackend for PostgresBackend {
             None => return Ok(None),
         };
 
-        let media = Media {
-            library_uuid: media_row.try_get("library_uuid")?,
-            path: media_row.try_get("path")?,
-            size: media_row.try_get::<&str, i64>("size")? as u64,
-            chash: media_row.try_get("chash")?,
-            phash: media_row.try_get("phash")?,
-            mtime: media_row.try_get::<&str, i64>("mtime")? as u64,
-            hidden: media_row.try_get("hidden")?,
-            date: media_row.try_get("date")?,
-            note: media_row.try_get("note")?,
-            tags: hstore_to_set(media_row.try_get("tags")?),
-            metadata: media_row.try_get("media_type")?,
-        };
+        let media = media_from_row(media_row)?;
 
         let collection_statement = r#"-- get_media
             SELECT collection_uuid FROM collection_contents WHERE media_uuid = $1
@@ -206,6 +211,75 @@ impl DbBackend for PostgresBackend {
         debug!("found media details");
 
         Ok(Some((media, collections, comments)))
+    }
+
+    #[instrument(skip(self, media_uuids))]
+    async fn get_media_batch(&self, media_uuids: Vec<MediaUuid>) -> Result<Vec<MediaDetails>> {
+        debug!({ count = media_uuids.len() }, "finding media details in batch");
+
+        if media_uuids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.pool.get().await?;
+
+        let media_statement = r#"-- get_media_batch
+            SELECT media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type
+            FROM media WHERE media_uuid = ANY($1)
+        "#;
+
+        let collection_statement = r#"-- get_media_batch
+            SELECT media_uuid, collection_uuid FROM collection_contents WHERE media_uuid = ANY($1)
+        "#;
+
+        let comment_statement = r#"-- get_media_batch
+            SELECT media_uuid, comment_uuid FROM comments WHERE media_uuid = ANY($1)
+        "#;
+
+        // tokio_postgres pipelines concurrent queries on the one connection
+        let params: &[&(dyn ToSql + Sync)] = &[&media_uuids];
+        let (media_rows, collection_rows, comment_rows) = tokio::try_join!(
+            conn.query(media_statement, params),
+            conn.query(collection_statement, params),
+            conn.query(comment_statement, params),
+        )?;
+
+        let mut media = HashMap::with_capacity(media_rows.len());
+        for row in media_rows {
+            media.insert(row.try_get::<_, MediaUuid>("media_uuid")?, media_from_row(&row)?);
+        }
+
+        let mut collections: HashMap<MediaUuid, Vec<CollectionUuid>> = HashMap::new();
+        for row in collection_rows {
+            collections
+                .entry(row.try_get("media_uuid")?)
+                .or_default()
+                .push(row.try_get("collection_uuid")?);
+        }
+
+        let mut comments: HashMap<MediaUuid, Vec<CommentUuid>> = HashMap::new();
+        for row in comment_rows {
+            comments
+                .entry(row.try_get("media_uuid")?)
+                .or_default()
+                .push(row.try_get("comment_uuid")?);
+        }
+
+        let out = media_uuids
+            .into_iter()
+            .filter_map(|media_uuid| {
+                media.remove(&media_uuid).map(|m| MediaDetails {
+                    media_uuid,
+                    media: m,
+                    collections: collections.remove(&media_uuid).unwrap_or_default(),
+                    comments: comments.remove(&media_uuid).unwrap_or_default(),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        debug!({ count = out.len() }, "found media details in batch");
+
+        Ok(out)
     }
 
     #[instrument(skip(self))]
@@ -342,64 +416,45 @@ impl DbBackend for PostgresBackend {
         &self,
         gid: HashSet<String>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = opts.format_postgres("media.ts_vec");
-
-        // for a given uid and filter, find all media that match either:
+        // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
-        //  * if the media is not hidden, is in an collection owned
-        //    by a group containing the uid
-
-        let mut statement = r#"-- search_media
+        //  * is in a collection owned by a group containing the uid
+        //
+        // this drives from the media table (rather than a UNION of the two access paths)
+        // so that the planner can walk idx_media_visible_date and stop at the LIMIT
+        let base = r#"-- search_media
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                collection_uuid
-                            FROM
-                                collections
-                            WHERE
-                                gid = ANY($1)
-                        ) AS t1
-                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
-                    UNION
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                library_uuid
-                            FROM
-                                libraries
-                            WHERE
-                                gid = ANY($1)
-                        ) AS t2
-                        INNER JOIN media ON t2.library_uuid = media.library_uuid
-                ) AS t3
-                INNER JOIN media ON t3.media_uuid = media.media_uuid
+                media
             WHERE
-                media.hidden = FALSE"#.to_owned();
+                media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND collections.gid = ANY($1)
+                    )
+                )"#;
 
-        statement.push_str(&ts_search_sql);
+        let gid = gid.into_iter().collect::<Vec<String>>();
 
-        let media = conn
-            .query_scalar(&statement, &[&gid.into_iter().collect::<Vec<String>>()])
-            .await?;
+        let page = paged_search(&conn, base, &[&gid], &opts).await?;
 
-        debug!({ count = media.len() }, "found media");
+        debug!({ count = page.items.len(), total = page.total }, "found media");
 
-        Ok(media)
+        Ok(page)
     }
-
     #[instrument(skip(self))]
     async fn similar_media(
         &self,
@@ -756,33 +811,46 @@ impl DbBackend for PostgresBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<CollectionUuid>> {
+        page: PageOptions,
+    ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
         let conn = self.pool.get().await?;
 
-        let statement = r#"-- search_collections
+        let base = r#"-- search_collections
             SELECT
                 collection_uuid
             FROM
                 collections
             WHERE
-                gid = ANY($1) AND name LIKE $2
-        "#;
+                gid = ANY($1) AND name LIKE $2"#;
+
+        let gid = gid.into_iter().collect::<Vec<String>>();
+        let filter = format!("%{}%", escape_like(&filter));
+        let limit = page.limit.map(|l| i64::try_from(l).unwrap_or(i64::MAX));
+        let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
+
+        let total = if page.with_total {
+            let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
+            let n: i64 = conn.query_one(&count, &[&gid, &filter]).await?.try_get(0)?;
+            Some(n as u64)
+        } else {
+            None
+        };
+
+        // matches idx_collection_name; LIMIT NULL is no limit
+        let statement = format!("{base} ORDER BY name, collection_uuid LIMIT $3 OFFSET $4");
 
         let collections = conn
-            .query_scalar(
-                statement,
-                &[
-                    &gid.into_iter().collect::<Vec<String>>(),
-                    &format!("%{}%", filter),
-                ],
-            )
+            .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
             .await?;
 
-        debug!({ count = collections.len() }, "found collections");
+        debug!({ count = collections.len(), total = total }, "found collections");
 
-        Ok(collections)
+        Ok(SearchPage {
+            items: collections,
+            total,
+        })
     }
 
     #[instrument(skip(self, opts))]
@@ -791,50 +859,33 @@ impl DbBackend for PostgresBackend {
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in collection");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = opts.format_postgres("media.ts_vec");
-
-        let mut statement = r#"-- search_media_in_collection
+        // non-hidden media in the collection, provided the collection is owned by one of
+        // the user's groups
+        let base = r#"-- search_media_in_collection
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                collection_uuid
-                            FROM
-                                collections
-                            WHERE
-                                gid = ANY($1) AND collection_uuid = $2
-                        ) AS t2
-                        INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
-                ) AS t3
-                INNER JOIN media ON t3.media_uuid = media.media_uuid
+                collection_contents
+                INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                INNER JOIN media ON media.media_uuid = collection_contents.media_uuid
             WHERE
-                media.hidden = FALSE"#.to_owned();
+                collections.gid = ANY($1)
+                AND collections.collection_uuid = $2
+                AND media.hidden = FALSE"#;
 
-        statement.push_str(&ts_search_sql);
+        let gid = gid.into_iter().collect::<Vec<String>>();
 
-        let media = conn
-            .query_scalar(
-                &statement,
-                &[&gid.into_iter().collect::<Vec<String>>(), &collection_uuid],
-            )
-            .await?;
+        let page = paged_search(&conn, base, &[&gid, &collection_uuid], &opts).await?;
 
-        debug!({ count = media.len() }, "found media in collection");
+        debug!({ count = page.items.len(), total = page.total }, "found media in collection");
 
-        Ok(media)
+        Ok(page)
     }
-
-    // library functions
     #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         debug!({ library_path = library.path }, "adding library");
@@ -941,6 +992,8 @@ impl DbBackend for PostgresBackend {
                 libraries
             WHERE
                 gid = ANY($1) AND path LIKE $2
+            ORDER BY
+                path, library_uuid
         "#;
 
         let libraries = conn
@@ -948,7 +1001,7 @@ impl DbBackend for PostgresBackend {
                 statement,
                 &[
                     &gid.into_iter().collect::<Vec<String>>(),
-                    &format!("%{}%", filter),
+                    &format!("%{}%", escape_like(&filter)),
                 ],
             )
             .await?;
@@ -957,7 +1010,6 @@ impl DbBackend for PostgresBackend {
 
         Ok(libraries)
     }
-
     #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,
@@ -965,45 +1017,76 @@ impl DbBackend for PostgresBackend {
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in library");
 
         let conn = self.pool.get().await?;
 
-        let ts_search_sql = opts.format_postgres("media.ts_vec");
-
-        let mut statement = r#"-- search_media_in_library
+        // this is the only search query where media with "hidden = true" can be found
+        let base = r#"-- search_media_in_library
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        library_uuid
-                    FROM
-                        libraries
-                    WHERE
-                        gid = ANY($1) AND library_uuid = $2
-                ) AS t1
-                INNER JOIN media ON t1.library_uuid = media.library_uuid
+                media
             WHERE
-                media.hidden = COALESCE($3, media.hidden)"#
-            .to_owned();
+                media.library_uuid = $2
+                AND media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
+                AND ($3::bool IS NULL OR media.hidden = $3)"#;
 
-        statement.push_str(&ts_search_sql);
+        // note: the previous "hidden = COALESCE($3, hidden)" form defeated the planner's
+        // selectivity estimate and produced a full scan + sort; this form lets it walk
+        // idx_media_library_date and stop at the LIMIT (checked with EXPLAIN ANALYZE)
 
-        let media = conn
-            .query_scalar(
-                &statement,
-                &[
-                    &gid.into_iter().collect::<Vec<String>>(),
-                    &library_uuid,
-                    &hidden,
-                ],
-            )
-            .await?;
+        let gid = gid.into_iter().collect::<Vec<String>>();
 
-        debug!({ count = media.len() }, "found media in collection");
+        let page = paged_search(
+            &conn,
+            base,
+            &[&gid, &library_uuid, &hidden],
+            &opts,
+        )
+        .await?;
 
-        Ok(media)
+        debug!({ count = page.items.len(), total = page.total }, "found media in library");
+
+        Ok(page)
     }
+}
+
+// run a paged media search
+//
+// base must be a SELECT of a single media_uuid column over a FROM clause that includes
+// the media table, ending inside its WHERE clause, and using placeholders $1..$n for the
+// n base_params.  the filter, ORDER BY, LIMIT and OFFSET are appended with all user input
+// bound as further parameters.  when opts.with_total is set, a separate COUNT(*) without
+// the ORDER/LIMIT is run so that the page query itself can stay a top-N index walk.
+async fn paged_search(
+    conn: &tokio_postgres::Client,
+    base: &str,
+    base_params: &[&(dyn ToSql + Sync)],
+    opts: &SearchOptions,
+) -> Result<SearchPage<MediaUuid>> {
+    let q = opts.postgres_sql("media.ts_vec", base_params.len() + 1);
+
+    let mut params: Vec<&(dyn ToSql + Sync)> = base_params.to_vec();
+    if let Some(filter) = &q.filter_param {
+        params.push(filter);
+    }
+
+    let total = if opts.with_total {
+        let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
+        let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
+        Some(n as u64)
+    } else {
+        None
+    };
+
+    params.push(&q.limit);
+    params.push(&q.offset);
+
+    let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
+
+    let items = conn.query_scalar(&statement, &params).await?;
+
+    Ok(SearchPage { items, total })
 }

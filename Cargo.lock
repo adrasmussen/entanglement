@@ -132,6 +132,7 @@ dependencies = [
  "postgres-types",
  "regex",
  "serde",
+ "serde_json",
  "strum",
  "uuid",
 ]

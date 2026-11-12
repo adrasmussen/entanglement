@@ -110,6 +110,10 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                 DbMsg::GetMedia { resp, media_uuid } => {
                     self.respond(resp, self.backend.get_media(media_uuid)).await
                 }
+                DbMsg::GetMediaBatch { resp, media_uuids } => {
+                    self.respond(resp, self.backend.get_media_batch(media_uuids))
+                        .await
+                }
                 DbMsg::GetMediaUuids { resp } => {
                     self.respond(resp, self.backend.get_media_uuids()).await
                 }
@@ -236,8 +240,13 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     )
                     .await
                 }
-                DbMsg::SearchCollections { resp, gid, filter } => {
-                    self.respond(resp, self.backend.search_collections(gid, filter))
+                DbMsg::SearchCollections {
+                    resp,
+                    gid,
+                    filter,
+                    page,
+                } => {
+                    self.respond(resp, self.backend.search_collections(gid, filter, page))
                         .await
                 }
                 DbMsg::SearchMediaInCollection {

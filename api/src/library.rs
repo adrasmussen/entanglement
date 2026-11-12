@@ -71,4 +71,6 @@ pub struct SearchMediaInLibraryReq {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
+    #[serde(default)]
+    pub total: Option<u64>,
 }

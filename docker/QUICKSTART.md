@@ -39,6 +39,15 @@ into `docker/dev-certs/` (gitignored, regenerated per-machine). `postgres`
 applies `db/schema.sql` on first boot. Check `docker compose logs server` for
 `startup complete!` with no panics.
 
+`db/schema.sql` only runs against an empty `pg-data` volume. If your volume
+predates a schema change, apply the matching file from `db/migrations/` by hand
+instead of resetting (each file is idempotent and documents how to run it), e.g.:
+
+```sh
+docker compose exec -T postgres psql -U entanglement -d entanglement \
+  -v ON_ERROR_STOP=1 < db/migrations/2026-11-12_paging_indexes.sql
+```
+
 ## 4. Register a library
 
 ```sh

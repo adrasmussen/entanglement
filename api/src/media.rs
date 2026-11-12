@@ -96,6 +96,9 @@ pub struct SearchMediaReq {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
+    // only populated when the request set opts.with_total
+    #[serde(default)]
+    pub total: Option<u64>,
 }
 
 // find similar media

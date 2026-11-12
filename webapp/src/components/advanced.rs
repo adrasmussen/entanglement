@@ -4,13 +4,13 @@ use dioxus::prelude::*;
 use tracing::error;
 
 use crate::{
-    common::colors::CollectionColor,
+    common::{colors::CollectionColor, search::fetch_all_uuids},
     components::{
         modal::{MODAL_STACK, Modal},
         search::CompactSearchBar,
     },
 };
-use api::{WebError, collection::*, media::MediaUuid};
+use api::{WebError, collection::*, media::MediaUuid, search::SearchRequest};
 
 // TODO -- use show_signal for consistent cleanup... or move to a button?
 #[derive(Clone, PartialEq, Props)]
@@ -179,15 +179,18 @@ fn BulkEditButton(props: BulkEditButtonProps) -> Element {
 #[derive(Clone, PartialEq, Props)]
 pub struct BulkEditTabProps {
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
-    media_uuids: Memo<Option<HashSet<MediaUuid>>>,
+    // the page's search request (paging options are ignored), used to find every match
+    search_req: Callback<(), SearchRequest>,
     modes: Vec<BulkEditMode>,
 }
 
 #[component]
 pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
     let mut bulk_edit_signal = props.bulk_edit_signal;
-    let media_uuids = props.media_uuids;
+    let search_req = props.search_req;
     let modes = props.modes;
+    let mut inverting = use_signal(|| false);
+    let mut invert_error = use_signal(|| None::<String>);
 
     rsx! {
         div { class: "bulk-edit-options",
@@ -246,13 +249,31 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
                 style: "display: flex; gap: var(--space-3); margin-top: var(--space-4);",
                 button {
                     class: "btn btn-secondary",
+                    disabled: inverting(),
                     onclick: move |_| {
-                        if let Some(media_uuids) = media_uuids() {
-                            bulk_edit_signal
-                                .set(Some(media_uuids.difference(&bulk_edit_uuids).copied().collect()));
+                        let selected = bulk_edit_uuids.clone();
+                        let req = search_req.call(());
+                        async move {
+                            inverting.set(true);
+                            invert_error.set(None);
+                            match fetch_all_uuids(req).await {
+                                Ok(all) => {
+                                    bulk_edit_signal
+                                        .set(Some(all.difference(&selected).copied().collect()));
+                                }
+                                Err(err) => {
+                                    error!("failed to fetch all search results: {err}");
+                                    invert_error.set(Some(err.to_string()));
+                                }
+                            }
+                            inverting.set(false);
                         }
                     },
-                    "Invert Selection"
+                    if inverting() {
+                        "Inverting..."
+                    } else {
+                        "Invert Selection"
+                    }
                 }
                 button {
                     class: "btn btn-secondary",
@@ -260,6 +281,11 @@ pub fn BulkEditTab(props: BulkEditTabProps) -> Element {
                         bulk_edit_signal.set(Some(HashSet::new()));
                     },
                     "Clear Selection"
+                }
+            }
+            if let Some(err) = invert_error() {
+                p { style: "color: var(--error); margin-top: var(--space-2);",
+                    "Could not invert selection: {err}"
                 }
             }
             div {
@@ -307,7 +333,10 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq { filter }).await
+        search_collections(&SearchCollectionsReq {
+            filter,
+            ..Default::default()
+        }).await
     });
 
     // Get available collections (excluding already selected ones)

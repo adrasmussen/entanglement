@@ -10,8 +10,6 @@ use crate::{
 };
 use api::{collection::CollectionUuid, media::*, thumbnail_link};
 
-// TODO -- deduplicate the error handling in the the callsites by making a MediaGrid
-// with an error boundary
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaCardProps {
     // media data fetched from the database

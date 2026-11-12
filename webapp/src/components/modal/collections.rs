@@ -517,7 +517,10 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq { filter }).await
+        search_collections(&SearchCollectionsReq {
+            filter,
+            ..Default::default()
+        }).await
     });
 
     // TODO -- better error handling when collections cannot be searched
@@ -710,7 +713,10 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
             .map(|s| s.to_owned())
             .collect();
 
-        search_collections(&SearchCollectionsReq { filter }).await
+        search_collections(&SearchCollectionsReq {
+            filter,
+            ..Default::default()
+        }).await
     });
 
     // TODO -- better error handling when collections cannot be searched
@@ -741,6 +747,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                         order: SortMethod::DateDesc,
                         limit: None,
                         offset: 0,
+                        with_total: false,
                     },
                 })
                 .await
@@ -926,6 +933,7 @@ pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Eleme
                     order: SortMethod::DateDesc,
                     limit: None,
                     offset: 0,
+                    with_total: false,
                 },
             })
             .await

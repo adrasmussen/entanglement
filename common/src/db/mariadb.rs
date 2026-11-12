@@ -1,12 +1,12 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use async_trait::async_trait;
-use mysql_async::{FromRowError, Pool, Row, from_row_opt, prelude::*};
+use mysql_async::{FromRowError, Params, Pool, Row, Value, from_row_opt, prelude::*};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument};
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath},
+    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
 };
 use api::{
     UuidSource,
@@ -24,7 +24,7 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
-    search::SearchOptions,
+    search::{SearchOptions, escape_like},
     unfold_set,
 };
 
@@ -300,22 +300,124 @@ impl DbBackend for MariaDBBackend {
                 date: media_data.7,
                 note: media_data.8,
                 tags: unfold_set(&media_data.9),
-                metadata: match media_data.10.as_str() {
-                    "Image" => MediaMetadata::Image,
-                    "Video" => MediaMetadata::Video,
-                    "VideoSlice" => MediaMetadata::VideoSlice,
-                    "Audio" => MediaMetadata::Audio,
-                    _ => {
-                        error!("invalid media record");
-                        return Err(anyhow::Error::msg(format!(
-                            "invalid media record for {media_uuid}"
-                        )));
-                    }
-                },
+                metadata: parse_media_type(media_uuid.value(), &media_data.10)?,
             },
             collection_data,
             comment_data,
         )))
+    }
+
+    #[instrument(skip(self, media_uuids))]
+    async fn get_media_batch(&self, media_uuids: Vec<MediaUuid>) -> Result<Vec<MediaDetails>> {
+        debug!({ count = media_uuids.len() }, "getting media details in batch");
+
+        if media_uuids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let _mr = self.locks.media.read().await;
+        let _yr = self.locks.comment.read().await;
+        let _xr = self.locks.contents.read().await;
+
+        // the IN list is only ever "?, ?, ..." -- the uuids themselves are bound positionally
+        let placeholders = vec!["?"; media_uuids.len()].join(", ");
+        let values = media_uuids.iter().map(|m| m.value()).collect::<Vec<Uuid>>();
+
+        let media_rows = format!(
+            "SELECT media_uuid, library_uuid, path, size, chash, phash, mtime, hidden, date, note, tags, media_type
+             FROM media WHERE media_uuid IN ({placeholders})"
+        )
+        .with(values.clone())
+        .run(self.pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?;
+
+        let mut media = HashMap::with_capacity(media_rows.len());
+        for row in media_rows {
+            let d = from_row_opt::<(
+                Uuid,
+                Uuid,
+                String,
+                u64,
+                String,
+                String,
+                u64,
+                bool,
+                String,
+                String,
+                String,
+                String,
+            )>(row)?;
+
+            media.insert(
+                d.0,
+                Media {
+                    library_uuid: LibraryUuid::from_value(self, d.1),
+                    path: d.2,
+                    size: d.3,
+                    chash: d.4,
+                    phash: d.5,
+                    mtime: d.6,
+                    hidden: d.7,
+                    date: d.8,
+                    note: d.9,
+                    tags: unfold_set(&d.10),
+                    metadata: parse_media_type(d.0, &d.11)?,
+                },
+            );
+        }
+
+        let mut collections: HashMap<Uuid, Vec<CollectionUuid>> = HashMap::new();
+        for row in format!(
+            "SELECT media_uuid, collection_uuid FROM collection_contents WHERE media_uuid IN ({placeholders})"
+        )
+        .with(values.clone())
+        .run(self.pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?
+        {
+            let (m, c) = from_row_opt::<(Uuid, Uuid)>(row)?;
+            collections
+                .entry(m)
+                .or_default()
+                .push(CollectionUuid::from_value(self, c));
+        }
+
+        let mut comments: HashMap<Uuid, Vec<CommentUuid>> = HashMap::new();
+        for row in format!(
+            "SELECT media_uuid, comment_uuid FROM comments WHERE media_uuid IN ({placeholders})"
+        )
+        .with(values)
+        .run(self.pool.get_conn().await?)
+        .await?
+        .collect::<Row>()
+        .await?
+        {
+            let (m, c) = from_row_opt::<(Uuid, Uuid)>(row)?;
+            comments
+                .entry(m)
+                .or_default()
+                .push(CommentUuid::from_value(self, c));
+        }
+
+        let out = media_uuids
+            .into_iter()
+            .filter_map(|media_uuid| {
+                let key = media_uuid.value();
+                media.remove(&key).map(|m| MediaDetails {
+                    media_uuid,
+                    media: m,
+                    collections: collections.remove(&key).unwrap_or_default(),
+                    comments: comments.remove(&key).unwrap_or_default(),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        debug!({ count = out.len() }, "found media details in batch");
+
+        Ok(out)
     }
 
     #[instrument(skip(self))]
@@ -498,11 +600,12 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip(self, opts))]
+    #[instrument(skip(self, opts))]
     async fn search_media(
         &self,
         gid: HashSet<String>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media");
 
         let _mr = self.locks.media.read().await;
@@ -510,73 +613,39 @@ impl DbBackend for MariaDBBackend {
         let _xr = self.locks.contents.read().await;
         let _cr = self.locks.collection.read().await;
 
-        let (sql, filter) = opts.format_mariadb("media.path, media.date, media.note, media.tags");
-
-        // for a given uid and filter, find all media that match either:
+        // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
-        //  * if the media is not hidden, is in an collection owned
-        //    by a group containing the uid
-        let mut query = r"
+        //  * is in a collection owned by a group containing the uid
+        let base = format!(
+            r"
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                collection_uuid
-                            FROM
-                                collections
-                            WHERE
-                                INSTR(:gid, gid) > 0
-                        ) AS t1
-                        INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
-                    UNION
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                library_uuid
-                            FROM
-                                libraries
-                            WHERE
-                                INSTR(:gid, gid) > 0
-                        ) AS t2
-                        INNER JOIN media ON t2.library_uuid = media.library_uuid
-                ) AS t3
-                INNER JOIN media ON t3.media_uuid = media.media_uuid
+                media
             WHERE
-                media.hidden = FALSE".to_owned();
+                media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {GID_MATCH})
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND {GID_MATCH}
+                    )
+                )"
+        );
 
-        query.push_str(&sql);
-
-        let result = query
-            .with(params! {
-                "gid" => fold_set(gid)?,
-                "filter" => filter,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
+        let page = self
+            .paged_search(&base, vec![("gid", fold_set(gid)?.into())], &opts)
             .await?;
 
-        let data = result
-            .into_iter()
-            .map(|row| {
-                let input = from_row_opt::<Uuid>(row)?;
+        debug!({ count = page.items.len(), total = page.total }, "found media");
 
-                Ok(MediaUuid::from_value(self, input))
-            })
-            .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
-
-        debug!({ count = data.len() }, "found media");
-
-        Ok(data)
+        Ok(page)
     }
-
     #[instrument(skip(self))]
     async fn similar_media(
         &self,
@@ -609,7 +678,7 @@ impl DbBackend for MariaDBBackend {
                             FROM
                                 collections
                             WHERE
-                                INSTR(:gid, gid) > 0
+                                LOCATE(CONCAT('|', gid, '|'), CONCAT('|', :gid, '|')) > 0
                         ) AS t1
                         INNER JOIN collection_contents ON t1.collection_uuid = collection_contents.collection_uuid
                     UNION
@@ -622,7 +691,7 @@ impl DbBackend for MariaDBBackend {
                             FROM
                                 libraries
                             WHERE
-                                INSTR(:gid, gid) > 0
+                                LOCATE(CONCAT('|', gid, '|'), CONCAT('|', :gid, '|')) > 0
                         ) AS t2
                         INNER JOIN media ON t2.library_uuid = media.library_uuid
                 ) AS t3
@@ -1054,32 +1123,52 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip(self, filter))]
+    #[instrument(skip(self, filter))]
     async fn search_collections(
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<CollectionUuid>> {
+        page: PageOptions,
+    ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
         let _cr = self.locks.collection.read().await;
 
-        let result = r"
+        let base = format!(
+            r"
             SELECT
                 collection_uuid
             FROM
                 collections
             WHERE
-                INSTR(:gid, gid) > 0 AND name LIKE :filter"
-            .with(params! {
-                "gid" => fold_set(gid)?,
-                "filter" => format!("%{}%", filter),
-            })
+                {GID_MATCH} AND name LIKE :filter"
+        );
+
+        let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
+            (b"gid".to_vec(), fold_set(gid)?.into()),
+            (b"filter".to_vec(), format!("%{}%", escape_like(&filter)).into()),
+        ]);
+
+        let total = if page.with_total {
+            let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")
+                .with(Params::Named(params.clone()))
+                .first::<u64, _>(self.pool.get_conn().await?)
+                .await?
+                .unwrap_or(0);
+            Some(n)
+        } else {
+            None
+        };
+
+        params.insert(b"limit".to_vec(), page.limit.unwrap_or(u64::MAX).into());
+        params.insert(b"offset".to_vec(), page.offset.into());
+
+        let data = format!("{base} ORDER BY name, collection_uuid LIMIT :limit OFFSET :offset")
+            .with(Params::Named(params))
             .run(self.pool.get_conn().await?)
             .await?
             .collect::<Row>()
-            .await?;
-
-        let data = result
+            .await?
             .into_iter()
             .map(|row| {
                 let input = from_row_opt::<Uuid>(row)?;
@@ -1088,9 +1177,9 @@ impl DbBackend for MariaDBBackend {
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
-        debug!({ count = data.len() }, "found collections");
+        debug!({ count = data.len(), total = total }, "found collections");
 
-        Ok(data)
+        Ok(SearchPage { items: data, total })
     }
 
     #[instrument(skip(self, opts))]
@@ -1099,67 +1188,44 @@ impl DbBackend for MariaDBBackend {
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching media in collection");
 
         let _mr = self.locks.media.read().await;
         let _xr = self.locks.contents.read().await;
         let _cr = self.locks.collection.read().await;
 
-        let (sql, filter) = opts.format_mariadb("media.path, media.date, media.note, media.tags");
-
         // for a given uid, filter, and collection_uuid, find all non-hidden media in that collection
         // provided that the collection is owned by a group containing the uid
-        let mut query = r"
+        let base = format!(
+            r"
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        media_uuid
-                    FROM
-                        (
-                            SELECT
-                                collection_uuid
-                            FROM
-                                collections
-                            WHERE
-                                INSTR(:gid, gid) > 0 AND collection_uuid = :collection_uuid
-                        ) AS t2
-                        INNER JOIN collection_contents ON t2.collection_uuid = collection_contents.collection_uuid
-                ) AS t3
-                INNER JOIN media ON t3.media_uuid = media.media_uuid
+                collection_contents
+                INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                INNER JOIN media ON media.media_uuid = collection_contents.media_uuid
             WHERE
-                media.hidden = FALSE".to_owned();
+                collections.collection_uuid = :collection_uuid
+                AND {GID_MATCH}
+                AND media.hidden = FALSE"
+        );
 
-        query.push_str(&sql);
-
-        let result = query
-            .with(params! {
-                "gid" => fold_set(gid)?,
-                "collection_uuid" => collection_uuid.value(),
-                "filter" => filter,
-            })
-            .run(self.pool.get_conn().await?)
-            .await?
-            .collect::<Row>()
+        let page = self
+            .paged_search(
+                &base,
+                vec![
+                    ("gid", fold_set(gid)?.into()),
+                    ("collection_uuid", collection_uuid.value().into()),
+                ],
+                &opts,
+            )
             .await?;
 
-        let data = result
-            .into_iter()
-            .map(|row| {
-                let input = from_row_opt::<Uuid>(row)?;
+        debug!({ count = page.items.len(), total = page.total }, "found media in collection");
 
-                Ok(MediaUuid::from_value(self, input))
-            })
-            .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
-
-        debug!({ count = data.len() }, "found media in collection");
-
-        Ok(data)
+        Ok(page)
     }
-
-    // library queries
     #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         debug!({ library_path = library.path }, "adding library");
@@ -1302,10 +1368,10 @@ impl DbBackend for MariaDBBackend {
             FROM
                 libraries
             WHERE
-                INSTR(:gid, gid) > 0 AND path LIKE :filter"
+                LOCATE(CONCAT('|', gid, '|'), CONCAT('|', :gid, '|')) > 0 AND path LIKE :filter"
             .with(params! {
                 "gid" => fold_set(gid)?,
-                "filter" => format!("%{}%", filter),
+                "filter" => format!("%{}%", escape_like(&filter)),
             })
             .run(self.pool.get_conn().await?)
             .await?
@@ -1327,74 +1393,131 @@ impl DbBackend for MariaDBBackend {
     }
 
     #[instrument(skip(self, hidden, opts))]
+    #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>> {
+    ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching media in library");
 
         let _mr = self.locks.media.read().await;
         let _lr = self.locks.library.read().await;
 
-        let (filter_sql, filter) =
-            opts.format_mariadb("media.path, media.date, media.note, media.tags");
-
         let (hidden_sql, hidden) = match hidden {
-            Some(v) => (String::from("media.hidden = :hidden"), v),
-            None => (String::from("true = :hidden"), true),
+            Some(v) => ("media.hidden = :hidden", v),
+            None => ("TRUE = :hidden", true),
         };
 
-        // for a given uid, filter, hidden state and library_uuid, find all media in that collection
+        // for a given uid, filter, hidden state and library_uuid, find all media in that library
         // provided that the library is owned by a group containing the uid
         //
         // note that this is the only search query where media with "hidden = true" can be found
-        let mut query = r"
+        let base = format!(
+            r"
             SELECT
                 media.media_uuid
             FROM
-                (
-                    SELECT
-                        library_uuid
-                    FROM
-                        libraries
-                    WHERE
-                        INSTR(:gid, gid) > 0 AND library_uuid = :library_uuid
-                ) AS t1
-                INNER JOIN media ON t1.library_uuid = media.library_uuid
+                media
             WHERE
-            "
-        .to_owned();
+                media.library_uuid = :library_uuid
+                AND media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {GID_MATCH})
+                AND {hidden_sql}"
+        );
 
-        query.push_str(&hidden_sql);
+        let page = self
+            .paged_search(
+                &base,
+                vec![
+                    ("gid", fold_set(gid)?.into()),
+                    ("library_uuid", library_uuid.value().into()),
+                    ("hidden", hidden.into()),
+                ],
+                &opts,
+            )
+            .await?;
 
-        query.push_str(&filter_sql);
+        debug!({ count = page.items.len(), total = page.total }, "found media in library");
 
-        let result = query
-            .with(params! {
-                "gid" => fold_set(gid)?,
-                "library_uuid" => library_uuid.value(),
-                "hidden" => hidden,
-                "filter" => filter,
-            })
+        Ok(page)
+    }
+}
+
+// exact membership test of the row's gid in the folded set of user groups bound as :gid
+//
+// the previous INSTR(:gid, gid) was a plain substring match, so membership in "devops"
+// would also grant access to "dev"; delimiting both sides with the folding separator (which
+// fold_set() guarantees never appears inside a group name) makes it exact.  LOCATE is used
+// rather than LIKE so that '%' and '_' in group names are not wildcards.
+const GID_MATCH: &str = "LOCATE(CONCAT('|', gid, '|'), CONCAT('|', :gid, '|')) > 0";
+
+const MEDIA_COLS: &str = "media.path, media.date, media.note, media.tags";
+
+fn parse_media_type(media_uuid: Uuid, s: &str) -> Result<MediaMetadata> {
+    match s {
+        "Image" => Ok(MediaMetadata::Image),
+        "Video" => Ok(MediaMetadata::Video),
+        "VideoSlice" => Ok(MediaMetadata::VideoSlice),
+        "Audio" => Ok(MediaMetadata::Audio),
+        _ => {
+            error!("invalid media record");
+            Err(anyhow::Error::msg(format!(
+                "invalid media record for {media_uuid}"
+            )))
+        }
+    }
+}
+
+impl MariaDBBackend {
+    // run a paged media search
+    //
+    // base must be a SELECT of a single media_uuid column over a FROM clause that includes
+    // the media table, ending inside its WHERE clause; the filter, ORDER BY and LIMIT/OFFSET
+    // are appended with all user input bound as the named parameters :filter, :limit and
+    // :offset.  when opts.with_total is set, a separate COUNT(*) is run without ORDER/LIMIT.
+    async fn paged_search(
+        &self,
+        base: &str,
+        base_params: Vec<(&str, Value)>,
+        opts: &SearchOptions,
+    ) -> Result<SearchPage<MediaUuid>> {
+        let q = opts.mariadb_sql(MEDIA_COLS);
+
+        let mut params: HashMap<Vec<u8>, Value> = base_params
+            .into_iter()
+            .map(|(k, v)| (k.as_bytes().to_vec(), v))
+            .collect();
+        params.insert(b"filter".to_vec(), q.filter_param.clone().into());
+
+        let total = if opts.with_total {
+            let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
+            let n = count
+                .with(Params::Named(params.clone()))
+                .first::<u64, _>(self.pool.get_conn().await?)
+                .await?
+                .unwrap_or(0);
+            Some(n)
+        } else {
+            None
+        };
+
+        params.insert(b"limit".to_vec(), q.limit.into());
+        params.insert(b"offset".to_vec(), q.offset.into());
+
+        let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
+
+        let items = statement
+            .with(Params::Named(params))
             .run(self.pool.get_conn().await?)
             .await?
             .collect::<Row>()
-            .await?;
-
-        let data = result
+            .await?
             .into_iter()
-            .map(|row| {
-                let input = from_row_opt::<Uuid>(row)?;
-
-                Ok(MediaUuid::from_value(self, input))
-            })
+            .map(|row| Ok(MediaUuid::from_value(self, from_row_opt::<Uuid>(row)?)))
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
-        debug!({ count = data.len() }, "found media in library");
-
-        Ok(data)
+        Ok(SearchPage { items, total })
     }
 }

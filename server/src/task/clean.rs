@@ -81,7 +81,7 @@ pub async fn clean_library(
         )
         .await?;
 
-    let media_in_library = rx.await??;
+    let media_in_library = rx.await??.items;
 
     let context = Arc::new(CleanContext {
         config: config.clone(),

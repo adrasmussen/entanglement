@@ -1,29 +1,25 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
 use crate::{
     Route,
-    common::storage::*,
+    common::{
+        paging::use_paged,
+        search::{fetch_media_page, search_opts},
+        storage::*,
+    },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_card::MediaCard,
+        media_grid::MediaGrid,
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
         sidebar::AdvancedSidebar,
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
 };
-use api::{
-    UuidSource,
-    library::*,
-    media::MediaUuid,
-    search::{
-        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
-        batch_search_and_sort,
-    },
-};
+use api::{UuidSource, library::*, search::SearchRequest};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryDetailProps {
@@ -103,33 +99,36 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
-    let media_future = use_resource(move || async move {
-        update_signal();
-        let library_uuid = library_uuid();
-        let hidden = show_hidden();
-        let filter = media_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
+    // all hooks must run before the early returns below
+    let paged = use_paged(
+        move || (library_uuid(), media_search_signal(), show_hidden()),
+        update_signal,
+        |(library_uuid, search, hidden): (LibraryUuid, String, bool), offset, limit, with_total| async move {
+            fetch_media_page(
+                SearchRequest::Library(SearchMediaInLibraryReq {
+                    library_uuid,
+                    hidden: Some(hidden),
+                    opts: search_opts(&search),
+                }),
+                offset,
+                limit,
+                with_total,
+            )
+            .await
+        },
+    );
 
-        batch_search_and_sort(&BatchSearchAndSortReq {
-            req: SearchRequest::Library(SearchMediaInLibraryReq {
-                library_uuid,
-                hidden: Some(hidden),
-                opts: SearchOptions {
-                    filter: SearchFilter::SubstringAny { filter },
-                    order: SortMethod::DateDesc,
-                    limit: None,
-                    offset: 0,
-                },
-            }),
+    let search_req = use_callback(move |_: ()| {
+        SearchRequest::Library(SearchMediaInLibraryReq {
+            library_uuid: *library_uuid.peek(),
+            hidden: Some(*show_hidden.peek()),
+            opts: search_opts(&media_search_signal.peek()),
         })
-        .await
     });
 
     // see GalleryInner for details
     //
-    // the two futures both early return the same loading skeleton, but they could differ in principle
+    // only the library metadata gates the page skeleton; media paging handles its own loading state
     let library_data = &*library_future.read();
     let library_data = match library_data.clone().transpose().show(|error| {
         rsx! {
@@ -144,32 +143,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         Some(v) => v,
     };
 
-    let media_data = &*media_future.read();
-    let media_data = match media_data.clone().transpose().show(|error| {
-        rsx! {
-            LibraryError { message: format!("There was an error searching media in the library: {error}") }
-        }
-    })? {
-        None => {
-            return rsx! {
-                LibraryDetailSkeleton {}
-            }
-        }
-        Some(v) => v,
-    };
-
-    let media_uuids = use_memo(move || match &*media_future.read() {
-        Some(Ok(v)) => Some(
-            v.media
-                .iter()
-                .map(|m| m.media_uuid)
-                .collect::<HashSet<MediaUuid>>(),
-        ),
-        _ => None,
-    });
-
     let library = library_data.library;
-    let media = media_data.media;
 
     // search bar action button
     let action_button = rsx! {
@@ -249,7 +223,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
-                    status: format!("Found {} {}results", media.len(), if show_hidden() { "hidden " } else { "" }),
+                    status: paged.pager.status(paged.items.read().len(), if show_hidden() { "hidden results" } else { "results" }),
                     action_button,
                 }
 
@@ -262,7 +236,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                         ("Bulk Edit".to_owned(), rsx! {
                             BulkEditTab {
                                 bulk_edit_signal,
-                                media_uuids,
+                                search_req,
                                 modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
                             }
                         }),
@@ -274,50 +248,40 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             }
 
             div { class: "scrollable-content",
-                // media grid
-                if media.is_empty() {
-                    div {
-                        class: "empty-state",
-                        style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
-                        div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
-                            "🖼️"
-                        }
-                        h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
-                            "No Media Found"
-                        }
-                        p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
-                            if show_hidden() {
-                                "No media matches your search criteria in this library."
-                            } else {
-                                "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                MediaGrid {
+                    items: paged.items,
+                    pager: paged.pager,
+                    bulk_edit_signal,
+                    collection_color_signal,
+                    empty: rsx! {
+                        div {
+                            class: "empty-state",
+                            style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                            div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
+                                "🖼️"
+                            }
+                            h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
+                                "No Media Found"
+                            }
+                            p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
+                                if show_hidden() {
+                                    "No media matches your search criteria in this library."
+                                } else {
+                                    "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                                }
+                            }
+                            if !show_hidden() {
+                                button {
+                                    class: "btn btn-secondary",
+                                    style: "margin-top: var(--space-4);",
+                                    onclick: move |_| {
+                                        show_hidden.set(true);
+                                    },
+                                    "Show Hidden Files"
+                                }
                             }
                         }
-                        if !show_hidden() {
-                            button {
-                                class: "btn btn-secondary",
-                                style: "margin-top: var(--space-4);",
-                                onclick: move |_| {
-                                    show_hidden.set(true);
-                                },
-                                "Show Hidden Files"
-                            }
-                        }
-                    }
-                } else {
-                    div {
-                        class: "media-grid",
-                        style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
-                        for media in media.iter() {
-                            MediaCard {
-                                key: "{media.media_uuid}",
-                                media_uuid: media.media_uuid,
-                                media: media.media.clone(),
-                                collections: media.collections.clone(),
-                                bulk_edit_signal,
-                                collection_color_signal,
-                            }
-                        }
-                    }
+                    },
                 }
             }
         }

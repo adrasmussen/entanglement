@@ -1,4 +1,6 @@
 pub mod colors;
+pub mod paging;
+pub mod search;
 pub mod storage;
 pub mod style;
 

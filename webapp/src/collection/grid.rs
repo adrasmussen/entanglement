@@ -2,18 +2,24 @@ use dioxus::prelude::*;
 
 use crate::{
     collection::card::CollectionCard,
-    components::modal::{MODAL_STACK, Modal},
+    common::paging::Pager,
+    components::{
+        infinite::InfiniteScrollSentinel,
+        modal::{MODAL_STACK, Modal},
+    },
 };
 use api::collection::CollectionUuid;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionGridProps {
-    collections: Vec<CollectionUuid>,
+    collections: Signal<Vec<CollectionUuid>>,
+    pager: Pager,
 }
 
 #[component]
 pub fn CollectionGrid(props: CollectionGridProps) -> Element {
-    let has_collections = !props.collections.is_empty();
+    let pager = props.pager;
+    let has_collections = !props.collections.read().is_empty();
 
     rsx! {
         if has_collections {
@@ -25,12 +31,13 @@ pub fn CollectionGrid(props: CollectionGridProps) -> Element {
                     gap: var(--space-4);
                     margin-top: var(--space-4);
                 ",
-                for collection_uuid in props.collections.iter() {
+                for collection_uuid in props.collections.read().iter() {
                     div { key: "{collection_uuid}",
                         CollectionCard { collection_uuid: *collection_uuid }
                     }
                 }
             }
+            InfiniteScrollSentinel { pager }
         } else {
             div {
                 class: "empty-state",
