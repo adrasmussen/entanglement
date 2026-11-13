@@ -399,14 +399,14 @@ impl SearchQuery {
                 ));
             }
 
-            if let FieldType::Enum(allowed) = spec.ty {
-                if !allowed.contains(&c.value.as_str()) {
-                    return Err(format!(
-                        "search field '{}' must be one of {}",
-                        c.field,
-                        allowed.join(", ")
-                    ));
-                }
+            if let FieldType::Enum(allowed) = spec.ty
+                && !allowed.contains(&c.value.as_str())
+            {
+                return Err(format!(
+                    "search field '{}' must be one of {}",
+                    c.field,
+                    allowed.join(", ")
+                ));
             }
 
             check_value(spec, c.op, &c.value)?;
