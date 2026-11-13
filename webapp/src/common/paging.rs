@@ -71,16 +71,67 @@ impl<T> Page<T> {
     }
 }
 
+// where paging stands at the end of the loaded items
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Tail {
+    // more can be loaded
+    #[default]
+    Open,
+    // more can be loaded, but the last page added nothing and the loaded range was refreshed
+    // because of it (see AfterLoad::Refresh); another such page gives up
+    Stalled,
+    // the end of the results
+    Ended,
+    // pages kept adding nothing even after a refresh, so loading stopped short of the end
+    GaveUp,
+}
+
+impl Tail {
+    pub fn can_load(self) -> bool {
+        matches!(self, Self::Open | Self::Stalled)
+    }
+
+    // after a load_more page
+    fn after_page(step: AfterLoad) -> Self {
+        match step {
+            AfterLoad::More => Self::Open,
+            AfterLoad::Done => Self::Ended,
+            AfterLoad::Refresh => Self::Stalled,
+            AfterLoad::GiveUp => Self::GaveUp,
+        }
+    }
+
+    // after the loaded range was re-fetched in place, `done` if that reached the end
+    fn after_refresh(done: bool, cause: RefreshCause) -> Self {
+        match (done, cause) {
+            (true, _) => Self::Ended,
+            (false, RefreshCause::Stall) => Self::Stalled,
+            (false, RefreshCause::Requested) => Self::Open,
+        }
+    }
+
+    // after a fetch failed: a stall is about pages that arrived, so it says nothing once one
+    // didn't, and a closed tail would ignore the Retry that the error shows
+    fn after_error(self) -> Self {
+        match self {
+            Self::Ended => Self::Ended,
+            _ => Self::Open,
+        }
+    }
+}
+
 // the non-generic part of the paging state, which is what the sentinel and
 // the status text need (and so can be a component prop)
 #[derive(Clone, Copy, PartialEq)]
 pub struct Pager {
     pub loading: Signal<bool>,
-    pub exhausted: Signal<bool>,
+    pub tail: Signal<Tail>,
     pub initialized: Signal<bool>,
     pub error: Signal<Option<String>>,
     pub total: Signal<Option<u64>>,
     pub load_more: Callback<()>,
+    // re-fetch everything loaded in place (which also gets a grid that gave up going again)
+    pub refresh: Callback<()>,
 }
 
 pub struct Paged<T: 'static> {
@@ -157,6 +208,15 @@ fn refresh_chunks(loaded: u64) -> Vec<(u64, u64)> {
         .step_by(MAX_PAGE as usize)
         .map(|offset| (offset, MAX_PAGE.min(target - offset)))
         .collect()
+}
+
+// why the loaded range is re-fetched.  only the refresh that a stall asked for keeps the
+// stall on record, so that a second stall gives up instead of refreshing forever; any other
+// refresh starts with a clean slate
+#[derive(Clone, Copy, PartialEq)]
+enum RefreshCause {
+    Requested,
+    Stall,
 }
 
 // the loaded range, as re-fetched by refetch()
@@ -269,7 +329,7 @@ struct Restored<K, T> {
     key: K,
     items: Vec<T>,
     total: Option<u64>,
-    exhausted: bool,
+    tail: Tail,
     edit_seq: u64,
     window: WindowState,
 }
@@ -283,14 +343,12 @@ struct PagedState<K: 'static, T: 'static> {
     window: Signal<WindowState>,
     total: Signal<Option<u64>>,
     loading: Signal<bool>,
-    exhausted: Signal<bool>,
+    tail: Signal<Tail>,
     initialized: Signal<bool>,
     error: Signal<Option<String>>,
     generation: Signal<u64>,
     // the MEDIA_EDITS sequence number the items are known to be up to date with
     synced_seq: Signal<u64>,
-    // a page added nothing new since the last one that did (see AfterLoad::Refresh)
-    stalled: Signal<bool>,
 }
 
 impl<K: 'static, T: 'static> Clone for PagedState<K, T> {
@@ -316,12 +374,11 @@ fn use_paged_state<K: Clone + 'static, T: PageItem>(
         }),
         total: use_signal(|| restored.and_then(|r| r.total)),
         loading: use_signal(|| false),
-        exhausted: use_signal(|| restored.map(|r| r.exhausted).unwrap_or(false)),
+        tail: use_signal(|| restored.map(|r| r.tail).unwrap_or_default()),
         initialized: use_signal(|| restored.is_some()),
         error: use_signal(|| None),
         generation: use_signal(|| 0),
         synced_seq: use_signal(|| restored.map(|r| r.edit_seq).unwrap_or(0)),
-        stalled: use_signal(|| false),
     }
 }
 
@@ -347,6 +404,8 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
     fn settle(&mut self, res: Result<(), WebError>) {
         if let Err(err) = res {
             self.error.set(Some(err.to_string()));
+            let tail = self.tail.peek().after_error();
+            self.tail.set(tail);
         }
         self.initialized.set(true);
         self.loading.set(false);
@@ -365,7 +424,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             CacheEntry {
                 items: Rc::new(self.items.peek().clone()),
                 total: *self.total.peek(),
-                exhausted: *self.exhausted.peek(),
+                tail: *self.tail.peek(),
                 edit_seq: *self.synced_seq.peek(),
                 window: self.window.peek().clone(),
             },
@@ -378,9 +437,8 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         self.items.write().clear();
         reset_window(self.window);
         self.total.set(None);
-        self.exhausted.set(false);
+        self.tail.set(Tail::Open);
         self.initialized.set(false);
-        self.stalled.set(false);
     }
 
     // the first page after a reset; `seq` is the edit log position from before it was fetched
@@ -389,8 +447,8 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         let mut list = Vec::new();
         append_dedup(&mut list, page.items);
 
-        self.exhausted
-            .set(is_last_page(PAGE_SIZE, page_len, list.len(), page.total));
+        let last = is_last_page(PAGE_SIZE, page_len, list.len(), page.total);
+        self.tail.set(if last { Tail::Ended } else { Tail::Open });
         self.items.set(list);
         self.total.set(page.total);
         self.synced_seq.set(seq);
@@ -412,26 +470,25 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             (added, list.len())
         };
 
-        let step = after_load(page_len, added, loaded, total, *self.stalled.peek());
+        let stalled = *self.tail.peek() == Tail::Stalled;
+        let step = after_load(page_len, added, loaded, total, stalled);
         match step {
-            AfterLoad::More => self.stalled.set(false),
-            AfterLoad::Done => self.exhausted.set(true),
             AfterLoad::Refresh => {
-                warn!("a page of already loaded items at offset {loaded}, refreshing in place");
-                self.stalled.set(true);
+                warn!("a page of already loaded items at offset {loaded}, refreshing in place")
             }
             AfterLoad::GiveUp => {
-                warn!("still no new items at offset {loaded} after a refresh, stopping here");
-                self.exhausted.set(true);
+                warn!("still no new items at offset {loaded} after a refresh, stopping here")
             }
+            AfterLoad::More | AfterLoad::Done => {}
         }
+        self.tail.set(Tail::after_page(step));
         self.store();
 
         step
     }
 
     // the whole loaded range, re-fetched in place
-    fn replace_items(&mut self, fresh: Refetched<T>, seq: u64) {
+    fn replace_items(&mut self, fresh: Refetched<T>, seq: u64, cause: RefreshCause) {
         // the trimmed prefix is only still valid if the same items are in it
         let start = self.window.peek().start;
         if start > 0 && !same_prefix(&self.items.peek(), &fresh.items, start) {
@@ -442,7 +499,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             self.total.set(Some(t));
         }
         self.items.set(fresh.items);
-        self.exhausted.set(fresh.done);
+        self.tail.set(Tail::after_refresh(fresh.done, cause));
         self.synced_seq.set(seq);
         self.store();
     }
@@ -494,7 +551,7 @@ where
             key,
             items: (*items).clone(),
             total: entry.total,
-            exhausted: entry.exhausted,
+            tail: entry.tail,
             edit_seq: entry.edit_seq,
             window: entry.window.restored(LayoutKey::current()),
         }))
@@ -557,12 +614,12 @@ fn use_reset_on_key<K, T>(
 }
 
 // re-fetch the whole loaded range in place, keeping the scroll position
-fn use_refresh<K, T>(state: PagedState<K, T>, fetch: FetchFn<K, T>) -> Callback<()>
+fn use_refresh<K, T>(state: PagedState<K, T>, fetch: FetchFn<K, T>) -> Callback<RefreshCause>
 where
     K: Clone + Hash + 'static,
     T: PageItem,
 {
-    use_callback(move |_: ()| {
+    use_callback(move |cause: RefreshCause| {
         let Some(k) = state.key.peek().clone() else {
             return;
         };
@@ -583,14 +640,14 @@ where
             let Some(res) = res else {
                 return;
             };
-            let res = res.map(|fresh| state.replace_items(fresh, seq));
+            let res = res.map(|fresh| state.replace_items(fresh, seq, cause));
             state.settle(res);
         });
     })
 }
 
 // refresh whenever `trigger` is written (after modal edits etc.), but not on the first run
-fn use_refresh_on(trigger: Signal<()>, refresh: Callback<()>) {
+fn use_refresh_on(trigger: Signal<()>, refresh: Callback<RefreshCause>) {
     let first_run = use_hook(|| Rc::new(Cell::new(true)));
     use_effect(move || {
         trigger();
@@ -598,7 +655,7 @@ fn use_refresh_on(trigger: Signal<()>, refresh: Callback<()>) {
         if first_run.replace(false) {
             return;
         }
-        refresh.call(());
+        refresh.call(RefreshCause::Requested);
     });
 }
 
@@ -607,7 +664,7 @@ fn use_reconcile<K, T>(
     state: PagedState<K, T>,
     cache: Option<Rc<CacheCfg<K, T>>>,
     restored: Option<Rc<Restored<K, T>>>,
-    refresh: Callback<()>,
+    refresh: Callback<RefreshCause>,
 ) where
     K: Clone + Hash + 'static,
     T: PageItem,
@@ -630,7 +687,7 @@ fn use_reconcile<K, T>(
         let gen_id = *state.generation.peek();
         spawn(async move {
             let EditsSince::Media(edited) = edited else {
-                refresh.call(());
+                refresh.call(RefreshCause::Requested);
                 return;
             };
 
@@ -643,7 +700,7 @@ fn use_reconcile<K, T>(
                 .collect();
 
             if present.len() > MAX_RECONCILE {
-                refresh.call(());
+                refresh.call(RefreshCause::Requested);
                 return;
             }
 
@@ -669,7 +726,7 @@ fn use_reconcile<K, T>(
             }
 
             if needs_refresh {
-                refresh.call(());
+                refresh.call(RefreshCause::Requested);
             } else {
                 // only now are the edits accounted for in the cache
                 state.synced_seq.set(seq);
@@ -682,14 +739,14 @@ fn use_reconcile<K, T>(
 fn use_load_more<K, T>(
     state: PagedState<K, T>,
     fetch: FetchFn<K, T>,
-    refresh: Callback<()>,
+    refresh: Callback<RefreshCause>,
 ) -> Callback<()>
 where
     K: Clone + Hash + 'static,
     T: PageItem,
 {
     use_callback(move |_: ()| {
-        if *state.loading.peek() || *state.exhausted.peek() {
+        if *state.loading.peek() || !state.tail.peek().can_load() {
             return;
         }
         let Some(k) = state.key.peek().clone() else {
@@ -714,7 +771,7 @@ where
 
             // after settling, so that the refresh's loading flag is the one left standing
             if step == Some(AfterLoad::Refresh) {
-                refresh.call(());
+                refresh.call(RefreshCause::Stall);
             }
         });
     })
@@ -757,22 +814,29 @@ where
     use_refresh_on(refresh, refresh_all);
     use_reconcile(state, cache, restored, refresh_all);
     let load_more = use_load_more(state, fetch, refresh_all);
+    let requested_refresh = use_callback(move |_: ()| refresh_all.call(RefreshCause::Requested));
 
     Paged {
         items: state.items,
         window: state.window,
         pager: Pager {
             loading: state.loading,
-            exhausted: state.exhausted,
+            tail: state.tail,
             initialized: state.initialized,
             error: state.error,
             total: state.total,
             load_more,
+            refresh: requested_refresh,
         },
     }
 }
 
 impl Pager {
+    // nothing more is going to load (reactive)
+    pub fn exhausted(&self) -> bool {
+        !(self.tail)().can_load()
+    }
+
     // "Showing X of Y things" / "Loading..." / "Error ..." for the search bar
     pub fn status(&self, loaded: usize, noun: &str) -> String {
         if let (Some(err), 0) = ((self.error)(), loaded) {
@@ -967,6 +1031,31 @@ mod tests {
         assert_eq!(after_load(60, 60, 180, None, false), AfterLoad::More);
         // whereas the stored total would have ended it
         assert_eq!(after_load(60, 60, 120, Some(120), false), AfterLoad::Done);
+    }
+
+    #[test]
+    fn a_stall_refreshes_once_then_gives_up_unless_something_clears_it() {
+        // a page of known items stalls, and the refresh that asks for keeps the stall
+        let tail = Tail::after_page(after_load(60, 0, 120, None, false));
+        assert_eq!(tail, Tail::Stalled);
+        let tail = Tail::after_refresh(false, RefreshCause::Stall);
+        assert_eq!(tail, Tail::Stalled);
+        let step = after_load(60, 0, 120, None, tail == Tail::Stalled);
+        assert_eq!(Tail::after_page(step), Tail::GaveUp);
+        assert!(!Tail::GaveUp.can_load());
+
+        // any other refresh clears it (and reopens a grid that gave up)
+        assert_eq!(
+            Tail::after_refresh(false, RefreshCause::Requested),
+            Tail::Open
+        );
+        assert_eq!(Tail::after_refresh(true, RefreshCause::Stall), Tail::Ended);
+
+        // as does an error, which also leaves the tail open for the Retry it shows
+        assert_eq!(Tail::Stalled.after_error(), Tail::Open);
+        assert_eq!(Tail::GaveUp.after_error(), Tail::Open);
+        assert_eq!(Tail::Ended.after_error(), Tail::Ended);
+        assert!(Tail::Stalled.can_load());
     }
 
     #[test]

@@ -21,7 +21,7 @@ use api::{
     search::PAGE_SIZE,
 };
 
-use crate::components::media_grid::GRID_DENSITY;
+use crate::{common::paging::Tail, components::media_grid::GRID_DENSITY};
 
 // how many grids are remembered; the least recently used entry is evicted first
 const MAX_ENTRIES: usize = 8;
@@ -134,7 +134,7 @@ pub struct CacheEntry {
     // a Vec<T> for whatever T the grid pages (downcast on restore)
     pub items: Rc<dyn Any>,
     pub total: Option<u64>,
-    pub exhausted: bool,
+    pub tail: Tail,
     // the EDIT_LOG sequence number this entry is up to date with
     pub edit_seq: u64,
     pub window: WindowState,
@@ -260,7 +260,7 @@ mod tests {
         CacheEntry {
             items: Rc::new(vec![tag]),
             total: Some(1),
-            exhausted: true,
+            tail: Tail::Ended,
             edit_seq: seq,
             window: WindowState::default(),
         }
