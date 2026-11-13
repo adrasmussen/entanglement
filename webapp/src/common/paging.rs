@@ -64,8 +64,9 @@ pub struct Page<T> {
 }
 
 impl<T> Page<T> {
-    // the length that decides whether this was the last page
-    fn len(&self) -> u64 {
+    // how many rows the page held on the server, which is what decides whether it was the
+    // last one (not to be confused with items.len())
+    fn row_count(&self) -> u64 {
         self.page_len.unwrap_or(self.items.len() as u64)
     }
 }
@@ -197,7 +198,7 @@ where
         if offset == 0 {
             out.total = page.total;
         }
-        let page_len = page.len();
+        let page_len = page.row_count();
         append_dedup(&mut out.items, page.items);
         if is_last_page(limit, page_len, out.items.len(), out.total) {
             out.done = true;
@@ -384,7 +385,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
 
     // the first page after a reset; `seq` is the edit log position from before it was fetched
     fn set_first_page(&mut self, page: Page<T>, seq: u64) {
-        let page_len = page.len();
+        let page_len = page.row_count();
         let mut list = Vec::new();
         append_dedup(&mut list, page.items);
 
@@ -401,7 +402,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         if let Some(t) = page.total {
             self.total.set(Some(t));
         }
-        let page_len = page.len();
+        let page_len = page.row_count();
         let (added, loaded) = {
             let mut list = self.items.write();
             let added = append_dedup(&mut list, page.items);
@@ -934,7 +935,7 @@ mod tests {
             total: None,
             page_len: Some(60),
         };
-        assert!(!is_last_page(PAGE_SIZE, page.len(), 55, None));
+        assert!(!is_last_page(PAGE_SIZE, page.row_count(), 55, None));
 
         // older servers do not say, so the item count is all there is
         let page = Page {
@@ -942,7 +943,7 @@ mod tests {
             total: None,
             page_len: None,
         };
-        assert!(is_last_page(PAGE_SIZE, page.len(), 55, None));
+        assert!(is_last_page(PAGE_SIZE, page.row_count(), 55, None));
 
         // a known total is reached
         assert!(is_last_page(PAGE_SIZE, 60, 120, Some(120)));
