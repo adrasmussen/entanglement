@@ -27,6 +27,20 @@ use media::{BulkEditTagsModal, EnhancedMediaModal};
 // signal so that moving between pages via modal works
 pub static MODAL_STACK: GlobalSignal<Vec<Modal>> = Signal::global(Vec::new);
 
+// pops the top modal off the stack, dismissing it
+pub fn close_modal() {
+    MODAL_STACK.with_mut(|v| {
+        v.pop();
+    });
+}
+
+// dismisses the top modal after a short delay, used to let a success
+// message linger briefly before the modal closes itself
+pub fn close_modal_after(ms: u32) {
+    let task = gloo_timers::callback::Timeout::new(ms, close_modal);
+    task.forget();
+}
+
 // Modal
 //
 // this enumerates all of the modal boxes we can display, and what the relevant
@@ -169,36 +183,46 @@ pub fn ModalInner(props: ModalInnerProps) -> Element {
         ModalSize::Full => "max-width: 95%;",
     };
 
+    let disable_close = props.disable_close;
+
     rsx! {
         div {
             class: "modal-overlay",
             // Clicking overlay closes modal unless disabled
             onclick: move |evt| {
                 evt.stop_propagation();
-                if !props.disable_close {
-                    MODAL_STACK
-                        .with_mut(|v| {
-                            v.pop();
-                        });
+                if !disable_close {
+                    close_modal();
                 }
             },
             div {
                 class: "modal-content",
                 style: "{width}",
+                role: "dialog",
+                "aria-modal": "true",
+                "aria-labelledby": "modal-title",
+                tabindex: "-1",
                 // Stop click propagation to prevent closing when clicking content
                 onclick: move |evt| evt.stop_propagation(),
+                // Esc dismisses the modal, matching the overlay-click behavior
+                onkeydown: move |evt| {
+                    if !disable_close && evt.key().to_string() == "Escape" {
+                        evt.stop_propagation();
+                        close_modal();
+                    }
+                },
+                // grab focus on open so Esc/Tab work without an extra click first
+                onmounted: move |evt| async move {
+                    let _ = evt.set_focus(true).await;
+                },
 
                 div { class: "modal-header",
-                    h2 { class: "modal-title", "{props.title}" }
-                    if !props.disable_close {
+                    h2 { class: "modal-title", id: "modal-title", "{props.title}" }
+                    if !disable_close {
                         button {
                             class: "btn-close",
-                            onclick: move |_| {
-                                MODAL_STACK
-                                    .with_mut(|v| {
-                                        v.pop();
-                                    });
-                            },
+                            "aria-label": "Close",
+                            onclick: move |_| close_modal(),
                             "×"
                         }
                     }

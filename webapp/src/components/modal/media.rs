@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
-use crate::components::modal::{MODAL_STACK, ModalInner, ModalSize, ProgressBar};
+use crate::components::modal::{ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after};
 use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
 
 #[derive(Clone, PartialEq, Props)]
@@ -75,9 +75,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                             footer: rsx! {
                                 button {
                                     class: "btn btn-primary",
-                                    onclick: move |_| {
-                                        MODAL_STACK.with_mut(|v| v.pop());
-                                    },
+                                    onclick: move |_| close_modal(),
                                     "Close"
                                 }
                             },
@@ -155,9 +153,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                             footer: rsx! {
                                 button {
                                     class: "btn btn-primary",
-                                    onclick: move |_| {
-                                        MODAL_STACK.with_mut(|v| v.pop());
-                                    },
+                                    onclick: move |_| close_modal(),
                                     "Close"
                                 }
                             },
@@ -183,9 +179,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                             footer: rsx! {
                                 button {
                                     class: "btn btn-primary",
-                                    onclick: move |_| {
-                                        MODAL_STACK.with_mut(|v| v.pop());
-                                    },
+                                    onclick: move |_| close_modal(),
                                     "Close"
                                 }
                             },
@@ -207,9 +201,7 @@ pub fn EnhancedMediaModal(props: EnhancedMediaModalProps) -> Element {
                     footer: rsx! {
                         button {
                             class: "btn btn-primary",
-                            onclick: move |_| {
-                                MODAL_STACK.with_mut(|v| v.pop());
-                            },
+                            onclick: move |_| close_modal(),
                             "Close"
                         }
                     },
@@ -249,7 +241,7 @@ pub struct BulkAddTagsModalProps {
 pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
     let media_uuids = match props.media_uuids {
         None => {
-            MODAL_STACK.with_mut(|v| v.pop());
+            close_modal();
             return rsx! {};
         }
         Some(v) => v,
@@ -352,24 +344,18 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
 
             // Close the modal after a delay if successful
             if error_count() == 0 {
-                let task = gloo_timers::callback::Timeout::new(1500, move || {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                });
-                task.forget();
+                close_modal_after(1500);
             }
         }
     };
 
     let footer = rsx! {
-        span { class: "status-message", style: "color: var(--primary);", "{status_signal}" }
+        span { class: "status-message", "{status_signal}" }
         div {
             class: "modal-buttons",
-            style: "display: flex; gap: var(--space-4); justify-content: flex-end;",
             button {
                 class: "btn btn-secondary",
-                onclick: move |_| {
-                    MODAL_STACK.with_mut(|v| v.pop());
-                },
+                onclick: move |_| close_modal(),
                 "Cancel"
             }
             button {
@@ -423,18 +409,12 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
                             style: "flex: 1;",
                         }
                     }
-                    div {
-                        class: "form-help",
-                        style: "color: var(--text-tertiary); font-size: 0.875rem; margin-top: 0.25rem;",
-                        "Enter tags separated by {FOLDING_SEPARATOR}"
-                    }
+                    div { class: "form-help", "Enter tags separated by {FOLDING_SEPARATOR}" }
                 }
 
                 // Media count summary
-                div { style: "margin-top: var(--space-4); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md);",
-                    p { style: "margin: 0; color: var(--text-secondary); font-weight: 500;",
-                        "{media_count} items selected for bulk operation"
-                    }
+                div { class: "summary-box",
+                    p { "{media_count} items selected for bulk operation" }
                 }
             }
         }
