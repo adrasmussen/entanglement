@@ -18,7 +18,6 @@ use api::{
     collection::{CollectionUuid, GetCollectionResp},
     library::{GetLibraryResp, LibraryUuid},
     media::MediaUuid,
-    search::PAGE_SIZE,
 };
 
 use crate::{common::paging::Tail, components::media_grid::GRID_DENSITY};
@@ -120,13 +119,6 @@ impl LayoutKey {
             viewport,
         }
     }
-}
-
-// how many cards one trim removes: whole rows, about a page worth, so that the cards that
-// remain keep their columns
-pub fn chunk_size(cols: usize) -> usize {
-    let cols = cols.max(1);
-    cols.max(PAGE_SIZE as usize / cols * cols)
 }
 
 #[derive(Clone)]
@@ -372,20 +364,6 @@ mod tests {
         assert!(matches!(log.since(5), EditsSince::Media(_)));
         assert!(matches!(log.since(4), EditsSince::Overflow));
         assert_eq!(log.entries.len(), MAX_EDITS);
-    }
-
-    #[test]
-    fn chunk_is_whole_rows_near_a_page() {
-        assert_eq!(chunk_size(0), PAGE_SIZE as usize);
-        assert_eq!(chunk_size(1), PAGE_SIZE as usize);
-        assert_eq!(chunk_size(3), 60);
-        assert_eq!(chunk_size(7), 56);
-        assert_eq!(chunk_size(64), 64);
-        for cols in 1..100 {
-            let c = chunk_size(cols);
-            assert_eq!(c % cols, 0);
-            assert!(c >= cols);
-        }
     }
 
     #[test]
