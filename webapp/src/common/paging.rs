@@ -399,7 +399,10 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
 
     // a load_more page
     fn append_page(&mut self, page: Page<T>) -> AfterLoad {
-        if let Some(t) = page.total {
+        // only a total that came with this very page can end the results: the stored one is
+        // from the first page, and rows added since would otherwise end the results early
+        let total = page.total;
+        if let Some(t) = total {
             self.total.set(Some(t));
         }
         let page_len = page.row_count();
@@ -413,7 +416,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             page_len,
             added,
             loaded,
-            *self.total.peek(),
+            total,
             *self.stalled.peek(),
         );
         match step {
@@ -960,6 +963,16 @@ mod tests {
         // the end of the results wins over everything else
         assert_eq!(after_load(10, 0, 120, None, true), AfterLoad::Done);
         assert_eq!(after_load(60, 0, 120, Some(120), false), AfterLoad::Done);
+    }
+
+    #[test]
+    fn a_full_page_without_a_total_is_not_the_end() {
+        // load_more only asks for the total on the first page, so a later page past an old
+        // total of 120 (rows were added since) comes without one and keeps going
+        assert_eq!(after_load(60, 60, 120, None, false), AfterLoad::More);
+        assert_eq!(after_load(60, 60, 180, None, false), AfterLoad::More);
+        // whereas the stored total would have ended it
+        assert_eq!(after_load(60, 60, 120, Some(120), false), AfterLoad::Done);
     }
 
     #[test]
