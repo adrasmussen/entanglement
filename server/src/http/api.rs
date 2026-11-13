@@ -152,12 +152,24 @@ pub(super) async fn update_media(
     Ok(Json(UpdateMediaResp {}).into_response())
 }
 
+// a 400 for a structured search query that the media fields don't declare (an invalid
+// query is the client's error, which AppError would report as a 500)
+fn check_media_filter(filter: &SearchFilter) -> Result<(), Response> {
+    filter
+        .validate_media()
+        .map_err(|msg| (StatusCode::BAD_REQUEST, msg).into_response())
+}
+
 #[instrument(skip_all)]
 pub(super) async fn search_media(
     State(state): State<Arc<HttpEndpoint>>,
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaReq>,
 ) -> Result<Response, AppError> {
+    if let Err(response) = check_media_filter(&message.opts.filter) {
+        return Ok(response);
+    }
+
     // auth handled as part of the db search
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -622,6 +634,10 @@ pub(super) async fn search_media_in_collection(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaInCollectionReq>,
 ) -> Result<Response, AppError> {
+    if let Err(response) = check_media_filter(&message.opts.filter) {
+        return Ok(response);
+    }
+
     // auth handled in db search
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -726,6 +742,10 @@ pub(super) async fn search_media_in_library(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchMediaInLibraryReq>,
 ) -> Result<Response, AppError> {
+    if let Err(response) = check_media_filter(&message.opts.filter) {
+        return Ok(response);
+    }
+
     // auth handled as part of the db search
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -962,6 +982,10 @@ pub(super) async fn batch_search_and_sort(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<BatchSearchAndSortReq>,
 ) -> Result<Response, AppError> {
+    if let Err(response) = check_media_filter(&message.req.opts().filter) {
+        return Ok(response);
+    }
+
     let gid = state.groups_for_user(&current_user.uid).await?;
 
     let mut req = message.req;

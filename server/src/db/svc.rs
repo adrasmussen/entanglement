@@ -84,9 +84,22 @@ pub struct DbRunner<B: DbBackend> {
 #[async_trait]
 impl<B: DbBackend> ESInner for DbRunner<B> {
     async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+        let backend = B::new(config.clone()).await?;
+
+        // the searchable fields are declared in api::query and become sql by name, so refuse
+        // to start (rather than fail on the first search) if the schema lacks any of them
+        let columns = api::query::all_declared_columns();
+        match backend.check_columns(&columns).await {
+            Ok(()) => info!({ columns = columns.len() }, "search columns present in database schema"),
+            Err(err) => {
+                error!({ error = %err }, "database schema check failed");
+                return Err(err);
+            }
+        }
+
         Ok(DbRunner {
             registry: registry.clone(),
-            backend: B::new(config.clone()).await?,
+            backend,
         })
     }
 
