@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
-use api::{collection::*, comment::*, library::*, media::*, search::SearchOptions};
-use common::db::{MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage};
+use api::{
+    collection::*, comment::*, library::*, media::*, page::PageRequest, search::SearchOptions,
+};
+use common::db::{MediaByCHash, MediaByPath, MediaDetails, SearchPage};
 
 use crate::service::*;
 
@@ -114,7 +116,7 @@ pub enum DbMsg {
         resp: EsmResp<SearchPage<CollectionUuid>>,
         gid: HashSet<String>,
         filter: String,
-        page: PageOptions,
+        page: PageRequest,
     },
     SearchMediaInCollection {
         resp: EsmResp<SearchPage<MediaUuid>>,
@@ -138,9 +140,10 @@ pub enum DbMsg {
         update: LibraryUpdate,
     },
     SearchLibraries {
-        resp: EsmResp<Vec<LibraryUuid>>,
+        resp: EsmResp<SearchPage<LibraryUuid>>,
         gid: HashSet<String>,
         filter: String,
+        page: PageRequest,
     },
     SearchMediaInLibrary {
         resp: EsmResp<SearchPage<MediaUuid>>,

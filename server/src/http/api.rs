@@ -15,7 +15,6 @@ use crate::{
     task::msg::TaskMsg,
 };
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
-use common::db::PageOptions;
 
 // http api endpoints
 //
@@ -162,6 +161,8 @@ pub(super) async fn search_media(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
+    let page_req = message.opts.page.clone();
+
     state
         .db_svc_sender
         .send(
@@ -177,6 +178,7 @@ pub(super) async fn search_media(
     let result = rx.await??;
 
     Ok(Json(SearchMediaResp {
+        meta: result.meta(&page_req),
         media: result.items,
         total: result.total,
     })
@@ -595,11 +597,7 @@ pub(super) async fn search_collections(
                 filter: message.filter,
                 // uuid-only like the other search endpoints, so None (used by the
                 // collection pickers) is left unbounded; the collections page pages itself
-                page: PageOptions {
-                    limit: message.limit,
-                    offset: message.offset,
-                    with_total: message.with_total,
-                },
+                page: message.page.clone(),
             }
             .into(),
         )
@@ -608,6 +606,7 @@ pub(super) async fn search_collections(
     let result = rx.await??;
 
     Ok(Json(SearchCollectionsResp {
+        meta: result.meta(&message.page),
         collections: result.items,
         total: result.total,
     })
@@ -626,6 +625,8 @@ pub(super) async fn search_media_in_collection(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
+    let page_req = message.opts.page.clone();
+
     state
         .db_svc_sender
         .send(
@@ -642,6 +643,7 @@ pub(super) async fn search_media_in_collection(
     let result = rx.await??;
 
     Ok(Json(SearchMediaInCollectionResp {
+        meta: result.meta(&page_req),
         media: result.items,
         total: result.total,
     })
@@ -700,6 +702,7 @@ pub(super) async fn search_libraries(
                 resp: tx,
                 gid,
                 filter: message.filter,
+                page: message.page.clone(),
             }
             .into(),
         )
@@ -707,7 +710,11 @@ pub(super) async fn search_libraries(
 
     let result = rx.await??;
 
-    Ok(Json(SearchLibrariesResp { libraries: result }).into_response())
+    Ok(Json(SearchLibrariesResp {
+        meta: result.meta(&message.page),
+        libraries: result.items,
+    })
+    .into_response())
 }
 
 #[instrument(skip_all)]
@@ -721,6 +728,8 @@ pub(super) async fn search_media_in_library(
     let gid = state.groups_for_user(&current_user.uid).await?;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
+
+    let page_req = message.opts.page.clone();
 
     state
         .db_svc_sender
@@ -739,6 +748,7 @@ pub(super) async fn search_media_in_library(
     let result = rx.await??;
 
     Ok(Json(SearchMediaInLibraryResp {
+        meta: result.meta(&page_req),
         media: result.items,
         total: result.total,
     })
@@ -864,8 +874,12 @@ pub(super) async fn batch_search_and_sort(
 
     {
         let opts = req.opts_mut();
-        opts.limit = Some(opts.limit.unwrap_or(MAX_PAGE).min(MAX_PAGE));
+        opts.page.limit = Some(opts.page.limit.unwrap_or(MAX_PAGE).min(MAX_PAGE));
     }
+
+    // the request as it will be run, i.e. after the clamp, so meta.limit echoes the limit
+    // actually used
+    let page_req = req.opts().page.clone();
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -894,6 +908,7 @@ pub(super) async fn batch_search_and_sort(
 
     let page = rx.await??;
     let page_len = page.items.len() as u64;
+    let meta = page.meta(&page_req);
 
     // past the end of the results there is nothing to hydrate
     if page.items.is_empty() {
@@ -901,6 +916,7 @@ pub(super) async fn batch_search_and_sort(
             media: Vec::new(),
             total: page.total,
             page_len: Some(0),
+            meta,
         })
         .into_response());
     }
@@ -935,6 +951,7 @@ pub(super) async fn batch_search_and_sort(
         media,
         total: page.total,
         page_len: Some(page_len),
+        meta,
     })
     .into_response())
 }

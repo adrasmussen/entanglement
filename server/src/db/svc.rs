@@ -279,8 +279,13 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(resp, self.backend.update_library(library_uuid, update))
                         .await
                 }
-                DbMsg::SearchLibraries { resp, gid, filter } => {
-                    self.respond(resp, self.backend.search_libraries(gid, filter))
+                DbMsg::SearchLibraries {
+                    resp,
+                    gid,
+                    filter,
+                    page,
+                } => {
+                    self.respond(resp, self.backend.search_libraries(gid, filter, page))
                         .await
                 }
                 DbMsg::SearchMediaInLibrary {
