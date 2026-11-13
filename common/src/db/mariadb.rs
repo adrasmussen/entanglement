@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
+    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage},
 };
 use api::{
     FOLDING_SEPARATOR, UuidSource,
@@ -24,6 +24,7 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
+    page::PageRequest,
     search::{SearchOptions, escape_like},
     unfold_set,
 };
@@ -1052,7 +1053,7 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-        page: PageOptions,
+        page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
@@ -1088,7 +1089,19 @@ impl DbBackend for MariaDBBackend {
             None
         };
 
-        params.insert(b"limit".to_vec(), page.limit.unwrap_or(u64::MAX).into());
+        // a count-only request has no page to fetch
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        // one row past the limit is a probe for has_more; mariadb has no LIMIT NULL, so
+        // the max u64 is the unbounded idiom
+        params.insert(
+            b"limit".to_vec(),
+            SearchPage::<CollectionUuid>::probe_limit(page.limit)
+                .unwrap_or(u64::MAX)
+                .into(),
+        );
         params.insert(b"offset".to_vec(), page.offset.into());
 
         let data = format!("{base} ORDER BY name, collection_uuid LIMIT :limit OFFSET :offset")
@@ -1105,9 +1118,11 @@ impl DbBackend for MariaDBBackend {
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
-        debug!({ count = data.len(), total = total }, "found collections");
+        let page = SearchPage::from_probe(data, total, page.limit);
 
-        Ok(SearchPage { items: data, total })
+        debug!({ count = page.items.len(), total = total }, "found collections");
+
+        Ok(page)
     }
 
     #[instrument(skip(self, opts))]
@@ -1288,13 +1303,14 @@ impl DbBackend for MariaDBBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<LibraryUuid>> {
+        page: PageRequest,
+    ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching libraries");
 
         let _lr = self.locks.library.read().await;
 
         let gid_match = &*GID_MATCH;
-        let result = format!(
+        let base = format!(
             r"
             SELECT
                 library_uuid
@@ -1302,15 +1318,46 @@ impl DbBackend for MariaDBBackend {
                 libraries
             WHERE
                 {gid_match} AND path LIKE :filter"
-        )
-        .with(params! {
-            "gid" => fold_set(gid)?,
-            "filter" => format!("%{}%", escape_like(&filter)),
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
+        );
+
+        let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
+            (b"gid".to_vec(), fold_set(gid)?.into()),
+            (
+                b"filter".to_vec(),
+                format!("%{}%", escape_like(&filter)).into(),
+            ),
+        ]);
+
+        let total = if page.with_total {
+            let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")
+                .with(Params::Named(params.clone()))
+                .first::<u64, _>(self.pool.get_conn().await?)
+                .await?
+                .ok_or_else(|| anyhow::Error::msg("COUNT(*) returned no row"))?;
+            Some(n)
+        } else {
+            None
+        };
+
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        params.insert(
+            b"limit".to_vec(),
+            SearchPage::<LibraryUuid>::probe_limit(page.limit)
+                .unwrap_or(u64::MAX)
+                .into(),
+        );
+        params.insert(b"offset".to_vec(), page.offset.into());
+
+        // path is unique (so it has an index), and library_uuid keeps the order total
+        let result = format!("{base} ORDER BY path, library_uuid LIMIT :limit OFFSET :offset")
+            .with(Params::Named(params))
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
         let data = result
             .into_iter()
@@ -1321,9 +1368,11 @@ impl DbBackend for MariaDBBackend {
             })
             .collect::<Result<Vec<LibraryUuid>, anyhow::Error>>()?;
 
-        debug!({ count = data.len() }, "found libraries");
+        let page = SearchPage::from_probe(data, total, page.limit);
 
-        Ok(data)
+        debug!({ count = page.items.len(), total = total }, "found libraries");
+
+        Ok(page)
     }
 
     #[instrument(skip(self, hidden, opts))]
@@ -1489,7 +1538,7 @@ impl MariaDBBackend {
     // base must be a SELECT of a single media_uuid column over a FROM clause that includes
     // the media table, ending inside its WHERE clause; the filter, ORDER BY and LIMIT/OFFSET
     // are appended with all user input bound as the named parameters :filter, :limit and
-    // :offset.  when opts.with_total is set, a separate COUNT(*) is run without ORDER/LIMIT.
+    // :offset.  when opts.page.with_total is set, a separate COUNT(*) is run without ORDER/LIMIT.
     async fn paged_search(
         &self,
         base: &str,
@@ -1504,7 +1553,7 @@ impl MariaDBBackend {
             .collect();
         params.insert(b"filter".to_vec(), q.filter_param.clone().into());
 
-        let total = if opts.with_total {
+        let total = if opts.page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
             let n = count
                 .with(Params::Named(params.clone()))
@@ -1516,7 +1565,14 @@ impl MariaDBBackend {
             None
         };
 
-        params.insert(b"limit".to_vec(), q.limit.into());
+        // a count-only request has no page to fetch
+        if opts.page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        // fetch one row past the limit as a probe for has_more (q.limit is already the
+        // max u64 when unbounded, which the saturating add leaves alone)
+        params.insert(b"limit".to_vec(), q.limit.saturating_add(1).into());
         params.insert(b"offset".to_vec(), q.offset.into());
 
         let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
@@ -1531,6 +1587,6 @@ impl MariaDBBackend {
             .map(|row| Ok(MediaUuid::from_value(self, from_row_opt::<Uuid>(row)?)))
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
-        Ok(SearchPage { items, total })
+        Ok(SearchPage::from_probe(items, total, opts.page.limit))
     }
 }

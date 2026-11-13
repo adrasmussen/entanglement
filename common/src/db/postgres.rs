@@ -19,7 +19,7 @@ use url::Url;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
+    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage},
 };
 use api::{
     UuidSource,
@@ -27,6 +27,7 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
+    page::PageRequest,
     search::{SearchOptions, escape_like},
 };
 
@@ -818,7 +819,7 @@ impl DbBackend for PostgresBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-        page: PageOptions,
+        page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
@@ -834,7 +835,6 @@ impl DbBackend for PostgresBackend {
 
         let gid = gid.into_iter().collect::<Vec<String>>();
         let filter = format!("%{}%", escape_like(&filter));
-        let limit = page.limit.map(|l| i64::try_from(l).unwrap_or(i64::MAX));
         let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
 
         let total = if page.with_total {
@@ -845,19 +845,26 @@ impl DbBackend for PostgresBackend {
             None
         };
 
-        // matches idx_collection_name; LIMIT NULL is no limit
+        // a count-only request has no page to fetch
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        // one row past the limit is a probe for has_more; matches idx_collection_name,
+        // and LIMIT NULL is no limit
+        let limit = SearchPage::<CollectionUuid>::probe_limit(page.limit)
+            .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
         let statement = format!("{base} ORDER BY name, collection_uuid LIMIT $3 OFFSET $4");
 
         let collections = conn
             .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
             .await?;
 
-        debug!({ count = collections.len(), total = total }, "found collections");
+        let page = SearchPage::from_probe(collections, total, page.limit);
 
-        Ok(SearchPage {
-            items: collections,
-            total,
-        })
+        debug!({ count = page.items.len(), total = total }, "found collections");
+
+        Ok(page)
     }
 
     #[instrument(skip(self, opts))]
@@ -989,35 +996,51 @@ impl DbBackend for PostgresBackend {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<LibraryUuid>> {
+        page: PageRequest,
+    ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching for libraries");
 
         let conn = self.pool.get().await?;
 
-        let statement = r#"-- search_libraries
+        let base = r#"-- search_libraries
             SELECT
                 library_uuid
             FROM
                 libraries
             WHERE
-                gid = ANY($1) AND path LIKE $2
-            ORDER BY
-                path, library_uuid
-        "#;
+                gid = ANY($1) AND path LIKE $2"#;
+
+        let gid = gid.into_iter().collect::<Vec<String>>();
+        let filter = format!("%{}%", escape_like(&filter));
+        let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
+
+        let total = if page.with_total {
+            let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
+            let n: i64 = conn.query_one(&count, &[&gid, &filter]).await?.try_get(0)?;
+            Some(n as u64)
+        } else {
+            None
+        };
+
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        let limit = SearchPage::<LibraryUuid>::probe_limit(page.limit)
+            .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
+
+        // path is unique (so it has an index), and library_uuid keeps the order total
+        let statement = format!("{base} ORDER BY path, library_uuid LIMIT $3 OFFSET $4");
 
         let libraries = conn
-            .query_scalar(
-                statement,
-                &[
-                    &gid.into_iter().collect::<Vec<String>>(),
-                    &format!("%{}%", escape_like(&filter)),
-                ],
-            )
+            .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
             .await?;
 
-        debug!({ count = libraries.len() }, "found libraries");
+        let page = SearchPage::from_probe(libraries, total, page.limit);
 
-        Ok(libraries)
+        debug!({ count = page.items.len(), total = total }, "found libraries");
+
+        Ok(page)
     }
 
     #[instrument(skip(self, hidden, opts))]
@@ -1062,7 +1085,7 @@ impl DbBackend for PostgresBackend {
 // base must be a SELECT of a single media_uuid column over a FROM clause that includes
 // the media table, ending inside its WHERE clause, and using placeholders $1..$n for the
 // n base_params.  the filter, ORDER BY, LIMIT and OFFSET are appended with all user input
-// bound as further parameters.  when opts.with_total is set, a separate COUNT(*) without
+// bound as further parameters.  when opts.page.with_total is set, a separate COUNT(*) without
 // the ORDER/LIMIT is run so that the page query itself can stay a top-N index walk.
 async fn paged_search(
     conn: &tokio_postgres::Client,
@@ -1077,7 +1100,7 @@ async fn paged_search(
         params.push(filter);
     }
 
-    let total = if opts.with_total {
+    let total = if opts.page.with_total {
         let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
         let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
         Some(n as u64)
@@ -1085,12 +1108,20 @@ async fn paged_search(
         None
     };
 
-    params.push(&q.limit);
+    // a count-only request has no page to fetch
+    if opts.page.limit == Some(0) {
+        return Ok(SearchPage::count_only(total));
+    }
+
+    // fetch one row past the limit as a probe for has_more (LIMIT NULL is no limit)
+    let limit = q.limit.map(|l| l.saturating_add(1));
+
+    params.push(&limit);
     params.push(&q.offset);
 
     let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
 
-    let items = conn.query_scalar(&statement, &params).await?;
+    let rows = conn.query_scalar(&statement, &params).await?;
 
-    Ok(SearchPage { items, total })
+    Ok(SearchPage::from_probe(rows, total, opts.page.limit))
 }

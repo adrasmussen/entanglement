@@ -10,6 +10,7 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
+    page::{PageMeta, PageRequest},
     search::SearchOptions,
 };
 
@@ -117,7 +118,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         filter: String,
-        page: PageOptions,
+        page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>>;
 
     async fn search_media_in_collection(
@@ -140,7 +141,8 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<LibraryUuid>>;
+        page: PageRequest,
+    ) -> Result<SearchPage<LibraryUuid>>;
 
     async fn search_media_in_library(
         &self,
@@ -154,19 +156,63 @@ pub trait DbBackend: Send + Sync + 'static {
 // paged search results
 //
 // items is the requested page (in sort order); total is the size of the full filtered
-// set, and is only computed (via a separate COUNT) when the caller asked for it
+// set, and is only computed (via a separate COUNT) when the caller asked for it.
+// has_more says whether rows exist past this page: backends fetch one extra row as a
+// probe and trim it, so it is exact whenever a page query ran, and None only for a
+// count-only request (limit = 0), where no page query runs
 #[derive(Clone, Debug)]
 pub struct SearchPage<T> {
     pub items: Vec<T>,
     pub total: Option<u64>,
+    pub has_more: Option<bool>,
 }
 
-// paging parameters for searches that don't take a full SearchOptions
-#[derive(Clone, Copy, Debug, Default)]
-pub struct PageOptions {
-    pub limit: Option<u64>,
-    pub offset: u64,
-    pub with_total: bool,
+impl<T> SearchPage<T> {
+    // the page for a count-only request: no rows, and nothing known about what follows
+    pub fn count_only(total: Option<u64>) -> Self {
+        Self {
+            items: Vec::new(),
+            total,
+            has_more: None,
+        }
+    }
+
+    // how many rows the page query should ask for: one more than the limit, so that an
+    // extra row proves there is more.  None stays unbounded
+    pub fn probe_limit(limit: Option<u64>) -> Option<u64> {
+        limit.map(|l| l.saturating_add(1))
+    }
+
+    // build the page from the rows fetched with probe_limit, trimming the probe row
+    pub fn from_probe(mut rows: Vec<T>, total: Option<u64>, limit: Option<u64>) -> Self {
+        let has_more = match limit {
+            None => false,
+            Some(l) => {
+                let more = rows.len() as u64 > l;
+                rows.truncate(usize::try_from(l).unwrap_or(usize::MAX));
+                more
+            }
+        };
+
+        Self {
+            items: rows,
+            total,
+            has_more: Some(has_more),
+        }
+    }
+
+    // the metadata for the response to req (whose limit has already been clamped by
+    // the caller, if it clamps)
+    pub fn meta(&self, req: &PageRequest) -> PageMeta {
+        PageMeta {
+            total: self.total,
+            row_count: self.items.len() as u64,
+            offset: req.offset,
+            limit: req.limit,
+            has_more: self.has_more,
+            next_cursor: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -190,4 +236,69 @@ pub struct MediaByCHash {
     pub media_uuid: MediaUuid,
     pub path: String,
     pub mtime: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn probe_asks_for_one_extra_row() {
+        assert_eq!(SearchPage::<u8>::probe_limit(None), None);
+        assert_eq!(SearchPage::<u8>::probe_limit(Some(60)), Some(61));
+        assert_eq!(
+            SearchPage::<u8>::probe_limit(Some(u64::MAX)),
+            Some(u64::MAX)
+        );
+    }
+
+    #[test]
+    fn from_probe_trims_the_probe_row() {
+        let p = SearchPage::from_probe(vec![1, 2, 3], Some(9), Some(2));
+        assert_eq!(p.items, vec![1, 2]);
+        assert_eq!(p.has_more, Some(true));
+        assert_eq!(p.total, Some(9));
+
+        // a page that exactly fits the limit is the last one
+        let p = SearchPage::from_probe(vec![1, 2], None, Some(2));
+        assert_eq!(p.items, vec![1, 2]);
+        assert_eq!(p.has_more, Some(false));
+
+        let p = SearchPage::from_probe(vec![1], None, Some(2));
+        assert_eq!(p.has_more, Some(false));
+
+        let p = SearchPage::from_probe(vec![1, 2, 3], None, None);
+        assert_eq!(p.items.len(), 3);
+        assert_eq!(p.has_more, Some(false));
+    }
+
+    #[test]
+    fn count_only_page_has_no_rows_and_unknown_has_more() {
+        let p = SearchPage::<u8>::count_only(Some(4));
+        assert!(p.items.is_empty());
+        assert_eq!(p.has_more, None);
+        assert_eq!(p.total, Some(4));
+    }
+
+    #[test]
+    fn meta_echoes_the_request() {
+        let p = SearchPage::from_probe(vec![1, 2, 3], Some(10), Some(2));
+        let req = PageRequest {
+            limit: Some(2),
+            offset: 4,
+            with_total: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            p.meta(&req),
+            PageMeta {
+                total: Some(10),
+                row_count: 2,
+                offset: 4,
+                limit: Some(2),
+                has_more: Some(true),
+                next_cursor: None,
+            }
+        );
+    }
 }
