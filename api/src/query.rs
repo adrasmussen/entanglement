@@ -327,7 +327,11 @@ impl SearchQuery {
                 match allowed.iter().find(|a| a.eq_ignore_ascii_case(&value)) {
                     Some(a) => value = a.to_string(),
                     None => {
-                        issue(format!("{} must be one of {}", spec.name, allowed.join(", ")));
+                        issue(format!(
+                            "{} must be one of {}",
+                            spec.name,
+                            allowed.join(", ")
+                        ));
                         continue;
                     }
                 }
@@ -434,9 +438,10 @@ fn check_value(spec: &FieldSpec, op: Op, value: &str) -> Result<(), String> {
                 "{} cannot contain '{FOLDING_SEPARATOR}'",
                 spec.name
             )),
-            FieldType::Date if !v.chars().all(|c| c.is_ascii_digit() || c == '-') => {
-                Err(format!("{} must look like 2020, 2020-06 or 2020-06-15", spec.name))
-            }
+            FieldType::Date if !v.chars().all(|c| c.is_ascii_digit() || c == '-') => Err(format!(
+                "{} must look like 2020, 2020-06 or 2020-06-15",
+                spec.name
+            )),
             _ => Ok(()),
         }
     };
@@ -532,9 +537,8 @@ fn unquote(raw: &str) -> String {
 }
 
 fn quote_if(v: &str, force: bool) -> String {
-    let needs = force
-        || v.is_empty()
-        || v.contains(|c: char| c.is_whitespace() || c == '"' || c == '\\');
+    let needs =
+        force || v.is_empty() || v.contains(|c: char| c.is_whitespace() || c == '"' || c == '\\');
 
     if !needs {
         return v.to_string();
@@ -630,7 +634,10 @@ mod tests {
         let r = p("TAG:x Type:VIDEOSLICE");
         assert_eq!(
             r.query.clauses,
-            vec![clause("tag", Op::Has, "x"), clause("type", Op::Eq, "VideoSlice")]
+            vec![
+                clause("tag", Op::Has, "x"),
+                clause("type", Op::Eq, "VideoSlice")
+            ]
         );
     }
 
@@ -649,7 +656,10 @@ mod tests {
 
         // a quoted value can start with an operator character literally
         let r = p(r#"description:">3""#);
-        assert_eq!(r.query.clauses, vec![clause("description", Op::Contains, ">3")]);
+        assert_eq!(
+            r.query.clauses,
+            vec![clause("description", Op::Contains, ">3")]
+        );
         assert!(r.issues.is_empty());
 
         // an operator before a quoted value still applies
@@ -684,7 +694,11 @@ mod tests {
             let r = p(input);
             assert!(r.query.is_empty(), "{input}: {:?}", r.query);
             assert_eq!(r.issues.len(), 1, "{input}");
-            assert!(r.issues[0].message.contains(needle), "{input}: {:?}", r.issues);
+            assert!(
+                r.issues[0].message.contains(needle),
+                "{input}: {:?}",
+                r.issues
+            );
             assert_eq!(r.issues[0].span, 0..input.len());
         }
 
@@ -697,7 +711,10 @@ mod tests {
     #[test]
     fn unterminated_quote_is_an_issue() {
         let r = p(r#"description:"abc def"#);
-        assert_eq!(r.query.clauses, vec![clause("description", Op::Contains, "abc def")]);
+        assert_eq!(
+            r.query.clauses,
+            vec![clause("description", Op::Contains, "abc def")]
+        );
         assert_eq!(r.issues.len(), 1);
         assert_eq!(r.issues[0].message, "unterminated quote");
     }
@@ -737,7 +754,9 @@ mod tests {
         }
 
         assert_eq!(
-            p("beach   tag:holiday date:2020-01..2020-06").query.to_text(),
+            p("beach   tag:holiday date:2020-01..2020-06")
+                .query
+                .to_text(),
             "beach tag:holiday date:2020-01..2020-06"
         );
     }
@@ -774,7 +793,9 @@ mod tests {
         assert!(bad(clause("date", Op::Range, "2020")).contains("a..b"));
         assert!(bad(clause("tag", Op::Has, "")).contains("values must be"));
         assert!(bad(clause("tag", Op::Has, "a|b")).contains("cannot contain"));
-        assert!(bad(clause("tag", Op::Has, &"x".repeat(MAX_VALUE_LEN + 1))).contains("values must be"));
+        assert!(
+            bad(clause("tag", Op::Has, &"x".repeat(MAX_VALUE_LEN + 1))).contains("values must be")
+        );
 
         let many = SearchQuery {
             text: vec!["a".into(); MAX_TEXT_TERMS + 1],

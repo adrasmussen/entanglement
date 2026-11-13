@@ -168,10 +168,7 @@ pub fn tables_of(columns: &[(&str, &str)]) -> Vec<String> {
 }
 
 // the wanted (table, column) pairs that are absent from `found`, as sorted `table.column`
-pub fn missing_columns(
-    wanted: &[(&str, &str)],
-    found: &HashSet<(String, String)>,
-) -> Vec<String> {
+pub fn missing_columns(wanted: &[(&str, &str)], found: &HashSet<(String, String)>) -> Vec<String> {
     let mut missing: Vec<String> = wanted
         .iter()
         .filter(|(t, c)| !found.contains(&(t.to_string(), c.to_string())))

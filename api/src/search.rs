@@ -8,6 +8,7 @@ use regex::escape;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    FOLDING_SEPARATOR,
     collection::{CollectionUuid, SearchMediaInCollectionReq},
     comment::CommentUuid,
     http_endpoint,
@@ -15,7 +16,6 @@ use crate::{
     media::{Media, MediaUuid, SearchMediaReq},
     page::{PageMeta, PageRequest, PagedResp},
     query::{Clause, FieldSpec, FieldType, Op, SearchClass, SearchQuery, field_spec},
-    FOLDING_SEPARATOR,
 };
 
 // paging limits
@@ -773,10 +773,7 @@ mod tests {
         .postgres_sql("ts", 2);
 
         // terms are sorted for deterministic output
-        assert_eq!(
-            q.filter_params,
-            ["'a&!(b' | 'back\\\\slash' | 'it''s'"]
-        );
+        assert_eq!(q.filter_params, ["'a&!(b' | 'back\\\\slash' | 'it''s'"]);
 
         let q = opts(SearchFilter::SubstringAll {
             filter: set(&["x", "y"]),

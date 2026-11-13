@@ -90,7 +90,10 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
         // to start (rather than fail on the first search) if the schema lacks any of them
         let columns = api::query::all_declared_columns();
         match backend.check_columns(&columns).await {
-            Ok(()) => info!({ columns = columns.len() }, "search columns present in database schema"),
+            Ok(()) => info!(
+                { columns = columns.len() },
+                "search columns present in database schema"
+            ),
             Err(err) => {
                 error!({ error = %err }, "database schema check failed");
                 return Err(err);
