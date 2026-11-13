@@ -10,7 +10,7 @@ use crate::components::{
     search::CompactSearchBar,
 };
 use api::{
-    FOLDING_SEPARATOR,
+    FOLDING_SEPARATOR, WebError,
     auth::*,
     collection::*,
     fold_set,
@@ -23,6 +23,9 @@ use api::{
 pub struct CreateCollectionModalProps {
     update_signal: Signal<()>,
 }
+
+// the groups the current user belongs to, sorted
+type GroupsResource = Resource<Result<Vec<String>, WebError>>;
 
 #[component]
 pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
@@ -40,19 +43,16 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut name_error = use_signal(String::new);
     let mut group_error = use_signal(String::new);
 
-    // the groups the current user belongs to; the server only allows creating
-    // a collection in a group the user is a member of
-    let groups_resource =
-        use_resource(|| async move { get_current_user(&GetCurrentUserReq {}).await });
-
-    // with exactly one group, there is nothing to choose, so preselect it
-    use_effect(move || {
-        if let Some(Ok(resp)) = &*groups_resource.read()
-            && resp.groups.len() == 1
+    // the server only allows creating a collection in a group the user is a member of.
+    // with exactly one, there is nothing to choose, so it is preselected
+    let groups_resource: GroupsResource = use_resource(move || async move {
+        let groups = get_current_user(&GetCurrentUserReq {}).await?.groups;
+        if let [only] = groups.as_slice()
             && collection_group.peek().is_empty()
         {
-            collection_group.set(resp.groups[0].clone());
+            collection_group.set(only.clone());
         }
+        Ok(groups)
     });
 
     let handle_submit = move |_| async move {
@@ -106,41 +106,9 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         }
     };
 
-    // Display the users of the selected group; this only reruns when the
-    // selection changes
-    let group_future = use_resource(move || async move {
-        let gid = collection_group();
-
-        if gid.trim().is_empty() {
-            return HashSet::new();
-        }
-
-        group_error.set(String::new());
-
-        match get_users_in_group(&GetUsersInGroupReq { gid }).await {
-            Ok(resp) => resp.uids,
-            Err(err) => {
-                group_error.set(err.to_string());
-                HashSet::new()
-            }
-        }
-    });
-
-    // Check if we have group members to display
-    let group_members = &*group_future.read();
-    let has_members = match group_members {
-        Some(members) => !members.is_empty(),
-        None => false,
-    };
-
     // creation requires the groups to have loaded and at least one to exist
-    let (groups, groups_loading, groups_failed): (Vec<String>, bool, Option<String>) =
-        match &*groups_resource.read() {
-            None => (Vec::new(), true, None),
-            Some(Ok(resp)) => (resp.groups.clone(), false, None),
-            Some(Err(err)) => (Vec::new(), false, Some(err.to_string())),
-        };
-    let can_create = !groups.is_empty();
+    let can_create = matches!(&*groups_resource.read(), Some(Ok(groups)) if !groups.is_empty());
+    let gid = collection_group();
 
     let footer = rsx! {
         span { class: "status-message", "{status_signal}" }
@@ -185,41 +153,10 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
 
                 div { class: "form-group",
                     label { class: "form-label", r#for: "collection-group", "Share with group" }
-                    if groups_loading {
-                        select {
-                            class: "form-input",
-                            id: "collection-group",
-                            disabled: true,
-                            option { "Loading groups…" }
-                        }
-                    } else if let Some(err) = groups_failed {
-                        div { class: "form-error", "Could not load your groups: {err}" }
-                    } else if groups.is_empty() {
-                        div { class: "form-help",
-                            "You are not a member of any group. Ask an administrator to add you to a group before creating a collection."
-                        }
-                    } else {
-                        select {
-                            class: "form-input",
-                            id: "collection-group",
-                            value: "{collection_group}",
-                            onchange: move |evt| collection_group.set(evt.value()),
-                            if groups.len() > 1 {
-                                option {
-                                    value: "",
-                                    disabled: true,
-                                    selected: collection_group().is_empty(),
-                                    "Select a group…"
-                                }
-                            }
-                            for group in groups.iter() {
-                                option {
-                                    value: "{group}",
-                                    selected: *group == collection_group(),
-                                    "{group}"
-                                }
-                            }
-                        }
+                    GroupSelect {
+                        groups: groups_resource,
+                        selected: collection_group,
+                        on_select: move |_| group_error.set(String::new()),
                     }
                     if !group_error().is_empty() {
                         div {
@@ -233,61 +170,8 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                     }
                 }
 
-                // Group members display
-                if has_members {
-                    div {
-                        class: "group-members-container",
-                        style: " margin-top: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200);",
-                        h4 { style: " font-size: 0.875rem; margin-bottom: var(--space-2); color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2);",
-                            svg {
-                                width: "16",
-                                height: "16",
-                                view_box: "0 0 24 24",
-                                fill: "none",
-                                stroke: "currentColor",
-                                stroke_width: "2",
-                                stroke_linecap: "round",
-                                stroke_linejoin: "round",
-                                "class": "feather feather-users",
-                                path { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }
-                                circle { cx: "9", cy: "7", r: "4" }
-                                path { d: "M23 21v-2a4 4 0 0 0-3-3.87" }
-                                path { d: "M16 3.13a4 4 0 0 1 0 7.75" }
-                            }
-                            "Group Members"
-                        }
-                        match group_members {
-                            Some(members) => {
-                                rsx! {
-                                    div {
-                                        class: "members-list",
-                                        style: "display: flex; flex-wrap: wrap; gap: var(--space-2);",
-                                        for member in members.iter() {
-                                            div {
-                                                class: "member-badge",
-                                                style: "display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2); background-color: var(--primary-light); color: white; border-radius: var(--radius-full); font-size: 0.75rem;",
-                                                "{member}"
-                                            }
-                                        }
-                                    }
-                                    div { style: "margin-top: var(--space-2); font-size: 0.75rem; color: var(--text-tertiary);",
-                                        "Total members: {members.len()}"
-                                    }
-                                }
-                            }
-                            None => {
-                                rsx! {
-                                    div { class: "skeleton", style: "height: 1.5rem; width: 100%;" }
-                                }
-                            }
-                        }
-                    }
-                } else if !collection_group().is_empty() {
-                    div {
-                        class: "group-members-container",
-                        style: " margin-top: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200); color: var(--text-tertiary); text-align: center; font-style: italic;",
-                        "No members found in this group"
-                    }
+                if !gid.is_empty() {
+                    GroupMembersPreview { gid }
                 }
 
                 div { class: "form-group",
@@ -312,6 +196,139 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+// a dropdown of the user's groups, or why there is none
+#[component]
+fn GroupSelect(
+    groups: GroupsResource,
+    selected: Signal<String>,
+    on_select: EventHandler<()>,
+) -> Element {
+    let mut groups = groups;
+    let mut selected = selected;
+
+    match &*groups.read() {
+        None => rsx! {
+            select { class: "form-input", id: "collection-group", disabled: true,
+                option { "Loading groups…" }
+            }
+        },
+        Some(Err(err)) => rsx! {
+            div { class: "form-error", "Could not load your groups: {err}" }
+            button {
+                r#type: "button",
+                class: "btn btn-secondary",
+                onclick: move |_| groups.restart(),
+                "Retry"
+            }
+        },
+        Some(Ok(list)) if list.is_empty() => rsx! {
+            div { class: "form-help",
+                "You are not a member of any group. Ask an administrator to add you to a group before creating a collection."
+            }
+        },
+        Some(Ok(list)) => {
+            // the options say which one is selected; the select has no value of its own
+            let current = selected();
+            rsx! {
+                select {
+                    class: "form-input",
+                    id: "collection-group",
+                    onchange: move |evt| {
+                        selected.set(evt.value());
+                        on_select.call(());
+                    },
+                    if list.len() > 1 {
+                        option {
+                            value: "",
+                            disabled: true,
+                            selected: current.is_empty(),
+                            "Select a group…"
+                        }
+                    }
+                    for group in list.iter() {
+                        option {
+                            value: "{group}",
+                            selected: *group == current,
+                            "{group}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+const MEMBERS_BOX_STYLE: &str = "margin-top: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3); background-color: var(--neutral-50); border-radius: var(--radius-md); border: 1px solid var(--neutral-200);";
+
+// who is in the group `gid`, looked up as it changes
+#[component]
+fn GroupMembersPreview(gid: ReadOnlySignal<String>) -> Element {
+    let members = use_resource(move || async move {
+        let resp = get_users_in_group(&GetUsersInGroupReq { gid: gid() }).await?;
+        let mut uids: Vec<String> = resp.uids.into_iter().collect();
+        uids.sort();
+        Ok::<_, WebError>(uids)
+    });
+
+    let body = match &*members.read() {
+        None => rsx! {
+            div { class: "skeleton", style: "height: 1.5rem; width: 100%;" }
+        },
+        Some(Err(err)) => rsx! {
+            div { class: "form-error", "Could not look up the group's members: {err}" }
+        },
+        Some(Ok(uids)) if uids.is_empty() => {
+            return rsx! {
+                div {
+                    class: "group-members-container",
+                    style: "{MEMBERS_BOX_STYLE} color: var(--text-tertiary); text-align: center; font-style: italic;",
+                    "No members found in this group"
+                }
+            };
+        }
+        Some(Ok(uids)) => rsx! {
+            div {
+                class: "members-list",
+                style: "display: flex; flex-wrap: wrap; gap: var(--space-2);",
+                for uid in uids.iter() {
+                    div {
+                        class: "member-badge",
+                        style: "display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2); background-color: var(--primary-light); color: white; border-radius: var(--radius-full); font-size: 0.75rem;",
+                        "{uid}"
+                    }
+                }
+            }
+            div { style: "margin-top: var(--space-2); font-size: 0.75rem; color: var(--text-tertiary);",
+                "Total members: {uids.len()}"
+            }
+        },
+    };
+
+    rsx! {
+        div { class: "group-members-container", style: MEMBERS_BOX_STYLE,
+            h4 { style: " font-size: 0.875rem; margin-bottom: var(--space-2); color: var(--text-secondary); display: flex; align-items: center; gap: var(--space-2);",
+                svg {
+                    width: "16",
+                    height: "16",
+                    view_box: "0 0 24 24",
+                    fill: "none",
+                    stroke: "currentColor",
+                    stroke_width: "2",
+                    stroke_linecap: "round",
+                    stroke_linejoin: "round",
+                    "class": "feather feather-users",
+                    path { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" }
+                    circle { cx: "9", cy: "7", r: "4" }
+                    path { d: "M23 21v-2a4 4 0 0 0-3-3.87" }
+                    path { d: "M16 3.13a4 4 0 0 1 0 7.75" }
+                }
+                "Group Members"
+            }
+            {body}
         }
     }
 }

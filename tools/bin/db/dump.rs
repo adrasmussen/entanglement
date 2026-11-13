@@ -29,7 +29,9 @@ fn make_key(prefix: u8, uuid: Uuid) -> Vec<u8> {
 }
 
 fn unmake_key(key: &[u8]) -> Result<Uuid> {
-    let (_prefix, uuid) = key.split_at_checked(1).ok_or_else(|| anyhow::Error::msg("invalid key"))?;
+    let (_prefix, uuid) = key
+        .split_at_checked(1)
+        .ok_or_else(|| anyhow::Error::msg("invalid key"))?;
 
     Ok(Uuid::from_bytes(uuid.try_into()?))
 }

@@ -487,7 +487,10 @@ mod tests {
                 ..Default::default()
             }
             .postgres_sql("ts", 1);
-            assert!(q.order_sql.ends_with("media.media_uuid ASC") || q.order_sql.ends_with("media.media_uuid DESC"));
+            assert!(
+                q.order_sql.ends_with("media.media_uuid ASC")
+                    || q.order_sql.ends_with("media.media_uuid DESC")
+            );
         }
     }
 

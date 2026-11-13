@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, uuid_newtype, media::MediaUuid};
+use crate::{http_endpoint, media::MediaUuid, uuid_newtype};
 
 // structs
 
