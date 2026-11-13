@@ -294,13 +294,12 @@ impl DbBackend for MariaDBBackend {
         let _yr = self.locks.comment.read().await;
         let _xr = self.locks.contents.read().await;
 
-        // the IN list is only ever "?, ?, ..." -- the uuids themselves are bound positionally
-        let placeholders = vec!["?"; media_uuids.len()].join(", ");
         let values = media_uuids.iter().map(|m| m.value()).collect::<Vec<Uuid>>();
 
+        let (placeholders, params) = in_list(&values);
         let media_rows =
             format!("SELECT {MEDIA_RECORD_COLS} FROM media WHERE media_uuid IN ({placeholders})")
-                .with(values.clone())
+                .with(params)
                 .run(self.pool.get_conn().await?)
                 .await?
                 .collect::<Row>()
@@ -313,19 +312,15 @@ impl DbBackend for MariaDBBackend {
         }
 
         let mut collections = self
-            .group_by_media(
-                format!("SELECT media_uuid, collection_uuid FROM collection_contents WHERE media_uuid IN ({placeholders})"),
-                values.clone(),
-                |c| CollectionUuid::from_value(self, c),
-            )
+            .uuids_by_media("collection_contents", "collection_uuid", &values, |c| {
+                CollectionUuid::from_value(self, c)
+            })
             .await?;
 
         let mut comments = self
-            .group_by_media(
-                format!("SELECT media_uuid, comment_uuid FROM comments WHERE media_uuid IN ({placeholders})"),
-                values,
-                |c| CommentUuid::from_value(self, c),
-            )
+            .uuids_by_media("comments", "comment_uuid", &values, |c| {
+                CommentUuid::from_value(self, c)
+            })
             .await?;
 
         let out = media_uuids
@@ -1087,7 +1082,7 @@ impl DbBackend for MariaDBBackend {
                 .with(Params::Named(params.clone()))
                 .first::<u64, _>(self.pool.get_conn().await?)
                 .await?
-                .unwrap_or(0);
+                .ok_or_else(|| anyhow::Error::msg("COUNT(*) returned no row"))?;
             Some(n)
         } else {
             None
@@ -1450,19 +1445,33 @@ fn parse_media_type(media_uuid: Uuid, s: &str) -> Result<MediaMetadata> {
     }
 }
 
+// an IN list of uuids: the "?, ?, ..." to put between its parentheses, and the uuids to
+// bind to them positionally
+fn in_list(uuids: &[Uuid]) -> (String, Vec<Value>) {
+    let placeholders = vec!["?"; uuids.len()].join(", ");
+    let params = uuids.iter().map(|u| Value::from(*u)).collect();
+    (placeholders, params)
+}
+
 impl MariaDBBackend {
-    // run a "SELECT media_uuid, x_uuid ... WHERE media_uuid IN (?, ...)" query with the
-    // media uuids bound positionally, and group the x_uuids by media
-    async fn group_by_media<T>(
+    // the `column` uuids of each of the `media` in `table` (which has a media_uuid column),
+    // grouped by media.  table and column are only ever internal constants, never user
+    // input; the media uuids are bound
+    async fn uuids_by_media<T>(
         &self,
-        statement: String,
-        values: Vec<Uuid>,
+        table: &'static str,
+        column: &'static str,
+        media: &[Uuid],
         convert: impl Fn(Uuid) -> T,
     ) -> Result<HashMap<Uuid, Vec<T>>> {
-        let mut grouped: HashMap<Uuid, Vec<T>> = HashMap::new();
+        let (placeholders, params) = in_list(media);
+        let statement = format!(
+            "SELECT media_uuid, {column} FROM {table} WHERE media_uuid IN ({placeholders})"
+        );
 
+        let mut grouped: HashMap<Uuid, Vec<T>> = HashMap::new();
         for row in statement
-            .with(values)
+            .with(params)
             .run(self.pool.get_conn().await?)
             .await?
             .collect::<Row>()
@@ -1501,7 +1510,7 @@ impl MariaDBBackend {
                 .with(Params::Named(params.clone()))
                 .first::<u64, _>(self.pool.get_conn().await?)
                 .await?
-                .unwrap_or(0);
+                .ok_or_else(|| anyhow::Error::msg("COUNT(*) returned no row"))?;
             Some(n)
         } else {
             None
