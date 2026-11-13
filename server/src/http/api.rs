@@ -14,8 +14,8 @@ use crate::{
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
     task::msg::TaskMsg,
 };
-use common::db::PageOptions;
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
+use common::db::PageOptions;
 
 // http api endpoints
 //
@@ -873,6 +873,7 @@ pub(super) async fn batch_search_and_sort(
     state.db_svc_sender.send(msg.into()).await?;
 
     let page = rx.await??;
+    let page_len = page.items.len() as u64;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -887,7 +888,8 @@ pub(super) async fn batch_search_and_sort(
         )
         .await?;
 
-    // media deleted between the two queries is simply skipped
+    // media deleted between the two queries is simply skipped, which is why the client is
+    // told the length of the page before hydration
     let media = rx
         .await??
         .into_iter()
@@ -902,6 +904,7 @@ pub(super) async fn batch_search_and_sort(
     Ok(Json(BatchSearchAndSortResp {
         media,
         total: page.total,
+        page_len: Some(page_len),
     })
     .into_response())
 }
