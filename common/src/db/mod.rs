@@ -27,6 +27,12 @@ pub trait DbBackend: Send + Sync + 'static {
     where
         Self: Sized;
 
+    // verify that every (table, column) exists in the connected database, failing with an
+    // error that lists each missing `table.column`.  the searchable fields are declared in
+    // api::query and turned into sql by name, so this catches a declaration that has drifted
+    // from the schema at startup rather than on the first search
+    async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()>;
+
     // get this from checking all collections that contain the media + owning group of the library
     async fn media_access_groups(&self, media_uuid: MediaUuid) -> Result<HashSet<String>>;
 
@@ -153,6 +159,41 @@ pub trait DbBackend: Send + Sync + 'static {
     ) -> Result<SearchPage<MediaUuid>>;
 }
 
+// the distinct table names in a column list, in sorted order, for the information_schema query
+pub fn tables_of(columns: &[(&str, &str)]) -> Vec<String> {
+    let mut tables: Vec<String> = columns.iter().map(|(t, _)| t.to_string()).collect();
+    tables.sort();
+    tables.dedup();
+    tables
+}
+
+// the wanted (table, column) pairs that are absent from `found`, as sorted `table.column`
+pub fn missing_columns(
+    wanted: &[(&str, &str)],
+    found: &HashSet<(String, String)>,
+) -> Vec<String> {
+    let mut missing: Vec<String> = wanted
+        .iter()
+        .filter(|(t, c)| !found.contains(&(t.to_string(), c.to_string())))
+        .map(|(t, c)| format!("{t}.{c}"))
+        .collect();
+    missing.sort();
+    missing.dedup();
+    missing
+}
+
+// the outcome of check_columns for the missing list
+pub fn column_check_result(missing: Vec<String>) -> Result<()> {
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow::Error::msg(format!(
+            "database schema is missing declared search columns: {}",
+            missing.join(", ")
+        )))
+    }
+}
+
 // paged search results
 //
 // items is the requested page (in sort order); total is the size of the full filtered
@@ -241,6 +282,48 @@ pub struct MediaByCHash {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn found(v: &[(&str, &str)]) -> HashSet<(String, String)> {
+        v.iter()
+            .map(|(t, c)| (t.to_string(), c.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn column_check_names_every_missing_column() {
+        let wanted = [
+            ("media", "tags"),
+            ("media", "nope"),
+            ("collections", "zzz"),
+            ("media", "nope"),
+        ];
+        let have = found(&[("media", "tags"), ("media", "note")]);
+
+        let missing = missing_columns(&wanted, &have);
+        assert_eq!(missing, ["collections.zzz", "media.nope"]);
+
+        let err = column_check_result(missing).unwrap_err().to_string();
+        assert!(err.contains("collections.zzz, media.nope"), "{err}");
+
+        assert!(column_check_result(missing_columns(&wanted[..1], &have)).is_ok());
+    }
+
+    // every declared search column, checked against a database that has exactly them
+    #[test]
+    fn declared_search_columns_pass_a_matching_schema() {
+        let declared = api::query::all_declared_columns();
+        let have: HashSet<(String, String)> = declared
+            .iter()
+            .map(|(t, c)| (t.to_string(), c.to_string()))
+            .collect();
+        assert!(missing_columns(&declared, &have).is_empty());
+        assert_eq!(tables_of(&declared), ["collections", "libraries", "media"]);
+
+        // a misdeclared column is reported by name
+        let mut bad = declared.clone();
+        bad.push(("media", "no_such_column"));
+        assert_eq!(missing_columns(&bad, &have), ["media.no_such_column"]);
+    }
 
     #[test]
     fn probe_asks_for_one_extra_row() {

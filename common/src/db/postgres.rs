@@ -19,7 +19,10 @@ use url::Url;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage},
+    db::{
+        DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage, column_check_result,
+        missing_columns, tables_of,
+    },
 };
 use api::{
     UuidSource,
@@ -98,6 +101,27 @@ impl DbBackend for PostgresBackend {
         let pool = Pool::builder().build(manager).await?;
 
         Ok(Self { pool })
+    }
+
+    async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()> {
+        let conn = self.pool.get().await?;
+
+        let tables = tables_of(columns);
+
+        let rows = conn
+            .query(
+                "SELECT table_name::text, column_name::text FROM information_schema.columns \
+                 WHERE table_schema = current_schema() AND table_name = ANY($1)",
+                &[&tables],
+            )
+            .await?;
+
+        let found = rows
+            .iter()
+            .map(|r| Ok((r.try_get(0)?, r.try_get(1)?)))
+            .collect::<Result<HashSet<(String, String)>>>()?;
+
+        column_check_result(missing_columns(columns, &found))
     }
 
     #[instrument(skip(self))]
@@ -1093,12 +1117,13 @@ async fn paged_search(
     base_params: &[&(dyn ToSql + Sync)],
     opts: &SearchOptions,
 ) -> Result<SearchPage<MediaUuid>> {
+    // the server validates requests, but a backend never runs a query it didn't check
+    opts.filter.validate_media().map_err(anyhow::Error::msg)?;
+
     let q = opts.postgres_sql("media.ts_vec", base_params.len() + 1);
 
     let mut params: Vec<&(dyn ToSql + Sync)> = base_params.to_vec();
-    if let Some(filter) = &q.filter_param {
-        params.push(filter);
-    }
+    params.extend(q.filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
 
     let total = if opts.page.with_total {
         let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);

@@ -15,7 +15,10 @@ use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage},
+    db::{
+        DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage, column_check_result,
+        missing_columns, tables_of,
+    },
 };
 use api::{
     FOLDING_SEPARATOR, UuidSource,
@@ -92,6 +95,29 @@ impl DbBackend for MariaDBBackend {
             pool: Pool::new(config.url.as_str()),
             locks: TableLocks::default(),
         })
+    }
+
+    async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()> {
+        // the table names are bound like any other value
+        let names = tables_of(columns);
+        let placeholders = vec!["?"; names.len()].join(", ");
+        let statement = format!(
+            "SELECT table_name, column_name FROM information_schema.columns \
+             WHERE table_schema = DATABASE() AND table_name IN ({placeholders})"
+        );
+        let params: Vec<Value> = names.into_iter().map(Value::from).collect();
+
+        let found = statement
+            .with(params)
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?
+            .into_iter()
+            .map(|row| from_row_opt::<(String, String)>(row))
+            .collect::<Result<HashSet<(String, String)>, FromRowError>>()?;
+
+        column_check_result(missing_columns(columns, &found))
     }
 
     #[instrument(skip(self))]
@@ -1545,13 +1571,18 @@ impl MariaDBBackend {
         base_params: Vec<(&str, Value)>,
         opts: &SearchOptions,
     ) -> Result<SearchPage<MediaUuid>> {
+        // the server validates requests, but a backend never runs a query it didn't check
+        opts.filter.validate_media().map_err(anyhow::Error::msg)?;
+
         let q = opts.mariadb_sql(MEDIA_COLS);
 
         let mut params: HashMap<Vec<u8>, Value> = base_params
             .into_iter()
             .map(|(k, v)| (k.as_bytes().to_vec(), v))
             .collect();
-        params.insert(b"filter".to_vec(), q.filter_param.clone().into());
+        for (name, value) in &q.filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
 
         let total = if opts.page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
