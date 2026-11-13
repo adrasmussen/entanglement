@@ -65,11 +65,7 @@ pub async fn fetch_media_page(
 
     let resp = batch_search_and_sort(&BatchSearchAndSortReq { req }).await?;
 
-    Ok(Page {
-        items: resp.media,
-        total: resp.total,
-        page_len: resp.page_len,
-    })
+    Ok(Page::from_resp(resp))
 }
 
 // which grid an item sits in, for deciding what an edit of it means (see reconcile_media)

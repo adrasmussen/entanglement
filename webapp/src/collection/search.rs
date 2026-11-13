@@ -40,11 +40,7 @@ pub fn CollectionSearch() -> Element {
             .await?;
 
             // uuid-only, so nothing goes missing between the search and the response
-            Ok(Page {
-                items: resp.collections,
-                total: resp.total,
-                page_len: None,
-            })
+            Ok(Page::from_resp(resp))
         },
     );
     let pager = paged.pager;
