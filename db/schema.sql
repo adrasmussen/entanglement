@@ -113,6 +113,10 @@ CREATE INDEX "idx_media_chash" ON "media" ("chash");
 
 CREATE INDEX "idx_media_cdate" ON "media" ("cdate");
 
+-- date:YYYY-MM prefix searches (LIKE 'x%'; see db/migrations/2026-11-14_search_field_indexes.sql).
+-- text_pattern_ops because the usual en_US collation can't use a plain btree for LIKE
+CREATE INDEX "idx_media_date_prefix" ON "media" ("date" text_pattern_ops);
+
 CREATE INDEX "idx_media_tags" ON "media" USING GIN ("tags");
 
 CREATE INDEX "idx_media_fulltext" ON "media" USING GIN ("ts_vec");
