@@ -215,7 +215,10 @@ impl DbBackend for PostgresBackend {
 
     #[instrument(skip(self, media_uuids))]
     async fn get_media_batch(&self, media_uuids: Vec<MediaUuid>) -> Result<Vec<MediaDetails>> {
-        debug!({ count = media_uuids.len() }, "finding media details in batch");
+        debug!(
+            { count = media_uuids.len() },
+            "finding media details in batch"
+        );
 
         if media_uuids.is_empty() {
             return Ok(Vec::new());
@@ -246,7 +249,10 @@ impl DbBackend for PostgresBackend {
 
         let mut media = HashMap::with_capacity(media_rows.len());
         for row in media_rows {
-            media.insert(row.try_get::<_, MediaUuid>("media_uuid")?, media_from_row(&row)?);
+            media.insert(
+                row.try_get::<_, MediaUuid>("media_uuid")?,
+                media_from_row(&row)?,
+            );
         }
 
         let mut collections: HashMap<MediaUuid, Vec<CollectionUuid>> = HashMap::new();
@@ -455,6 +461,7 @@ impl DbBackend for PostgresBackend {
 
         Ok(page)
     }
+
     #[instrument(skip(self))]
     async fn similar_media(
         &self,
@@ -886,6 +893,8 @@ impl DbBackend for PostgresBackend {
 
         Ok(page)
     }
+
+    // library functions
     #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         debug!({ library_path = library.path }, "adding library");
@@ -1010,6 +1019,7 @@ impl DbBackend for PostgresBackend {
 
         Ok(libraries)
     }
+
     #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,
@@ -1039,13 +1049,7 @@ impl DbBackend for PostgresBackend {
 
         let gid = gid.into_iter().collect::<Vec<String>>();
 
-        let page = paged_search(
-            &conn,
-            base,
-            &[&gid, &library_uuid, &hidden],
-            &opts,
-        )
-        .await?;
+        let page = paged_search(&conn, base, &[&gid, &library_uuid, &hidden], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media in library");
 
