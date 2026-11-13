@@ -756,14 +756,22 @@ where
         let mut state = state;
         let gen_id = state.begin();
         let offset = state.items.peek().len() as u64;
+        // the first page (the Retry after a failed one) is one like after a reset, which
+        // is what records the edit log position the items are up to date with
+        let first = offset == 0;
+        let seq = MEDIA_EDITS.peek().seq();
 
         let fetch = fetch.clone();
         spawn(async move {
-            let res = fetch(k, offset, PAGE_SIZE, offset == 0).await;
+            let res = fetch(k, offset, PAGE_SIZE, first).await;
             if !state.is_current(gen_id) {
                 return;
             }
             let (res, step) = match res {
+                Ok(page) if first => {
+                    state.set_first_page(page, seq);
+                    (Ok(()), None)
+                }
                 Ok(page) => (Ok(()), Some(state.append_page(page))),
                 Err(err) => (Err(err), None),
             };
