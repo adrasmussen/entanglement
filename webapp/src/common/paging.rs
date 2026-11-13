@@ -8,6 +8,7 @@ use std::{
 };
 
 use dioxus::prelude::*;
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use tracing::warn;
 
 use crate::common::grid_cache::{
@@ -289,6 +290,71 @@ pub enum Reconcile<T> {
     Refresh,
 }
 
+// the cached items that are among the `edited` media
+fn edited_items<T: PageItem>(items: &[T], edited: &HashSet<MediaUuid>) -> Vec<T> {
+    items
+        .iter()
+        .filter(|i| i.edit_uuid().is_some_and(|u| edited.contains(&u)))
+        .cloned()
+        .collect()
+}
+
+// one edited item, fixed up in place
+enum Fix<T: PageItem> {
+    Patch(T::Key, T),
+    Remove(T::Key),
+}
+
+// what reconcile_edits makes of the edited items
+enum Reconciled<T: PageItem> {
+    // fix them up in place
+    Apply(Vec<Fix<T>>),
+    // at least one of them needs the loaded range re-fetched
+    Refresh,
+    // a refresh or reset took over in the meantime, and it has the edits covered
+    Superseded,
+}
+
+// ask `reconcile` about all the edited items at once.  the first answer that needs a refresh
+// (or fails) settles it, and the rest are dropped unanswered.  `current` is asked after
+// every answer, as in refetch()
+async fn reconcile_edits<T, F, Fut>(
+    edited: Vec<T>,
+    reconcile: F,
+    current: impl Fn() -> bool,
+) -> Reconciled<T>
+where
+    T: PageItem,
+    F: Fn(T) -> Fut,
+    Fut: Future<Output = Result<Reconcile<T>, WebError>>,
+{
+    let mut pending: FuturesUnordered<_> = edited
+        .into_iter()
+        .map(|old| {
+            let key = old.page_key();
+            let answer = reconcile(old);
+            async move { (key, answer.await) }
+        })
+        .collect();
+
+    let mut fixes = Vec::new();
+    while let Some((key, res)) = pending.next().await {
+        if !current() {
+            return Reconciled::Superseded;
+        }
+        match res {
+            Ok(Reconcile::Patch(new)) => fixes.push(Fix::Patch(key, new)),
+            Ok(Reconcile::Remove) => fixes.push(Fix::Remove(key)),
+            Ok(Reconcile::Refresh) => return Reconciled::Refresh,
+            Err(err) => {
+                warn!("failed to reconcile an edited item, refreshing instead: {err}");
+                return Reconciled::Refresh;
+            }
+        }
+    }
+    Reconciled::Apply(fixes)
+}
+
 type ReconcileFuture<T> = Pin<Box<dyn Future<Output = Result<Reconcile<T>, WebError>>>>;
 
 // opts a grid into the GRID_CACHE.  `scope` names the kind of grid (the cache key is the
@@ -529,6 +595,13 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         self.store();
     }
 
+    fn apply_fix(&mut self, fix: Fix<T>) {
+        match fix {
+            Fix::Patch(key, new) => self.patch_item(&key, new),
+            Fix::Remove(key) => self.remove_item(&key),
+        }
+    }
+
     fn patch_item(&mut self, key: &T::Key, new: T) {
         let mut list = self.items.write();
         if let Some(slot) = list.iter_mut().find(|i| i.page_key() == *key) {
@@ -698,46 +771,24 @@ fn use_reconcile<K, T>(
                 return;
             };
 
-            let present: Vec<T> = state
-                .items
-                .peek()
-                .iter()
-                .filter(|i| i.edit_uuid().is_some_and(|u| edited.contains(&u)))
-                .cloned()
-                .collect();
-
-            if present.len() > MAX_RECONCILE {
+            let edited = edited_items(&state.items.peek(), &edited.into_iter().collect());
+            if edited.len() > MAX_RECONCILE {
                 refresh.call(RefreshCause::Requested);
                 return;
             }
 
-            let mut needs_refresh = false;
-            for old in present {
-                let item_key = old.page_key();
-                let res = (cache.reconcile)(key.clone(), old).await;
-
-                // a refresh or reset took over, and it has the edits covered
-                if !state.is_current(gen_id) {
-                    return;
-                }
-
-                match res {
-                    Ok(Reconcile::Patch(new)) => state.patch_item(&item_key, new),
-                    Ok(Reconcile::Remove) => state.remove_item(&item_key),
-                    Ok(Reconcile::Refresh) => needs_refresh = true,
-                    Err(err) => {
-                        warn!("failed to reconcile an edited item, refreshing instead: {err}");
-                        needs_refresh = true;
+            let reconcile = |old| (cache.reconcile)(key.clone(), old);
+            match reconcile_edits(edited, reconcile, || state.is_current(gen_id)).await {
+                Reconciled::Apply(fixes) => {
+                    for fix in fixes {
+                        state.apply_fix(fix);
                     }
+                    // only now are the edits accounted for in the cache
+                    state.synced_seq.set(seq);
+                    state.store();
                 }
-            }
-
-            if needs_refresh {
-                refresh.call(RefreshCause::Requested);
-            } else {
-                // only now are the edits accounted for in the cache
-                state.synced_seq.set(seq);
-                state.store();
+                Reconciled::Refresh => refresh.call(RefreshCause::Requested),
+                Reconciled::Superseded => {}
             }
         });
     });
@@ -883,6 +934,18 @@ mod tests {
         fn page_key(&self) -> u32 {
             self.0
         }
+
+        // the keys from 1000 on are media that can be edited
+        fn edit_uuid(&self) -> Option<MediaUuid> {
+            (self.0 >= 1000).then(|| uuid(self.0))
+        }
+    }
+
+    struct Src;
+    impl api::UuidSource for Src {}
+
+    fn uuid(n: u32) -> MediaUuid {
+        MediaUuid::try_parse(&Src, &format!("00000000-0000-0000-0000-{n:012}")).unwrap()
     }
 
     // the fetches below are always ready
@@ -1068,6 +1131,56 @@ mod tests {
         assert_eq!(Tail::GaveUp.after_error(), Tail::Open);
         assert_eq!(Tail::Ended.after_error(), Tail::Ended);
         assert!(Tail::Stalled.can_load());
+    }
+
+    #[test]
+    fn edited_items_are_the_loaded_edited_media() {
+        let list = vec![It(1, 0), It(1000, 0), It(1001, 0), It(1002, 0)];
+        let edited = HashSet::from([uuid(1), uuid(1001), uuid(1002), uuid(1005)]);
+        // It(1) is not media, and 1005 is not loaded
+        assert_eq!(edited_items(&list, &edited), vec![It(1001, 0), It(1002, 0)]);
+        assert!(edited_items(&list, &HashSet::new()).is_empty());
+    }
+
+    // reconcile answers by key: 1 patches, 2 removes, 3 needs a refresh, 4 fails
+    fn answer(old: It) -> std::future::Ready<Result<Reconcile<It>, WebError>> {
+        ready(match old.0 {
+            1 => Ok(Reconcile::Patch(It(1, old.1 + 1))),
+            2 => Ok(Reconcile::Remove),
+            3 => Ok(Reconcile::Refresh),
+            _ => Err(WebError::msg("nope".into())),
+        })
+    }
+
+    #[test]
+    fn reconcile_edits_applies_patches_and_removals() {
+        let res = block_on(reconcile_edits(vec![It(1, 0), It(2, 0)], answer, || true));
+        let Reconciled::Apply(fixes) = res else {
+            panic!("expected fixes");
+        };
+        let mut list = vec![It(0, 0), It(1, 0), It(2, 0)];
+        for fix in fixes {
+            match fix {
+                Fix::Patch(k, new) => *list.iter_mut().find(|i| i.0 == k).unwrap() = new,
+                Fix::Remove(k) => list.retain(|i| i.0 != k),
+            }
+        }
+        assert_eq!(list, vec![It(0, 0), It(1, 1)]);
+    }
+
+    #[test]
+    fn reconcile_edits_stops_at_a_refresh_or_an_error() {
+        let res = block_on(reconcile_edits(vec![It(1, 0), It(3, 0)], answer, || true));
+        assert!(matches!(res, Reconciled::Refresh));
+
+        let res = block_on(reconcile_edits(vec![It(1, 0), It(4, 0)], answer, || true));
+        assert!(matches!(res, Reconciled::Refresh));
+
+        let res = block_on(reconcile_edits(vec![It(1, 0)], answer, || false));
+        assert!(matches!(res, Reconciled::Superseded));
+
+        let res = block_on(reconcile_edits(Vec::new(), answer, || true));
+        assert!(matches!(res, Reconciled::Apply(f) if f.is_empty()));
     }
 
     #[test]
