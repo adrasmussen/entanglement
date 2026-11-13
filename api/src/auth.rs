@@ -30,5 +30,6 @@ pub struct GetCurrentUserReq {}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GetCurrentUserResp {
     pub uid: String,
+    // sorted, so that the order is deterministic (the server keeps them in a set)
     pub groups: Vec<String>,
 }
