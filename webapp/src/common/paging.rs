@@ -400,6 +400,31 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         *self.generation.peek() == gen_id
     }
 
+    // the end of a fetch of generation `gen_id`: nothing at all if a newer generation took
+    // over in the meantime, otherwise `apply` the result (if it is one) and settle.  returns
+    // what `apply` returned
+    fn finish<P, R>(
+        &mut self,
+        gen_id: u64,
+        res: Result<P, WebError>,
+        apply: impl FnOnce(&mut Self, P) -> R,
+    ) -> Option<R> {
+        if !self.is_current(gen_id) {
+            return None;
+        }
+        match res {
+            Ok(value) => {
+                let out = apply(self, value);
+                self.settle(Ok(()));
+                Some(out)
+            }
+            Err(err) => {
+                self.settle(Err(err));
+                None
+            }
+        }
+    }
+
     // the end of a fetch that is still current
     fn settle(&mut self, res: Result<(), WebError>) {
         if let Err(err) = res {
@@ -604,11 +629,7 @@ fn use_reset_on_key<K, T>(
         let fetch = fetch.clone();
         spawn(async move {
             let res = fetch(new_key, 0, PAGE_SIZE, true).await;
-            if !state.is_current(gen_id) {
-                return;
-            }
-            let res = res.map(|page| state.set_first_page(page, seq));
-            state.settle(res);
+            state.finish(gen_id, res, |s, page| s.set_first_page(page, seq));
         });
     });
 }
@@ -637,11 +658,10 @@ where
                 || state.is_current(gen_id),
             )
             .await;
-            let Some(res) = res else {
-                return;
-            };
-            let res = res.map(|fresh| state.replace_items(fresh, seq, cause));
-            state.settle(res);
+            // None: superseded between two of its requests
+            if let Some(res) = res {
+                state.finish(gen_id, res, |s, fresh| s.replace_items(fresh, seq, cause));
+            }
         });
     })
 }
@@ -764,21 +784,17 @@ where
         let fetch = fetch.clone();
         spawn(async move {
             let res = fetch(k, offset, PAGE_SIZE, first).await;
-            if !state.is_current(gen_id) {
-                return;
-            }
-            let (res, step) = match res {
-                Ok(page) if first => {
-                    state.set_first_page(page, seq);
-                    (Ok(()), None)
+            let stalled = state.finish(gen_id, res, |s, page| {
+                if first {
+                    s.set_first_page(page, seq);
+                    false
+                } else {
+                    s.append_page(page) == AfterLoad::Refresh
                 }
-                Ok(page) => (Ok(()), Some(state.append_page(page))),
-                Err(err) => (Err(err), None),
-            };
-            state.settle(res);
+            });
 
             // after settling, so that the refresh's loading flag is the one left standing
-            if step == Some(AfterLoad::Refresh) {
+            if stalled == Some(true) {
                 refresh.call(RefreshCause::Stall);
             }
         });
