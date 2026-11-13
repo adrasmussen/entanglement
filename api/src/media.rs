@@ -4,7 +4,10 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
+    collection::CollectionUuid,
+    comment::CommentUuid,
+    http_endpoint,
+    library::LibraryUuid,
     page::{PageMeta, PagedResp},
     search::SearchOptions,
     uuid_newtype,
