@@ -4,6 +4,7 @@ use crate::{
     collection::{COLLECTION_SEARCH_KEY, grid::CollectionGrid},
     common::{
         paging::{Page, use_paged},
+        search::literal_filter,
         storage::*,
     },
     components::{
@@ -11,7 +12,7 @@ use crate::{
         search::SearchBar,
     },
 };
-use api::collection::*;
+use api::{collection::*, page::PageRequest};
 
 #[component]
 pub fn CollectionSearch() -> Element {
@@ -26,12 +27,15 @@ pub fn CollectionSearch() -> Element {
         // cards here load their own data, so heights are not stable on a first frame
         None,
         |search: String, offset, limit, with_total| async move {
-            let filter = search.split_whitespace().map(|s| s.to_owned()).collect();
+            let filter = literal_filter(&search);
             let resp = search_collections(&SearchCollectionsReq {
                 filter,
-                limit: Some(limit),
-                offset,
-                with_total,
+                page: PageRequest {
+                    limit: Some(limit),
+                    offset,
+                    with_total,
+                    ..Default::default()
+                },
             })
             .await?;
 

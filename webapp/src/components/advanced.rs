@@ -4,7 +4,10 @@ use dioxus::prelude::*;
 use tracing::error;
 
 use crate::{
-    common::{colors::CollectionColor, search::fetch_all_uuids},
+    common::{
+        colors::CollectionColor,
+        search::{fetch_all_uuids, literal_filter},
+    },
     components::{
         modal::{MODAL_STACK, Modal},
         search::CompactSearchBar,
@@ -328,10 +331,7 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
     });
 
     let collections_future = use_resource(move || async move {
-        let filter = collection_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
+        let filter = literal_filter(&collection_search_signal());
 
         search_collections(&SearchCollectionsReq {
             filter,

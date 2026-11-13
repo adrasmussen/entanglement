@@ -11,6 +11,7 @@ use api::{
     collection::{SearchCollectionsReq, search_collections},
     library::{SearchLibrariesReq, search_libraries},
     media::{SearchMediaReq, search_media},
+    page::PageRequest,
     search::SearchOptions,
 };
 
@@ -32,8 +33,7 @@ pub fn ModernHome() -> Element {
     let media_count = use_resource(|| async move {
         search_media(&SearchMediaReq {
             opts: SearchOptions {
-                limit: Some(1),
-                with_total: true,
+                page: PageRequest::first(1, true),
                 ..Default::default()
             },
         })
@@ -46,9 +46,7 @@ pub fn ModernHome() -> Element {
 
         search_collections(&SearchCollectionsReq {
             filter: String::new(),
-            limit: Some(1),
-            with_total: true,
-            ..Default::default()
+            page: PageRequest::first(1, true),
         })
         .await
         .and_then(|resp| resp.total.ok_or_else(missing_total))
@@ -57,6 +55,7 @@ pub fn ModernHome() -> Element {
     let libraries_count = use_resource(|| async move {
         search_libraries(&SearchLibrariesReq {
             filter: String::new(),
+            ..Default::default()
         })
         .await
         .map(|resp| resp.libraries.len())

@@ -17,7 +17,11 @@ pub fn LibrarySearch() -> Element {
         update_signal();
 
         let filter = library_search_signal();
-        search_libraries(&SearchLibrariesReq { filter }).await
+        search_libraries(&SearchLibrariesReq {
+            filter,
+            ..Default::default()
+        })
+        .await
     });
 
     let status = match &*library_future.read() {

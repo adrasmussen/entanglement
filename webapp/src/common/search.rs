@@ -17,9 +17,9 @@ use api::{
 pub async fn fetch_all_uuids(mut req: SearchRequest) -> Result<HashSet<MediaUuid>, WebError> {
     {
         let opts = req.opts_mut();
-        opts.limit = None;
-        opts.offset = 0;
-        opts.with_total = false;
+        opts.page.limit = None;
+        opts.page.offset = 0;
+        opts.page.with_total = false;
     }
 
     let uuids: Vec<MediaUuid> = match req {
@@ -29,6 +29,13 @@ pub async fn fetch_all_uuids(mut req: SearchRequest) -> Result<HashSet<MediaUuid
     };
 
     Ok(uuids.into_iter().collect())
+}
+
+// the collection and library search boxes match one literal substring, so the words of the
+// box are rejoined with single spaces (collecting them straight into a String would glue
+// them together: "my trip" would search for "mytrip")
+pub fn literal_filter(search: &str) -> String {
+    search.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 // the (unpaged) options for a media search box string
@@ -51,9 +58,9 @@ pub async fn fetch_media_page(
 ) -> Result<Page<SearchResponse>, WebError> {
     {
         let opts = req.opts_mut();
-        opts.offset = offset;
-        opts.limit = Some(limit);
-        opts.with_total = with_total;
+        opts.page.offset = offset;
+        opts.page.limit = Some(limit);
+        opts.page.with_total = with_total;
     }
 
     let resp = batch_search_and_sort(&BatchSearchAndSortReq { req }).await?;
@@ -131,6 +138,14 @@ pub async fn reconcile_media(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_filter_keeps_the_spaces() {
+        assert_eq!(literal_filter("my trip"), "my trip");
+        assert_eq!(literal_filter("  my   trip\t"), "my trip");
+        assert_eq!(literal_filter("   "), "");
+    }
+
     use api::{
         UuidSource,
         library::LibraryUuid,

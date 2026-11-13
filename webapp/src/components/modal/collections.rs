@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
+use crate::common::search::literal_filter;
 use crate::components::{
     modal::{
         MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after,
@@ -15,6 +16,7 @@ use api::{
     collection::*,
     fold_set,
     media::MediaUuid,
+    page::PageRequest,
     search::{SearchFilter, SearchOptions, SortMethod},
     unfold_set,
 };
@@ -587,10 +589,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
     let selected_collection = use_signal(|| None::<CollectionUuid>);
 
     let collections_future = use_resource(move || async move {
-        let filter = collection_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
+        let filter = literal_filter(&collection_search_signal());
 
         search_collections(&SearchCollectionsReq {
             filter,
@@ -784,10 +783,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
     let selected_collection = use_signal(|| None::<CollectionUuid>);
 
     let collections_future = use_resource(move || async move {
-        let filter = collection_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
+        let filter = literal_filter(&collection_search_signal());
 
         search_collections(&SearchCollectionsReq {
             filter,
@@ -822,9 +818,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                             filter: HashSet::new(),
                         },
                         order: SortMethod::DateDesc,
-                        limit: None,
-                        offset: 0,
-                        with_total: false,
+                        page: PageRequest::default(),
                     },
                 })
                 .await
@@ -1008,9 +1002,7 @@ pub fn BulkRmFromCollectionModal(props: BulkRmFromCollectionModalProps) -> Eleme
                         filter: HashSet::new(),
                     },
                     order: SortMethod::DateDesc,
-                    limit: None,
-                    offset: 0,
-                    with_total: false,
+                    page: PageRequest::default(),
                 },
             })
             .await
