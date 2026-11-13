@@ -875,6 +875,16 @@ pub(super) async fn batch_search_and_sort(
     let page = rx.await??;
     let page_len = page.items.len() as u64;
 
+    // past the end of the results there is nothing to hydrate
+    if page.items.is_empty() {
+        return Ok(Json(BatchSearchAndSortResp {
+            media: Vec::new(),
+            total: page.total,
+            page_len: Some(0),
+        })
+        .into_response());
+    }
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
