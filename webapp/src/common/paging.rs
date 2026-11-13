@@ -169,6 +169,24 @@ fn is_last_page(requested: u64, page_len: u64, loaded: usize, total: Option<u64>
     page_len < requested || total.is_some_and(|t| loaded as u64 >= t)
 }
 
+// whether the page about to load at `offset` should also re-count the results: always for
+// the first page, and again once the loaded items reach the count we have, since rows added
+// after it was taken would otherwise leave "Showing X of Y" with X past Y
+fn needs_total(offset: u64, total: Option<u64>) -> bool {
+    offset == 0 || total.is_some_and(|t| offset >= t)
+}
+
+// the count to show after a load_more page: a count that came with the page wins, and once
+// the results have ended everything is loaded, so the count can't be below what's on screen
+fn shown_total(stored: Option<u64>, fresh: Option<u64>, loaded: usize, done: bool) -> Option<u64> {
+    let total = fresh.or(stored);
+    if done {
+        Some(total.unwrap_or(0).max(loaded as u64))
+    } else {
+        total
+    }
+}
+
 // what load_more does after appending a page
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum AfterLoad {
@@ -603,14 +621,14 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         // only a total that came with this very page can end the results: the stored one is
         // from the first page, and rows added since would otherwise end the results early
         let total = page.total;
-        if let Some(t) = total {
-            self.total.set(Some(t));
-        }
         let page_len = page.row_count();
         let (added, loaded) = self.edit_items(|list| (append_dedup(list, page.items), list.len()));
 
         let stalled = *self.tail.peek() == Tail::Stalled;
         let step = after_load(page_len, added, loaded, total, stalled);
+        let stored = *self.total.peek();
+        self.total
+            .set(shown_total(stored, total, loaded, step == AfterLoad::Done));
         match step {
             AfterLoad::Refresh => {
                 warn!("a page of already loaded items at offset {loaded}, refreshing in place")
@@ -840,11 +858,12 @@ where
         // the first page (the Retry after a failed one) is one like after a reset, which
         // is what records the edit log position the items are up to date with
         let first = offset == 0;
+        let with_total = needs_total(offset, *state.total.peek());
         let seq = MEDIA_EDITS.peek().seq();
 
         let fetch = fetch.clone();
         spawn(async move {
-            let res = fetch(k, offset, PAGE_SIZE, first).await;
+            let res = fetch(k, offset, PAGE_SIZE, with_total).await;
             let stalled = state.finish(gen_id, res, |s, page| {
                 if first {
                     s.set_first_page(page, seq);
@@ -940,6 +959,30 @@ impl Pager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recounts_on_the_first_page_and_once_past_the_count() {
+        assert!(needs_total(0, None));
+        assert!(needs_total(0, Some(1500)));
+        assert!(!needs_total(60, Some(1500)));
+        assert!(!needs_total(1499, Some(1500)));
+        assert!(needs_total(1500, Some(1500)));
+        assert!(needs_total(1560, Some(1500)));
+        // no count to go stale (e.g. a fetch that never returns one)
+        assert!(!needs_total(60, None));
+    }
+
+    #[test]
+    fn shown_total_prefers_a_fresh_count_and_never_trails_a_finished_list() {
+        assert_eq!(shown_total(Some(1500), Some(1560), 1500, false), Some(1560));
+        assert_eq!(shown_total(Some(1500), None, 1440, false), Some(1500));
+        // finished past a stale count: everything is on screen
+        assert_eq!(shown_total(Some(1500), None, 1530, true), Some(1530));
+        // finished below the count (rows deleted meanwhile): keep the server's count
+        assert_eq!(shown_total(Some(1500), None, 1490, true), Some(1500));
+        assert_eq!(shown_total(None, None, 42, true), Some(42));
+        assert_eq!(shown_total(None, None, 42, false), None);
+    }
     use std::{
         cell::RefCell,
         future::ready,
