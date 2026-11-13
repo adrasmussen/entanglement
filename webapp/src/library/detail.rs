@@ -12,7 +12,7 @@ use crate::{
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_grid::MediaGrid,
+        media_grid::{GridDensityToggle, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -147,7 +147,8 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
 
     // search bar action button
     let action_button = rsx! {
-        div { style: "display: flex; align-items: center; margin-left: auto;",
+        div { style: "display: flex; align-items: center; gap: var(--space-2); margin-left: auto;",
+            GridDensityToggle {}
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {

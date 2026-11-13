@@ -10,7 +10,7 @@ use crate::{
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_grid::MediaGrid,
+        media_grid::{GridDensityToggle, MediaGrid},
         modal::ModalBox,
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -51,20 +51,23 @@ pub fn GallerySearch() -> Element {
     });
 
     let action_button = rsx! {
-        button {
-            class: "btn btn-secondary",
-            onclick: move |_| {
-                if advanced_expanded() {
-                    bulk_edit_signal.set(None);
-                    collection_color_signal.set(HashMap::new());
-                }
-                advanced_expanded.set(!advanced_expanded());
-            },
+        div { style: "display: flex; align-items: center; gap: var(--space-2);",
+            GridDensityToggle {}
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    if advanced_expanded() {
+                        bulk_edit_signal.set(None);
+                        collection_color_signal.set(HashMap::new());
+                    }
+                    advanced_expanded.set(!advanced_expanded());
+                },
 
-            if advanced_expanded() {
-                "Hide Advanced"
-            } else {
-                "Advanced"
+                if advanced_expanded() {
+                    "Hide Advanced"
+                } else {
+                    "Advanced"
+                }
             }
         }
     };

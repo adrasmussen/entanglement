@@ -526,10 +526,40 @@ pub const BASE_COMPONENTS: &str = r#"
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+/* compact density (GridDensityToggle): smaller minimum column width and a
+   slimmer info strip, so roughly one more column and row fit on screen */
+.media-grid.compact {
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.media-grid.compact .media-card-info {
+  padding: var(--space-2);
+}
+
+.media-grid.compact .media-card-info .date {
+  font-size: 0.75rem;
+  margin-bottom: 0;
+}
+
+.media-grid.compact .media-card-info .note {
+  font-size: 0.875rem;
+  -webkit-line-clamp: 1;
+}
+
+.grid-density-toggle {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
 @media (max-width: 640px) {
   .media-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--space-2);
+  }
+
+  .media-grid.compact {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
 }
 
