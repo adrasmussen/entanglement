@@ -6,8 +6,9 @@ use dioxus_router::prelude::*;
 use crate::{
     Route,
     common::{
-        paging::use_paged,
-        search::{fetch_media_page, search_opts},
+        grid_cache::{LIBRARY_META, LIBRARY_SHOW_HIDDEN},
+        paging::{CacheCfg, use_paged},
+        search::{GridScope, fetch_media_page, reconcile_media, search_opts},
         storage::*,
     },
     components::{
@@ -19,7 +20,11 @@ use crate::{
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
 };
-use api::{UuidSource, library::*, search::SearchRequest};
+use api::{
+    UuidSource,
+    library::*,
+    search::{SearchRequest, SearchResponse},
+};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct LibraryDetailProps {
@@ -89,11 +94,25 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         update_signal();
 
         let library_uuid = library_uuid();
-        get_library(&GetLibraryReq { library_uuid }).await
+        let resp = get_library(&GetLibraryReq { library_uuid }).await;
+        if let Ok(resp) = &resp {
+            LIBRARY_META.write().insert(library_uuid, resp.clone());
+        }
+        resp
     });
 
     // the library media search is the only place where we can specify hidden = true
-    let mut show_hidden = use_signal(|| false);
+    let mut show_hidden = use_signal(|| {
+        LIBRARY_SHOW_HIDDEN
+            .peek()
+            .get(&*library_uuid.peek())
+            .copied()
+            .unwrap_or(false)
+    });
+    use_effect(move || {
+        let v = show_hidden();
+        LIBRARY_SHOW_HIDDEN.write().insert(*library_uuid.peek(), v);
+    });
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
@@ -103,6 +122,12 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     let paged = use_paged(
         move || (library_uuid(), media_search_signal(), show_hidden()),
         update_signal,
+        Some(CacheCfg::new(
+            "library",
+            |(_, search, hidden): (LibraryUuid, String, bool), old: SearchResponse| async move {
+                reconcile_media(GridScope::Library { hidden }, &search, old).await
+            },
+        )),
         |(library_uuid, search, hidden): (LibraryUuid, String, bool), offset, limit, with_total| async move {
             fetch_media_page(
                 SearchRequest::Library(SearchMediaInLibraryReq {
@@ -135,11 +160,15 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             LibraryError { message: format!("There was an error fetching the library metadata: {error}") }
         }
     })? {
-        None => {
-            return rsx! {
-                LibraryDetailSkeleton {}
+        // see CollectionInner
+        None => match LIBRARY_META.peek().get(&library_uuid()).cloned() {
+            Some(v) => v,
+            None => {
+                return rsx! {
+                    LibraryDetailSkeleton {}
+                };
             }
-        }
+        },
         Some(v) => v,
     };
 
@@ -251,6 +280,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
             div { class: "scrollable-content",
                 MediaGrid {
                     items: paged.items,
+                    window: paged.window,
                     pager: paged.pager,
                     bulk_edit_signal,
                     collection_color_signal,

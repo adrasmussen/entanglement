@@ -23,6 +23,8 @@ pub fn CollectionSearch() -> Element {
     let paged = use_paged(
         move || collection_search_signal.cloned(),
         update_signal,
+        // cards here load their own data, so heights are not stable on a first frame
+        None,
         |search: String, offset, limit, with_total| async move {
             let filter = search.split_whitespace().map(|s| s.to_owned()).collect();
             let resp = search_collections(&SearchCollectionsReq {
