@@ -533,6 +533,12 @@ pub const BASE_COMPONENTS: &str = r#"
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
+/* flatter crop than the default 4:3 -- cards are ~17% shorter regardless of how
+   many columns fit (object-fit: cover crops rather than squashes) */
+.media-grid.compact .media-card-image img {
+  aspect-ratio: 16 / 10;
+}
+
 .media-grid.compact .media-card-info {
   padding: var(--space-2);
 }

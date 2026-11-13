@@ -15,8 +15,9 @@ use api::{collection::CollectionUuid, media::MediaUuid, search::SearchResponse};
 
 // thumbnail grid density, shared by every MediaGrid (gallery, collection and library
 // detail) and remembered per browser.  comfortable is the original 280px-minimum
-// layout; compact drops the minimum to 240px and tightens the card, which turns the
-// usual two-column view into three columns and fits two rows on screen.
+// layout; compact drops the minimum to 240px, uses a flatter 16:10 crop and
+// tightens the card, which turns the usual two-column view into three columns and
+// fits two rows on screen.
 const GRID_DENSITY_KEY: &str = "media_grid_density";
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
