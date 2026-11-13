@@ -53,6 +53,16 @@ impl WindowState {
         }
     }
 
+    // everything mounted again in `layout`, for a grid that stays mounted.  its width is
+    // still what it was, and forgetting it would make the next resize look like the first
+    // one, which only records the width instead of starting over
+    pub fn reset(&self, layout: LayoutKey) -> Self {
+        Self {
+            grid_width: self.grid_width,
+            ..Self::fresh(layout)
+        }
+    }
+
     pub fn spacer_px(&self) -> f64 {
         self.spacers.iter().map(|(_, px)| px).sum()
     }
@@ -83,6 +93,12 @@ impl WindowState {
             Self::fresh(layout)
         }
     }
+}
+
+// start the windowing of a mounted grid over, in the current layout (see WindowState::reset)
+pub fn reset_window(mut window: Signal<WindowState>) {
+    let next = window.peek().reset(LayoutKey::current());
+    window.set(next);
 }
 
 // the layout facts that decide whether measured heights are still valid
@@ -359,6 +375,29 @@ mod tests {
         assert!(w.untrim());
         assert_eq!((w.start, w.spacer_px()), (0, 0.0));
         assert!(!w.untrim());
+    }
+
+    #[test]
+    fn window_reset_keeps_the_grid_width() {
+        let layout = LayoutKey {
+            compact: false,
+            viewport: 1200,
+        };
+        let mut w = WindowState::fresh(layout);
+        w.grid_width = 1100.0;
+        w.trim(60, 1000.0);
+
+        let compact = LayoutKey {
+            compact: true,
+            ..layout
+        };
+        let reset = w.reset(compact);
+        assert_eq!((reset.start, reset.spacer_px()), (0, 0.0));
+        assert!(reset.compact);
+        assert_eq!(reset.grid_width, 1100.0);
+
+        // only a new grid starts without a width
+        assert_eq!(WindowState::fresh(layout).grid_width, 0.0);
     }
 
     #[test]

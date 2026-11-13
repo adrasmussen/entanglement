@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 use tracing::warn;
 
 use crate::common::grid_cache::{
-    CacheEntry, EditsSince, GRID_CACHE, LayoutKey, MEDIA_EDITS, WindowState,
+    CacheEntry, EditsSince, GRID_CACHE, LayoutKey, MEDIA_EDITS, WindowState, reset_window,
 };
 use api::{
     WebError,
@@ -376,7 +376,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
     fn clear(&mut self, key: K) {
         self.key.set(Some(key));
         self.items.write().clear();
-        self.window.set(WindowState::fresh(LayoutKey::current()));
+        reset_window(self.window);
         self.total.set(None);
         self.exhausted.set(false);
         self.initialized.set(false);
@@ -412,13 +412,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             (added, list.len())
         };
 
-        let step = after_load(
-            page_len,
-            added,
-            loaded,
-            total,
-            *self.stalled.peek(),
-        );
+        let step = after_load(page_len, added, loaded, total, *self.stalled.peek());
         match step {
             AfterLoad::More => self.stalled.set(false),
             AfterLoad::Done => self.exhausted.set(true),
@@ -441,7 +435,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         // the trimmed prefix is only still valid if the same items are in it
         let start = self.window.peek().start;
         if start > 0 && !same_prefix(&self.items.peek(), &fresh.items, start) {
-            self.window.set(WindowState::fresh(LayoutKey::current()));
+            reset_window(self.window);
         }
 
         if let Some(t) = fresh.total {
@@ -475,7 +469,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             });
             // an unmounted card was removed, so the spacer is wrong
             if pos < self.window.peek().start {
-                self.window.set(WindowState::fresh(LayoutKey::current()));
+                reset_window(self.window);
             }
         }
     }

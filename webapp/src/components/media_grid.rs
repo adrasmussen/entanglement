@@ -11,7 +11,7 @@ use tracing::warn;
 use crate::{
     common::{
         colors::CollectionColor,
-        grid_cache::{LayoutKey, WindowState, chunk_size},
+        grid_cache::{LayoutKey, WindowState, chunk_size, reset_window},
         paging::Pager,
         storage::{set_local_storage, try_local_storage},
     },
@@ -251,7 +251,7 @@ fn use_grid_windowing(mut window: Signal<WindowState>) -> GridWindowing {
     use_effect(move || {
         let compact = GRID_DENSITY().is_compact();
         if window.peek().compact != compact {
-            window.set(WindowState::fresh(LayoutKey::current()));
+            reset_window(window);
         }
     });
 
@@ -306,9 +306,9 @@ fn use_grid_windowing(mut window: Signal<WindowState>) -> GridWindowing {
         if known == 0.0 {
             window.write().grid_width = width;
         } else if (known - width).abs() > 1.0 {
-            let mut fresh = WindowState::fresh(LayoutKey::current());
-            fresh.grid_width = width;
-            window.set(fresh);
+            let mut next = window.peek().reset(LayoutKey::current());
+            next.grid_width = width;
+            window.set(next);
         }
     });
 
