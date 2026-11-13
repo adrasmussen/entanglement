@@ -11,7 +11,7 @@ use crate::{
     collection::{CollectionUuid, SearchMediaInCollectionReq},
     comment::CommentUuid,
     http_endpoint,
-    library::SearchMediaInLibraryReq,
+    library::{LibraryUuid, SearchMediaInLibraryReq},
     media::{Media, MediaUuid, SearchMediaReq},
     page::{PageMeta, PageRequest, PagedResp},
 };
@@ -358,6 +358,47 @@ pub struct SearchResponse {
     pub comments: Vec<CommentUuid>,
 }
 
+http_endpoint!(GetCounts);
+
+// exact counts for several scopes in one round trip.  each scope counts what the
+// matching search endpoint would return for an empty filter, so the numbers always agree
+// with the lists and the same access rules apply (a collection or library the user can't
+// see counts as 0)
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum CountScope {
+    // all media visible to the user
+    Media,
+    Collections,
+    Libraries,
+    MediaInCollection {
+        collection_uuid: CollectionUuid,
+    },
+    MediaInLibrary {
+        library_uuid: LibraryUuid,
+        hidden: Option<bool>,
+    },
+}
+
+// the most scopes a single request may ask for
+pub const MAX_COUNT_SCOPES: usize = 16;
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct GetCountsReq {
+    pub scopes: Vec<CountScope>,
+}
+
+// one entry per requested scope, in request order
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct GetCountsResp {
+    pub counts: Vec<ScopeCount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ScopeCount {
+    pub scope: CountScope,
+    pub count: u64,
+}
+
 http_endpoint!(BatchSearchAndSort);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -402,6 +443,25 @@ mod tests {
             filter,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn count_scopes_wire_format() {
+        let json = r#"{"scopes":["Media","Libraries",
+            {"MediaInLibrary":{"library_uuid":"00000000-0000-0000-0000-000000000001","hidden":false}}]}"#;
+        let req: GetCountsReq = serde_json::from_str(json).unwrap();
+        assert_eq!(req.scopes.len(), 3);
+        assert_eq!(req.scopes[0], CountScope::Media);
+        assert!(matches!(
+            req.scopes[2],
+            CountScope::MediaInLibrary {
+                hidden: Some(false),
+                ..
+            }
+        ));
+        let back: GetCountsReq =
+            serde_json::from_value(serde_json::to_value(&req).unwrap()).unwrap();
+        assert_eq!(back.scopes, req.scopes);
     }
 
     #[test]
