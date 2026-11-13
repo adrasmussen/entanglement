@@ -309,7 +309,10 @@ impl DbBackend for MariaDBBackend {
 
     #[instrument(skip(self, media_uuids))]
     async fn get_media_batch(&self, media_uuids: Vec<MediaUuid>) -> Result<Vec<MediaDetails>> {
-        debug!({ count = media_uuids.len() }, "getting media details in batch");
+        debug!(
+            { count = media_uuids.len() },
+            "getting media details in batch"
+        );
 
         if media_uuids.is_empty() {
             return Ok(Vec::new());
@@ -1146,7 +1149,10 @@ impl DbBackend for MariaDBBackend {
 
         let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
             (b"gid".to_vec(), fold_set(gid)?.into()),
-            (b"filter".to_vec(), format!("%{}%", escape_like(&filter)).into()),
+            (
+                b"filter".to_vec(),
+                format!("%{}%", escape_like(&filter)).into(),
+            ),
         ]);
 
         let total = if page.with_total {

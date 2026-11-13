@@ -235,6 +235,7 @@ impl HttpEndpoint {
         // it would be nice to come up with a macro to automate some of this...
         let api_router: Router<()> = Router::new()
             .route("/GetUsersInGroup", post(get_users_in_group))
+            .route("/GetCurrentUser", post(get_current_user))
             .route("/GetMedia", post(get_media))
             .route("/UpdateMedia", post(update_media))
             .route("/SearchMedia", post(search_media))

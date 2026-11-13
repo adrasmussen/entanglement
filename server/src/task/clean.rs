@@ -21,7 +21,7 @@ use crate::{
     service::{ESMRegistry, EsmSender, ServiceType},
     task::scan_utils::add_tag_to_media,
 };
-use api::{library::LibraryUuid, media::MediaUuid, search::{SearchOptions}};
+use api::{library::LibraryUuid, media::MediaUuid, search::SearchOptions};
 use common::{config::ESConfig, media::create_thumbnail};
 
 #[derive(Debug)]

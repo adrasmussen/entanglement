@@ -14,8 +14,8 @@ use crate::{
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
     task::msg::TaskMsg,
 };
-use common::db::PageOptions;
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
+use common::db::PageOptions;
 
 // http api endpoints
 //
@@ -57,6 +57,26 @@ pub(super) async fn get_users_in_group(
     let result = rx.await??;
 
     Ok(Json(GetUsersInGroupResp { uids: result }).into_response())
+}
+
+#[instrument(skip_all)]
+pub(super) async fn get_current_user(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(_message): Json<GetCurrentUserReq>,
+) -> Result<Response, AppError> {
+    let mut groups: Vec<String> = state
+        .groups_for_user(&current_user.uid)
+        .await?
+        .into_iter()
+        .collect();
+    groups.sort();
+
+    Ok(Json(GetCurrentUserResp {
+        uid: current_user.uid,
+        groups,
+    })
+    .into_response())
 }
 
 // media handlers

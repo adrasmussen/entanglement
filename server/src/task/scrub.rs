@@ -93,7 +93,10 @@ struct PathUuidParser;
 impl UuidSource for PathUuidParser {}
 
 fn valid_uuid(path: &Path, media_uuids: &HashSet<MediaUuid>) -> bool {
-    match path.file_name().map(|s| MediaUuid::try_parse(&PathUuidParser, &s.to_string_lossy())) {
+    match path
+        .file_name()
+        .map(|s| MediaUuid::try_parse(&PathUuidParser, &s.to_string_lossy()))
+    {
         Some(Ok(v)) => media_uuids.contains(&v),
         _ => false,
     }
