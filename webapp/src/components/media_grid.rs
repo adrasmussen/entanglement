@@ -6,6 +6,7 @@ use std::{
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::{
     common::{
@@ -235,30 +236,18 @@ const WATCH_JS: &str = r#"
     onScroll();
 "#;
 
-#[derive(Clone, PartialEq, Props)]
-pub struct MediaGridProps {
-    items: Signal<Vec<SearchResponse>>,
-    // which of the items are mounted, see KEEP_ABOVE
-    window: Signal<WindowState>,
-    pager: Pager,
-    bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
-    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
-    #[props(default)]
-    collection_uuid: Option<CollectionUuid>,
-    // page-specific empty state
-    empty: Element,
+// keeps the grid's DOM to a window around the viewport (see KEEP_ABOVE): a scroll watcher
+// trims cards above the viewport, while the returned handlers remount them when the spacer
+// comes into view and start over when the layout changes under the measured heights
+struct GridWindowing {
+    on_spacer_visible: Callback<VisibleEvent>,
+    on_resize: Callback<ResizeEvent>,
 }
 
-#[component]
-pub fn MediaGrid(props: MediaGridProps) -> Element {
-    let items = props.items;
-    let mut window = props.window;
-    let pager = props.pager;
-
+fn use_grid_windowing(mut window: Signal<WindowState>) -> GridWindowing {
     let trimming = use_hook(|| Rc::new(Cell::new(false)));
 
     // heights measured in one density mean nothing in the other
-    let compact = GRID_DENSITY().is_compact();
     use_effect(move || {
         let compact = GRID_DENSITY().is_compact();
         if window.peek().compact != compact {
@@ -271,23 +260,27 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     });
-    use_hook({
-        let trimming = trimming.clone();
-        move || {
-            let mut watcher = document::eval(
-                &WATCH_JS
-                    .replace("KEEP_ABOVE", &KEEP_ABOVE.to_string())
-                    .replace("WATCH_ID", &watch_id.to_string()),
-            );
-            spawn(async move {
-                while watcher.recv::<bool>().await.is_ok() {
-                    if !trimming.replace(true) {
-                        trim_while_above(window).await;
-                        trimming.set(false);
+    use_hook(move || {
+        let mut watcher = document::eval(
+            &WATCH_JS
+                .replace("KEEP_ABOVE", &KEEP_ABOVE.to_string())
+                .replace("WATCH_ID", &watch_id.to_string()),
+        );
+        spawn(async move {
+            let err = loop {
+                match watcher.recv::<bool>().await {
+                    Ok(_) => {
+                        if !trimming.replace(true) {
+                            trim_while_above(window).await;
+                            trimming.set(false);
+                        }
                     }
+                    Err(err) => break err,
                 }
-            });
-        }
+            };
+            // the grid keeps working, but every card stays mounted from here on
+            warn!("grid scroll watcher {watch_id} stopped, no more windowing: {err:?}");
+        });
     });
     use_drop(move || {
         let _ = document::eval(&format!(
@@ -319,6 +312,63 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         }
     });
 
+    GridWindowing {
+        on_spacer_visible,
+        on_resize,
+    }
+}
+
+// placeholder cards for a grid whose first page is still loading
+#[component]
+fn MediaGridSkeleton() -> Element {
+    let grid_class = GRID_DENSITY().grid_class();
+
+    rsx! {
+        div { class: "loading-state {grid_class}",
+            for _ in 0..8 {
+                div { class: "skeleton-card",
+                    div { class: "skeleton", style: "height: 200px;" }
+                    div {
+                        class: "skeleton",
+                        style: "height: 24px; width: 40%; margin-top: 12px;",
+                    }
+                    div {
+                        class: "skeleton",
+                        style: "height: 18px; width: 80%; margin-top: 8px;",
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct MediaGridProps {
+    items: Signal<Vec<SearchResponse>>,
+    // which of the items are mounted, see KEEP_ABOVE
+    window: Signal<WindowState>,
+    pager: Pager,
+    bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+    #[props(default)]
+    collection_uuid: Option<CollectionUuid>,
+    // page-specific empty state
+    empty: Element,
+}
+
+#[component]
+pub fn MediaGrid(props: MediaGridProps) -> Element {
+    let items = props.items;
+    let window = props.window;
+    let pager = props.pager;
+
+    let GridWindowing {
+        on_spacer_visible,
+        on_resize,
+    } = use_grid_windowing(window);
+
+    let compact = GRID_DENSITY().is_compact();
+
     let initialized = (pager.initialized)();
     let error = (pager.error)();
     let is_empty = items.read().is_empty();
@@ -326,21 +376,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
 
     if !initialized {
         return rsx! {
-            div { class: "loading-state {grid_class}",
-                for _ in 0..8 {
-                    div { class: "skeleton-card",
-                        div { class: "skeleton", style: "height: 200px;" }
-                        div {
-                            class: "skeleton",
-                            style: "height: 24px; width: 40%; margin-top: 12px;",
-                        }
-                        div {
-                            class: "skeleton",
-                            style: "height: 18px; width: 80%; margin-top: 8px;",
-                        }
-                    }
-                }
-            }
+            MediaGridSkeleton {}
         };
     }
 
@@ -360,8 +396,8 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         };
     }
 
-    // the effect above fixes the stored state after a density change; until it runs, nothing
-    // is considered trimmed
+    // use_grid_windowing fixes the stored state after a density change; until its effect
+    // runs, nothing is considered trimmed
     let (start, spacer_px) = {
         let w = window.read();
         if w.compact == compact {
