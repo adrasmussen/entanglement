@@ -7,6 +7,25 @@ auth is mTLS, not username/password).
 
 Run everything below from the repo root.
 
+## 0. Create your local `.env`
+
+Do this first. Every `docker compose` command, including the build, refuses to
+run without the two passwords set. `.env` is gitignored and holds secrets, so
+never commit it:
+
+```sh
+cp .env.example .env
+sed -i '' "s/^ENTG_DB_PASSWORD=.*/ENTG_DB_PASSWORD=$(openssl rand -hex 24)/" .env
+sed -i '' "s/^ENTG_CLIENT_P12_PASSWORD=.*/ENTG_CLIENT_P12_PASSWORD=$(openssl rand -hex 16)/" .env
+```
+
+(`sed -i ''` is the macOS form; on Linux use `sed -i` with no `''`.)
+
+If you already have a `pg-data` volume from before `.env` existed, its role
+still has the old password. Either reset it (see "Resetting everything") or
+follow "Rotating the database password" in the root README, using the value
+you just put in `.env`.
+
 ## 1. Build the image
 
 ```sh
@@ -28,18 +47,6 @@ cp ~/Pictures/some-test-photos/*.jpg media-src/testlib/
 it's gitignored, so this is entirely local to your machine.
 
 ## 3. Bring up the stack
-
-First create your local `.env`. It's gitignored and holds the database
-password, so never commit it:
-
-```sh
-cp .env.example .env
-sed -i '' "s/^ENTG_DB_PASSWORD=.*/ENTG_DB_PASSWORD=$(openssl rand -hex 24)/" .env
-sed -i '' "s/^ENTG_CLIENT_P12_PASSWORD=.*/ENTG_CLIENT_P12_PASSWORD=$(openssl rand -hex 16)/" .env
-```
-
-`docker compose` refuses to start without `ENTG_DB_PASSWORD` and
-`ENTG_CLIENT_P12_PASSWORD` set.
 
 The app is published on `https://127.0.0.1:8444` by default, bound to
 loopback only. To run it alongside other local stacks, copy `.env.example`
