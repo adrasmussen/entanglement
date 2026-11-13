@@ -8,58 +8,58 @@ use crate::{
 };
 use api::{
     WebError,
-    collection::{SearchCollectionsReq, search_collections},
-    library::{SearchLibrariesReq, search_libraries},
-    media::{SearchMediaReq, search_media},
-    page::PageRequest,
-    search::SearchOptions,
+    search::{CountScope, GetCountsReq, get_counts},
 };
 
-// with_total was asked for, so a response without one is broken rather than empty
-fn missing_total() -> WebError {
-    let err = WebError::msg(String::from("search response is missing the total count"));
-    error!("{err}");
-    err
-}
+// the dashboard cards, in the order they are requested
+const STAT_SCOPES: [CountScope; 3] = [
+    CountScope::Media,
+    CountScope::Collections,
+    CountScope::Libraries,
+];
 
 #[component]
 pub fn ModernHome() -> Element {
-    // re-run on modal close, so creating a collection refreshes the count below
+    // re-run on modal close, so creating a collection refreshes the counts below
     let update_signal = use_signal(|| ());
 
-    // dashboard stats, pulled from the same search endpoints the gallery/
-    // collection/library pages use, with an empty/default filter to match
-    // everything -- see SearchFilter's Default impl
-    let media_count = use_resource(|| async move {
-        search_media(&SearchMediaReq {
-            opts: SearchOptions {
-                page: PageRequest::first(1, true),
-                ..Default::default()
-            },
-        })
-        .await
-        .and_then(|resp| resp.total.ok_or_else(missing_total))
-    });
-
-    let collections_count = use_resource(move || async move {
+    // dashboard stats: one request for all three, which counts exactly what the gallery,
+    // collection and library pages would list
+    let counts = use_resource(move || async move {
         update_signal();
 
-        search_collections(&SearchCollectionsReq {
-            filter: String::new(),
-            page: PageRequest::first(1, true),
+        let resp = get_counts(&GetCountsReq {
+            scopes: STAT_SCOPES.to_vec(),
         })
-        .await
-        .and_then(|resp| resp.total.ok_or_else(missing_total))
+        .await?;
+
+        let count_of = |scope: &CountScope| {
+            resp.counts
+                .iter()
+                .find(|c| &c.scope == scope)
+                .map(|c| c.count)
+                .ok_or_else(|| {
+                    let err = WebError::msg(format!("no count came back for {scope:?}"));
+                    error!("{err}");
+                    err
+                })
+        };
+
+        Ok::<_, WebError>((
+            count_of(&STAT_SCOPES[0])?,
+            count_of(&STAT_SCOPES[1])?,
+            count_of(&STAT_SCOPES[2])?,
+        ))
     });
 
-    let libraries_count = use_resource(|| async move {
-        search_libraries(&SearchLibrariesReq {
-            filter: String::new(),
-            ..Default::default()
-        })
-        .await
-        .map(|resp| resp.libraries.len())
-    });
+    // one value per card; the same loading and error rendering for all of them
+    let stat = |pick: fn(&(u64, u64, u64)) -> u64| match &*counts.read() {
+        Some(Ok(all)) => rsx! { "{pick(all)}" },
+        Some(Err(_)) => rsx! { "—" },
+        None => rsx! {
+            div { class: "skeleton", style: "width: 80px; height: 32px;" }
+        },
+    };
 
     rsx! {
         div { class: "home-container",
@@ -98,16 +98,7 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon media-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    match &*media_count.read() {
-                                        Some(Ok(count)) => rsx! { "{count}" },
-                                        Some(Err(_)) => rsx! { "—" },
-                                        None => rsx! {
-                                            div {
-                                                class: "skeleton",
-                                                style: "width: 80px; height: 32px;",
-                                            }
-                                        },
-                                    }
+                                    {stat(|c| c.0)}
                                 }
                                 p { class: "stat-label", "Media Items" }
                             }
@@ -123,16 +114,7 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon collection-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    match &*collections_count.read() {
-                                        Some(Ok(count)) => rsx! { "{count}" },
-                                        Some(Err(_)) => rsx! { "—" },
-                                        None => rsx! {
-                                            div {
-                                                class: "skeleton",
-                                                style: "width: 80px; height: 32px;",
-                                            }
-                                        },
-                                    }
+                                    {stat(|c| c.1)}
                                 }
                                 p { class: "stat-label", "Collections" }
                             }
@@ -148,16 +130,7 @@ pub fn ModernHome() -> Element {
                             div { class: "stat-icon library-icon" }
                             div { class: "stat-content",
                                 h3 { class: "stat-value",
-                                    match &*libraries_count.read() {
-                                        Some(Ok(count)) => rsx! { "{count}" },
-                                        Some(Err(_)) => rsx! { "—" },
-                                        None => rsx! {
-                                            div {
-                                                class: "skeleton",
-                                                style: "width: 80px; height: 32px;",
-                                            }
-                                        },
-                                    }
+                                    {stat(|c| c.2)}
                                 }
                                 p { class: "stat-label", "Libraries" }
                             }
