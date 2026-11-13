@@ -220,6 +220,9 @@ sudo security add-trusted-cert -d -r trustRoot \
 When your browser is prompted for a client certificate, pick the one with
 subject `entanglement-dev` / CN `dev`.
 
+To check the API against the database, run `zsh docker/devtest/api_check.sh`: it
+compares raw SQL with the paging and count endpoints and prints a grid of results.
+
 ## Inspecting the database
 
 **From the host (pgAdmin, TablePlus, `psql`, ...):** Postgres is published on
