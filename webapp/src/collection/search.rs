@@ -11,9 +11,7 @@ use crate::{
         search::SearchBar,
     },
 };
-use api::{
-    collection::*,
-};
+use api::collection::*;
 
 #[component]
 pub fn CollectionSearch() -> Element {

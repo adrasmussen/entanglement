@@ -7,8 +7,8 @@ use api::{
     library::search_media_in_library,
     media::{MediaUuid, search_media},
     search::{
-        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SearchResponse, SortMethod,
-        batch_search_and_sort,
+        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SearchResponse,
+        SortMethod, batch_search_and_sort,
     },
 };
 

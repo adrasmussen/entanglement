@@ -192,7 +192,8 @@ where
                         // replace the head, keep whatever was loaded past it
                         let mut list = Vec::new();
                         append_dedup(&mut list, page.items);
-                        let tail: Vec<T> = items.peek().iter().skip(limit as usize).cloned().collect();
+                        let tail: Vec<T> =
+                            items.peek().iter().skip(limit as usize).cloned().collect();
                         append_dedup(&mut list, tail);
 
                         let mut done = if loaded <= limit {
@@ -249,8 +250,7 @@ where
                         list.len() as u64
                     };
                     let known_total = page.total.or(*total.peek());
-                    let done =
-                        got < PAGE_SIZE || known_total.map(|t| len >= t).unwrap_or(false);
+                    let done = got < PAGE_SIZE || known_total.map(|t| len >= t).unwrap_or(false);
                     exhausted.set(done);
                 }
                 Err(err) => error.set(Some(err.to_string())),

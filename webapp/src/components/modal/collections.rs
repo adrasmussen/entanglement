@@ -4,7 +4,9 @@ use dioxus::prelude::*;
 use tracing::error;
 
 use crate::components::{
-    modal::{MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after},
+    modal::{
+        MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after,
+    },
     search::CompactSearchBar,
 };
 use api::{
@@ -520,7 +522,8 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
         search_collections(&SearchCollectionsReq {
             filter,
             ..Default::default()
-        }).await
+        })
+        .await
     });
 
     // TODO -- better error handling when collections cannot be searched
@@ -716,7 +719,8 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
         search_collections(&SearchCollectionsReq {
             filter,
             ..Default::default()
-        }).await
+        })
+        .await
     });
 
     // TODO -- better error handling when collections cannot be searched

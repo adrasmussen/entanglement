@@ -336,7 +336,8 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
         search_collections(&SearchCollectionsReq {
             filter,
             ..Default::default()
-        }).await
+        })
+        .await
     });
 
     // Get available collections (excluding already selected ones)
