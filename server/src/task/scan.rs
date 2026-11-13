@@ -143,7 +143,7 @@ pub async fn scan_library(
                     Err(err) => {
                         warn!("scan error: {err:?}");
                         context.warnings.fetch_add(1, Ordering::Relaxed);
-                        continue
+                        continue;
                     }
                 };
 

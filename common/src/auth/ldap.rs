@@ -61,10 +61,13 @@ impl AuthzProvider for LdapAuthz {
     #[instrument(skip_all)]
     fn new(config: Arc<ESConfig>) -> Result<Self> {
         info!("configuring ldap3 authz settings");
-        let config = config.ldap.clone().ok_or_else(|| anyhow::Error::msg("ldap config not found"))?;
+        let config = config
+            .ldap
+            .clone()
+            .ok_or_else(|| anyhow::Error::msg("ldap config not found"))?;
 
         if config.url.scheme() != "ldaps" {
-            return Err(anyhow::Error::msg("ldap connector requires TLS"))
+            return Err(anyhow::Error::msg("ldap connector requires TLS"));
         }
 
         let mut root_store = RootCertStore::empty();

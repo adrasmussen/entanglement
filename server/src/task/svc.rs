@@ -481,7 +481,8 @@ fn watch_task(
                 Ok(_) => {}
                 Err(err) => error!("failed to send/receive completion message: {err}"),
             }
-        }.instrument(span!(Level::INFO, "watch_task"));
+        }
+        .instrument(span!(Level::INFO, "watch_task"));
 
         spawn(task)
     };
