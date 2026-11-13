@@ -587,7 +587,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
                 p { "Search Collections" }
                 CompactSearchBar {
                     search_signal: collection_search_signal,
-                    placeholder: "Enter collection name or description...",
+                    placeholder: "Enter collection name...",
                 }
 
                 CollectionSelectionList { collections, selected_collection }
@@ -856,7 +856,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
                 p { "Search Collections" }
                 CompactSearchBar {
                     search_signal: collection_search_signal,
-                    placeholder: "Enter collection name or description...",
+                    placeholder: "Enter collection name...",
                 }
 
                 CollectionSelectionList { collections, selected_collection }

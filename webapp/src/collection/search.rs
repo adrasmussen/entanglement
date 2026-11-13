@@ -71,7 +71,7 @@ pub fn CollectionSearch() -> Element {
                 SearchBar {
                     search_signal: collection_search_signal,
                     storage_key: COLLECTION_SEARCH_KEY,
-                    placeholder: "Search by collection name or description...",
+                    placeholder: "Search by collection name...",
                     status,
                     action_button,
                 }

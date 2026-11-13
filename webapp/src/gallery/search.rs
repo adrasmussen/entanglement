@@ -95,7 +95,7 @@ pub fn GallerySearch() -> Element {
                 SearchBar {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
-                    placeholder: "Search by date or description...",
+                    placeholder: "Search by date, description or tags...",
                     status: paged.pager.status(paged.items.read().len(), "results"),
                     action_button,
                 }
