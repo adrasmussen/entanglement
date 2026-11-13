@@ -37,6 +37,10 @@ pub trait DbBackend: Send + Sync + 'static {
         media_uuid: MediaUuid,
     ) -> Result<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>;
 
+    // fetch full details for a page of media in one round of queries, preserving the
+    // order of the input; uuids that no longer exist are skipped
+    async fn get_media_batch(&self, media_uuids: Vec<MediaUuid>) -> Result<Vec<MediaDetails>>;
+
     async fn get_media_uuids(&self) -> Result<Vec<MediaUuid>>;
 
     async fn get_media_by_path(&self, path: String) -> Result<Option<MediaByPath>>;
@@ -61,7 +65,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>>;
+    ) -> Result<SearchPage<MediaUuid>>;
 
     async fn similar_media(
         &self,
@@ -113,14 +117,15 @@ pub trait DbBackend: Send + Sync + 'static {
         &self,
         gid: HashSet<String>,
         filter: String,
-    ) -> Result<Vec<CollectionUuid>>;
+        page: PageOptions,
+    ) -> Result<SearchPage<CollectionUuid>>;
 
     async fn search_media_in_collection(
         &self,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>>;
+    ) -> Result<SearchPage<MediaUuid>>;
 
     // library functions
     async fn add_library(&self, library: Library) -> Result<LibraryUuid>;
@@ -143,7 +148,33 @@ pub trait DbBackend: Send + Sync + 'static {
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
         opts: SearchOptions,
-    ) -> Result<Vec<MediaUuid>>;
+    ) -> Result<SearchPage<MediaUuid>>;
+}
+
+// paged search results
+//
+// items is the requested page (in sort order); total is the size of the full filtered
+// set, and is only computed (via a separate COUNT) when the caller asked for it
+#[derive(Clone, Debug)]
+pub struct SearchPage<T> {
+    pub items: Vec<T>,
+    pub total: Option<u64>,
+}
+
+// paging parameters for searches that don't take a full SearchOptions
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PageOptions {
+    pub limit: Option<u64>,
+    pub offset: u64,
+    pub with_total: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct MediaDetails {
+    pub media_uuid: MediaUuid,
+    pub media: Media,
+    pub collections: Vec<CollectionUuid>,
+    pub comments: Vec<CommentUuid>,
 }
 
 // structs needed to do media updates

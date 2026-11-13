@@ -19,7 +19,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="$REPO_ROOT/media-src/$LIBRARY_PATH"
 CERT="$REPO_ROOT/docker/dev-certs/client.crt"
 KEY="$REPO_ROOT/docker/dev-certs/client.key"
-BASE_URL="https://127.0.0.1:8443/entanglement/api"
+# host port: shell env, then ./.env (as docker compose reads it), then the default
+if [ -z "${ENTG_HTTPS_PORT:-}" ] && [ -f "$REPO_ROOT/.env" ]; then
+    ENTG_HTTPS_PORT=$(sed -n 's/^ENTG_HTTPS_PORT=//p' "$REPO_ROOT/.env" | tail -1)
+fi
+ENTG_HTTPS_PORT="${ENTG_HTTPS_PORT:-8444}"
+BASE_URL="https://127.0.0.1:$ENTG_HTTPS_PORT/entanglement/api"
 
 if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
     echo "error: $CERT / $KEY not found -- run 'docker compose up -d certgen' first" >&2
@@ -38,7 +43,7 @@ echo "restarting server container to pick up the new files..."
 
 # give the server a moment to finish restarting before we hit its API
 for i in $(seq 1 15); do
-    curl -sk -o /dev/null "https://127.0.0.1:8443/entanglement/app" && break
+    curl -sk -o /dev/null "https://127.0.0.1:$ENTG_HTTPS_PORT/entanglement/app" && break
     sleep 1
 done
 

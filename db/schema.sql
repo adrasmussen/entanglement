@@ -89,7 +89,17 @@ CREATE TABLE "media" (
     CONSTRAINT "media_library" FOREIGN KEY ("library_uuid") REFERENCES "libraries" ("library_uuid")
 );
 
-CREATE INDEX "idx_media_library" ON "media" ("library_uuid");
+-- ordered indexes backing paged searches (see api/src/search.rs order_sql); the
+-- media_uuid tiebreaker makes the ordering total so that offset paging is stable.
+--
+-- gallery and collection detail only ever return hidden = FALSE media, so partial
+-- indexes let the planner walk them in order and stop at the LIMIT
+CREATE INDEX "idx_media_visible_date" ON "media" ("date" DESC, "media_uuid" DESC) WHERE "hidden" = FALSE;
+
+CREATE INDEX "idx_media_visible_path" ON "media" ("path", "media_uuid") WHERE "hidden" = FALSE;
+
+-- library detail (hidden filter optional); also covers lookups by library_uuid alone
+CREATE INDEX "idx_media_library_date" ON "media" ("library_uuid", "date" DESC, "media_uuid" DESC);
 
 CREATE INDEX "idx_media_path" ON "media" ("path");
 
@@ -140,6 +150,9 @@ CREATE TABLE "collections" (
 );
 
 CREATE INDEX "idx_collection_gid" ON "collections" ("gid");
+
+-- collections page ordering (search_collections ORDER BY name, collection_uuid)
+CREATE INDEX "idx_collection_name" ON "collections" ("name", "collection_uuid");
 
 CREATE INDEX "idx_collection_tags" ON "collections" USING GIN ("tags");
 

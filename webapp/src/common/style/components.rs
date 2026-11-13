@@ -526,10 +526,125 @@ pub const BASE_COMPONENTS: &str = r#"
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+/* compact density (GridDensityMenu): smaller minimum column width and a
+   slimmer info strip, so roughly one more column and row fit on screen */
+.media-grid.compact {
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* flatter crop than the default 4:3 -- cards are ~17% shorter regardless of how
+   many columns fit (object-fit: cover crops rather than squashes) */
+.media-grid.compact .media-card-image img {
+  aspect-ratio: 16 / 10;
+}
+
+.media-grid.compact .media-card-info {
+  padding: var(--space-2);
+}
+
+.media-grid.compact .media-card-info .date {
+  font-size: 0.75rem;
+  margin-bottom: 0;
+}
+
+.media-grid.compact .media-card-info .note {
+  font-size: 0.875rem;
+  -webkit-line-clamp: 1;
+}
+
+/* GridDensityMenu: icon button + popover in the page header */
+.grid-density-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast) var(--easing-standard),
+              color var(--transition-fast) var(--easing-standard);
+}
+
+.icon-btn:hover,
+.icon-btn[aria-expanded="true"] {
+  background-color: var(--neutral-100);
+  color: var(--text-primary);
+}
+
+.icon-btn:focus-visible,
+.menu-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.menu-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 21;
+  min-width: 160px;
+  padding: var(--space-1);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.menu-label {
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background-color: var(--neutral-100);
+}
+
+.menu-item-check {
+  display: inline-block;
+  width: 1em;
+  color: var(--primary);
+}
+
 @media (max-width: 640px) {
   .media-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--space-2);
+  }
+
+  .media-grid.compact {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
 }
 

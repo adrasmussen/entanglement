@@ -105,17 +105,27 @@ pub struct RmMediaFromCollectionResp {}
 
 // search collections
 //
-// defaults to ""
+// filter defaults to "" (match everything) and is matched literally against the name;
+// results are ordered by name.  limit = None returns every match on the uuid-only path,
+// though callers that render cards should page with PAGE_SIZE
 http_endpoint!(SearchCollections);
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
     pub filter: String,
+    #[serde(default)]
+    pub limit: Option<u64>,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default)]
+    pub with_total: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchCollectionsResp {
     pub collections: Vec<CollectionUuid>,
+    #[serde(default)]
+    pub total: Option<u64>,
 }
 
 // search media inside a particular collection
@@ -130,4 +140,6 @@ pub struct SearchMediaInCollectionReq {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchMediaInCollectionResp {
     pub media: Vec<MediaUuid>,
+    #[serde(default)]
+    pub total: Option<u64>,
 }

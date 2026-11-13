@@ -22,10 +22,14 @@ pub fn ModernHome() -> Element {
     // everything -- see SearchFilter's Default impl
     let media_count = use_resource(|| async move {
         search_media(&SearchMediaReq {
-            opts: SearchOptions::default(),
+            opts: SearchOptions {
+                limit: Some(1),
+                with_total: true,
+                ..Default::default()
+            },
         })
         .await
-        .map(|resp| resp.media.len())
+        .map(|resp| resp.total.unwrap_or(0))
     });
 
     let collections_count = use_resource(move || async move {
@@ -33,9 +37,12 @@ pub fn ModernHome() -> Element {
 
         search_collections(&SearchCollectionsReq {
             filter: String::new(),
+            limit: Some(1),
+            with_total: true,
+            ..Default::default()
         })
         .await
-        .map(|resp| resp.collections.len())
+        .map(|resp| resp.total.unwrap_or(0))
     });
 
     let libraries_count = use_resource(|| async move {

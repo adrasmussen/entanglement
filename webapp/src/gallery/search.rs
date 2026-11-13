@@ -1,12 +1,16 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use dioxus::prelude::*;
 
 use crate::{
-    common::storage::try_local_storage,
+    common::{
+        paging::{CacheCfg, use_paged},
+        search::{GridScope, fetch_media_page, reconcile_media, search_opts},
+        storage::try_local_storage,
+    },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_card::MediaCard,
+        media_grid::{GridDensityMenu, MediaGrid},
         modal::ModalBox,
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -14,11 +18,8 @@ use crate::{
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::{
-    media::*,
-    search::{
-        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
-        batch_search_and_sort,
-    },
+    media::SearchMediaReq,
+    search::{SearchRequest, SearchResponse},
 };
 
 #[component]
@@ -30,53 +31,51 @@ pub fn GallerySearch() -> Element {
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
-    let media_future = use_resource(move || async move {
-        update_signal();
+    let paged = use_paged(
+        move || media_search_signal.cloned(),
+        update_signal,
+        Some(CacheCfg::new(
+            "gallery",
+            |search: String, old: SearchResponse| async move {
+                reconcile_media(GridScope::Gallery, &search, old).await
+            },
+        )),
+        |search: String, offset, limit, with_total| async move {
+            fetch_media_page(
+                SearchRequest::Media(SearchMediaReq {
+                    opts: search_opts(&search),
+                }),
+                offset,
+                limit,
+                with_total,
+            )
+            .await
+        },
+    );
 
-        let filter = media_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
-
-        batch_search_and_sort(&BatchSearchAndSortReq {
-            req: SearchRequest::Media(SearchMediaReq {
-                opts: SearchOptions {
-                    filter: SearchFilter::SubstringAny { filter },
-                    order: SortMethod::DateDesc,
-                    limit: None,
-                    offset: 0,
-                },
-            }),
+    let search_req = use_callback(move |_: ()| {
+        SearchRequest::Media(SearchMediaReq {
+            opts: search_opts(&media_search_signal.peek()),
         })
-        .await
-    });
-
-    // clunky, but it avoids cloning the reponse
-    let media_uuids = use_memo(move || match &*media_future.read() {
-        Some(Ok(v)) => Some(
-            v.media
-                .iter()
-                .map(|m| m.media_uuid)
-                .collect::<HashSet<MediaUuid>>(),
-        ),
-        _ => None,
     });
 
     let action_button = rsx! {
-        button {
-            class: "btn btn-secondary",
-            onclick: move |_| {
-                if advanced_expanded() {
-                    bulk_edit_signal.set(None);
-                    collection_color_signal.set(HashMap::new());
-                }
-                advanced_expanded.set(!advanced_expanded());
-            },
+        div { style: "display: flex; align-items: center; gap: var(--space-2);",
+            button {
+                class: "btn btn-secondary",
+                onclick: move |_| {
+                    if advanced_expanded() {
+                        bulk_edit_signal.set(None);
+                        collection_color_signal.set(HashMap::new());
+                    }
+                    advanced_expanded.set(!advanced_expanded());
+                },
 
-            if advanced_expanded() {
-                "Hide Advanced"
-            } else {
-                "Advanced"
+                if advanced_expanded() {
+                    "Hide Advanced"
+                } else {
+                    "Advanced"
+                }
             }
         }
     };
@@ -88,19 +87,16 @@ pub fn GallerySearch() -> Element {
             div { class: "sticky-header",
                 div {
                     class: "page-header",
-                    style: "margin-bottom: var(--space-4);",
+                    style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
                     p { "Browse and search all accessible media" }
+                    GridDensityMenu {}
                 }
 
                 SearchBar {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search by date or description...",
-                    status: match &*media_future.read() {
-                        Some(Ok(resp)) => format!("Found {} results", resp.media.len()),
-                        Some(Err(_)) => String::from("Error searching media"),
-                        None => String::from("Loading..."),
-                    },
+                    status: paged.pager.status(paged.items.read().len(), "results"),
                     action_button,
                 }
 
@@ -113,7 +109,7 @@ pub fn GallerySearch() -> Element {
                         ("Bulk Edit".to_owned(), rsx! {
                             BulkEditTab {
                                 bulk_edit_signal,
-                                media_uuids,
+                                search_req,
                                 modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
                             }
                         }),
@@ -125,51 +121,15 @@ pub fn GallerySearch() -> Element {
             }
 
             div { class: "scrollable-content",
-                match &*media_future.read() {
-                    Some(Ok(resp)) => {
-                        rsx! {
-                            if resp.media.is_empty() {
-                                div { class: "empty-state",
-                                    p { "No media found matching your search criteria." }
-                                }
-                            } else {
-                                // TODO -- convert this to a MediaGrid element (see equivalent in collections and libraries)
-                                //         and convert them all to reactive memos instead of cloning
-                                div { class: "media-grid",
-                                    for search_resp in resp.media.iter() {
-                                        MediaCard {
-                                            key: "{search_resp.media_uuid}",
-                                            media_uuid: search_resp.media_uuid,
-                                            media: search_resp.media.clone(),
-                                            collections: search_resp.collections.clone(),
-                                            bulk_edit_signal,
-                                            collection_color_signal,
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Some(Err(err)) => rsx! {
-                        div { class: "error-state",
-                            p { "Error: {err}" }
-                        }
-                    },
-                    None => rsx! {
-                        div { class: "loading-state media-grid",
-                            for _ in 0..8 {
-                                div { class: "skeleton-card",
-                                    div { class: "skeleton", style: "height: 200px;" }
-                                    div {
-                                        class: "skeleton",
-                                        style: "height: 24px; width: 40%; margin-top: 12px;",
-                                    }
-                                    div {
-                                        class: "skeleton",
-                                        style: "height: 18px; width: 80%; margin-top: 8px;",
-                                    }
-                                }
-                            }
+                MediaGrid {
+                    items: paged.items,
+                    window: paged.window,
+                    pager: paged.pager,
+                    bulk_edit_signal,
+                    collection_color_signal,
+                    empty: rsx! {
+                        div { class: "empty-state",
+                            p { "No media found matching your search criteria." }
                         }
                     },
                 }

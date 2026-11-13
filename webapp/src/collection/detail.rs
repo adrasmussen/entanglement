@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
@@ -6,10 +6,15 @@ use dioxus_router::prelude::*;
 use crate::{
     Route,
     collection::MEDIA_SEARCH_KEY,
-    common::storage::*,
+    common::{
+        grid_cache::COLLECTION_META,
+        paging::{CacheCfg, use_paged},
+        search::{GridScope, fetch_media_page, reconcile_media, search_opts},
+        storage::*,
+    },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_card::MediaCard,
+        media_grid::{GridDensityMenu, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -19,11 +24,7 @@ use api::{
     UuidSource,
     collection::*,
     fold_set,
-    media::MediaUuid,
-    search::{
-        BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SortMethod,
-        batch_search_and_sort,
-    },
+    search::{SearchRequest, SearchResponse},
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -96,7 +97,13 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         update_signal();
         let collection_uuid = collection_uuid();
 
-        get_collection(&GetCollectionReq { collection_uuid }).await
+        let resp = get_collection(&GetCollectionReq { collection_uuid }).await;
+        if let Ok(resp) = &resp {
+            COLLECTION_META
+                .write()
+                .insert(collection_uuid, resp.clone());
+        }
+        resp
     });
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
@@ -104,76 +111,66 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
-    let media_future = use_resource(move || async move {
-        let collection_uuid = collection_uuid();
-        let filter = media_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
+    // all hooks must run before the early returns below
+    let paged = use_paged(
+        move || (collection_uuid(), media_search_signal()),
+        update_signal,
+        Some(CacheCfg::new(
+            "collection",
+            |(collection_uuid, search): (CollectionUuid, String), old: SearchResponse| async move {
+                reconcile_media(GridScope::Collection(collection_uuid), &search, old).await
+            },
+        )),
+        |(collection_uuid, search): (CollectionUuid, String), offset, limit, with_total| async move {
+            fetch_media_page(
+                SearchRequest::Collection(SearchMediaInCollectionReq {
+                    collection_uuid,
+                    opts: search_opts(&search),
+                }),
+                offset,
+                limit,
+                with_total,
+            )
+            .await
+        },
+    );
 
-        batch_search_and_sort(&BatchSearchAndSortReq {
-            req: SearchRequest::Collection(SearchMediaInCollectionReq {
-                collection_uuid,
-                opts: SearchOptions {
-                    filter: SearchFilter::SubstringAny { filter },
-                    order: SortMethod::DateDesc,
-                    limit: None,
-                    offset: 0,
-                },
-            }),
+    let search_req = use_callback(move |_: ()| {
+        SearchRequest::Collection(SearchMediaInCollectionReq {
+            collection_uuid: *collection_uuid.peek(),
+            opts: search_opts(&media_search_signal.peek()),
         })
-        .await
     });
 
     // see GalleryInner for details
     //
-    // the two futures both early return the same loading skeleton, but they could differ in principle
+    // only the collection metadata gates the page skeleton; media paging handles its own loading state
     let collection_data = &*collection_future.read();
     let collection_data = match collection_data.clone().transpose().show(|error| {
         rsx! {
             CollectionError { message: format!("There was an error fetching the collection metadata: {error}") }
         }
     })? {
-        None => {
-            return rsx! {
-                CollectionDetailSkeleton {}
+        // remembered from the last visit, so that coming back does not flash a skeleton (and
+        // shrink the page under the restored scroll position); the resource refreshes it
+        None => match COLLECTION_META.peek().get(&collection_uuid()).cloned() {
+            Some(v) => v,
+            None => {
+                return rsx! {
+                    CollectionDetailSkeleton {}
+                };
             }
-        }
+        },
         Some(v) => v,
     };
-
-    let media_data = &*media_future.read();
-    let media_data = match media_data.clone().transpose().show(|error| {
-        rsx! {
-            CollectionError { message: format!("There was an error searching media in the collection: {error}") }
-        }
-    })? {
-        None => {
-            return rsx! {
-                CollectionDetailSkeleton {}
-            }
-        }
-        Some(v) => v,
-    };
-
-    let media_uuids = use_memo(move || match &*media_future.read() {
-        Some(Ok(v)) => Some(
-            v.media
-                .iter()
-                .map(|m| m.media_uuid)
-                .collect::<HashSet<MediaUuid>>(),
-        ),
-        _ => None,
-    });
 
     let collection = collection_data.collection;
-    let media = media_data.media;
 
     let formatted_tags = fold_set(collection.tags.clone())
         .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
 
     let action_button = rsx! {
-        div { style: "display: flex; align-items: center; margin-left: auto;",
+        div { style: "display: flex; align-items: center; gap: var(--space-2); margin-left: auto;",
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -221,7 +218,8 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                             }
                         }
 
-                        div { style: "display: flex; gap: var(--space-2);",
+                        div { style: "display: flex; gap: var(--space-2); align-items: center;",
+                            GridDensityMenu {}
                             button {
                                 class: "btn btn-secondary",
                                 onclick: move |_| {
@@ -244,7 +242,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this collection...",
-                    status: format!("Found {} results", media.len()),
+                    status: paged.pager.status(paged.items.read().len(), "results"),
                     action_button,
                 }
 
@@ -257,7 +255,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                         ("Bulk Edit".to_owned(), rsx! {
                             BulkEditTab {
                                 bulk_edit_signal,
-                                media_uuids,
+                                search_req,
                                 modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::RmFromCollection(collection_uuid())]),
                             }
                         }),
@@ -269,42 +267,28 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
             }
 
             div { class: "scrollable-content",
-                // media grid
-                if media.is_empty() {
-                    div {
-                        class: "empty-state",
-                        style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
-                        div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
-                            "🖼️"
-                        }
-                        h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
-                            "No Media in This Collection"
-                        }
-                        p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
-                            "This collection doesn't contain any media yet. Add some media to get started."
-                        }
-                        button {
-                            class: "btn btn-primary",
-                            style: "margin-top: var(--space-4);",
-                            onclick: move |_| {},
-                            "Add Media to Collection"
-                        }
-                    }
-                } else {
-                    div {
-                        class: "media-grid",
-                        style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
-                        for media in media.iter() {
-                            MediaCard {
-                                key: "{media.media_uuid}",
-                                media_uuid: media.media_uuid,
-                                media: media.media.clone(),
-                                collections: media.collections.clone(),
-                                bulk_edit_signal,
-                                collection_color_signal,
+                MediaGrid {
+                    items: paged.items,
+                    window: paged.window,
+                    pager: paged.pager,
+                    bulk_edit_signal,
+                    collection_color_signal,
+                    collection_uuid: collection_uuid(),
+                    empty: rsx! {
+                        div {
+                            class: "empty-state",
+                            style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                            div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
+                                "🖼️"
+                            }
+                            h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
+                                "No Media in This Collection"
+                            }
+                            p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
+                                "This collection doesn't contain any media yet. Add some media to get started."
                             }
                         }
-                    }
+                    },
                 }
             }
         }

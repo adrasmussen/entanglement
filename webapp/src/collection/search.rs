@@ -2,15 +2,16 @@ use dioxus::prelude::*;
 
 use crate::{
     collection::{COLLECTION_SEARCH_KEY, grid::CollectionGrid},
-    common::storage::*,
+    common::{
+        paging::{Page, use_paged},
+        storage::*,
+    },
     components::{
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
     },
 };
-use api::{
-    collection::*,
-};
+use api::collection::*;
 
 #[component]
 pub fn CollectionSearch() -> Element {
@@ -19,16 +20,28 @@ pub fn CollectionSearch() -> Element {
     let collection_search_signal =
         use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
 
-    let collection_future = use_resource(move || async move {
-        update_signal();
+    let paged = use_paged(
+        move || collection_search_signal.cloned(),
+        update_signal,
+        // cards here load their own data, so heights are not stable on a first frame
+        None,
+        |search: String, offset, limit, with_total| async move {
+            let filter = search.split_whitespace().map(|s| s.to_owned()).collect();
+            let resp = search_collections(&SearchCollectionsReq {
+                filter,
+                limit: Some(limit),
+                offset,
+                with_total,
+            })
+            .await?;
 
-        let filter = collection_search_signal()
-            .split_whitespace()
-            .map(|s| s.to_owned())
-            .collect();
-
-        search_collections(&SearchCollectionsReq { filter }).await
-    });
+            Ok(Page {
+                items: resp.collections,
+                total: resp.total,
+            })
+        },
+    );
+    let pager = paged.pager;
 
     let action_button = rsx! {
         div { style: "margin-left: auto;",
@@ -42,11 +55,7 @@ pub fn CollectionSearch() -> Element {
         }
     };
 
-    let status = match &*collection_future.read() {
-        Some(Ok(resp)) => format!("Found {} collections", resp.collections.len()),
-        Some(Err(_)) => String::from("Error searching collections"),
-        None => String::from("Loading..."),
-    };
+    let status = pager.status(paged.items.read().len(), "collections");
 
     rsx! {
         div { class: "container with-sticky",
@@ -69,21 +78,8 @@ pub fn CollectionSearch() -> Element {
             }
 
             div { class: "scrollable-content",
-                match &*collection_future.read() {
-                    Some(Ok(resp)) => {
-                        rsx! {
-                            CollectionGrid { collections: resp.collections.clone() }
-                        }
-                    }
-                    Some(Err(err)) => rsx! {
-                        div {
-                            class: "error-state",
-                            style: "padding: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4); color: var(--error); text-align: center;",
-                            "Error: {err}"
-                        }
-                    },
-                    None => rsx! {
-                        div {
+                if !(pager.initialized)() {
+                    div {
                             class: "loading-state collections-grid",
                             style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);",
                             for _ in 0..6 {
@@ -118,7 +114,22 @@ pub fn CollectionSearch() -> Element {
                                 }
                             }
                         }
-                    },
+                } else if let (Some(err), true) = ((pager.error)(), paged.items.read().is_empty()) {
+                    div {
+                        class: "error-state",
+                        style: "padding: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4); color: var(--error); text-align: center;",
+                        "Error: {err}"
+                        div {
+                            button {
+                                class: "btn btn-secondary",
+                                style: "margin-top: var(--space-2);",
+                                onclick: move |_| pager.load_more.call(()),
+                                "Retry"
+                            }
+                        }
+                    }
+                } else {
+                    CollectionGrid { collections: paged.items, pager }
                 }
             }
         }

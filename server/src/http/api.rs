@@ -6,7 +6,6 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use tokio::sync::Mutex;
 use tracing::instrument;
 
 use crate::{
@@ -15,6 +14,7 @@ use crate::{
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
     task::msg::TaskMsg,
 };
+use common::db::PageOptions;
 use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
 
 // http api endpoints
@@ -156,7 +156,11 @@ pub(super) async fn search_media(
 
     let result = rx.await??;
 
-    Ok(Json(SearchMediaResp { media: result }).into_response())
+    Ok(Json(SearchMediaResp {
+        media: result.items,
+        total: result.total,
+    })
+    .into_response())
 }
 
 #[instrument(skip_all)]
@@ -569,6 +573,13 @@ pub(super) async fn search_collections(
                 resp: tx,
                 gid,
                 filter: message.filter,
+                // uuid-only like the other search endpoints, so None (used by the
+                // collection pickers) is left unbounded; the collections page pages itself
+                page: PageOptions {
+                    limit: message.limit,
+                    offset: message.offset,
+                    with_total: message.with_total,
+                },
             }
             .into(),
         )
@@ -577,7 +588,8 @@ pub(super) async fn search_collections(
     let result = rx.await??;
 
     Ok(Json(SearchCollectionsResp {
-        collections: result,
+        collections: result.items,
+        total: result.total,
     })
     .into_response())
 }
@@ -609,7 +621,11 @@ pub(super) async fn search_media_in_collection(
 
     let result = rx.await??;
 
-    Ok(Json(SearchMediaInCollectionResp { media: result }).into_response())
+    Ok(Json(SearchMediaInCollectionResp {
+        media: result.items,
+        total: result.total,
+    })
+    .into_response())
 }
 
 #[instrument(skip_all)]
@@ -702,7 +718,11 @@ pub(super) async fn search_media_in_library(
 
     let result = rx.await??;
 
-    Ok(Json(SearchMediaInLibraryResp { media: result }).into_response())
+    Ok(Json(SearchMediaInLibraryResp {
+        media: result.items,
+        total: result.total,
+    })
+    .into_response())
 }
 
 #[instrument(skip_all)]
@@ -810,10 +830,8 @@ pub(super) async fn show_tasks(
 
 // see notes in api/search.rs
 //
-// there are probably a dozen ways to do this better, including moving logic
-// into the database calls, avoiding an expensive copy at the end, and so on
-//
-// TODO -- look into streaming responses and lazy loading in the UI
+// the page is selected in sql (limit/offset from the request, clamped to MAX_PAGE), and
+// then hydrated with a single batched lookup rather than one GetMedia round trip per item
 #[instrument(skip_all)]
 pub(super) async fn batch_search_and_sort(
     State(state): State<Arc<HttpEndpoint>>,
@@ -822,89 +840,68 @@ pub(super) async fn batch_search_and_sort(
 ) -> Result<Response, AppError> {
     let gid = state.groups_for_user(&current_user.uid).await?;
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut req = message.req;
 
-    match message.req {
-        SearchRequest::Media(request) => {
-            state
-                .db_svc_sender
-                .send(
-                    DbMsg::SearchMedia {
-                        resp: tx,
-                        gid,
-                        opts: request.opts,
-                    }
-                    .into(),
-                )
-                .await?;
-        }
-        SearchRequest::Collection(request) => {
-            state
-                .db_svc_sender
-                .send(
-                    DbMsg::SearchMediaInCollection {
-                        resp: tx,
-                        gid,
-                        collection_uuid: request.collection_uuid,
-                        opts: request.opts,
-                    }
-                    .into(),
-                )
-                .await?;
-        }
-        SearchRequest::Library(request) => {
-            state
-                .db_svc_sender
-                .send(
-                    DbMsg::SearchMediaInLibrary {
-                        resp: tx,
-                        gid,
-                        library_uuid: request.library_uuid,
-                        hidden: request.hidden,
-                        opts: request.opts,
-                    }
-                    .into(),
-                )
-                .await?;
-        }
-    };
-
-    let media_uuids = rx.await??;
-
-    let out = Mutex::new(Vec::<SearchResponse>::new());
-
-    for media_uuid in media_uuids {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-
-        state
-            .db_svc_sender
-            .send(
-                DbMsg::GetMedia {
-                    resp: tx,
-                    media_uuid,
-                }
-                .into(),
-            )
-            .await?;
-
-        let media_data = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown media_uuid"))?;
-
-        let mut out = out.lock().await;
-
-        out.push(SearchResponse {
-            media_uuid,
-            media: media_data.0,
-            collections: media_data.1,
-            comments: media_data.2,
-        });
+    {
+        let opts = req.opts_mut();
+        opts.limit = Some(opts.limit.unwrap_or(MAX_PAGE).min(MAX_PAGE));
     }
 
-    let out = out.lock().await;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    let msg = match req {
+        SearchRequest::Media(request) => DbMsg::SearchMedia {
+            resp: tx,
+            gid,
+            opts: request.opts,
+        },
+        SearchRequest::Collection(request) => DbMsg::SearchMediaInCollection {
+            resp: tx,
+            gid,
+            collection_uuid: request.collection_uuid,
+            opts: request.opts,
+        },
+        SearchRequest::Library(request) => DbMsg::SearchMediaInLibrary {
+            resp: tx,
+            gid,
+            library_uuid: request.library_uuid,
+            hidden: request.hidden,
+            opts: request.opts,
+        },
+    };
+
+    state.db_svc_sender.send(msg.into()).await?;
+
+    let page = rx.await??;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .db_svc_sender
+        .send(
+            DbMsg::GetMediaBatch {
+                resp: tx,
+                media_uuids: page.items,
+            }
+            .into(),
+        )
+        .await?;
+
+    // media deleted between the two queries is simply skipped
+    let media = rx
+        .await??
+        .into_iter()
+        .map(|d| SearchResponse {
+            media_uuid: d.media_uuid,
+            media: d.media,
+            collections: d.collections,
+            comments: d.comments,
+        })
+        .collect();
 
     Ok(Json(BatchSearchAndSortResp {
-        media: out.to_vec(),
+        media,
+        total: page.total,
     })
     .into_response())
 }

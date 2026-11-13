@@ -47,20 +47,29 @@ if [ ! -f "$CERT_DIR/client.crt" ] || [ ! -f "$CERT_DIR/client.key" ]; then
         -out "$CERT_DIR/client.crt" -days 3650 -sha256
 
     rm -f "$CERT_DIR/client.csr"
+    echo "generated dev client cert (CN=dev)"
+fi
 
-    # convenience bundle for importing into a browser/OS keychain; empty
-    # passphrase is fine, this is throwaway local-dev material
+# convenience bundle for importing into a browser/OS keychain. the export password
+# comes from ENTG_CLIENT_P12_PASSWORD in the gitignored ./.env and is passed to
+# openssl via the environment (not argv). this is regenerated whenever client.p12
+# is missing, so to change the password: update .env, delete client.p12, and run
+# `docker compose up certgen` -- the client key/cert themselves are unchanged.
+if [ ! -f "$CERT_DIR/client.p12" ]; then
+    : "${ENTG_CLIENT_P12_PASSWORD:?ENTG_CLIENT_P12_PASSWORD must be set (see .env.example)}"
+    export ENTG_CLIENT_P12_PASSWORD
+
     openssl pkcs12 -export -legacy \
         -inkey "$CERT_DIR/client.key" -in "$CERT_DIR/client.crt" \
         -certfile "$CERT_DIR/ca.crt" \
-        -out "$CERT_DIR/client.p12" -passout pass:devclientcert \
+        -out "$CERT_DIR/client.p12" -passout env:ENTG_CLIENT_P12_PASSWORD \
         2>/dev/null || \
     openssl pkcs12 -export \
         -inkey "$CERT_DIR/client.key" -in "$CERT_DIR/client.crt" \
         -certfile "$CERT_DIR/ca.crt" \
-        -out "$CERT_DIR/client.p12" -passout pass:devclientcert
+        -out "$CERT_DIR/client.p12" -passout env:ENTG_CLIENT_P12_PASSWORD
 
-    echo "generated dev client cert (CN=dev) + client.p12 (password: devclientcert)"
+    echo "generated client.p12 (password: ENTG_CLIENT_P12_PASSWORD in .env)"
 fi
 
 chmod 644 "$CERT_DIR/ca.crt" "$CERT_DIR/server.crt" "$CERT_DIR/client.crt" "$CERT_DIR/client.p12" 2>/dev/null || true

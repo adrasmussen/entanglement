@@ -15,46 +15,121 @@ use crate::{
     media::{Media, MediaUuid, SearchMediaReq},
 };
 
+// paging limits
+//
+// PAGE_SIZE is what the webapp requests per infinite-scroll page (divisible by the
+// common 2/3/4/5/6 column grid layouts), while MAX_PAGE is the server-side clamp for
+// the endpoints that hydrate full media records (BatchSearchAndSort, SearchCollections)
+pub const PAGE_SIZE: u64 = 60;
+pub const MAX_PAGE: u64 = 200;
+
 // search options
+//
+// limit = None means "no limit"; with_total asks the backend to run an additional
+// COUNT(*) over the filtered set (without ORDER/LIMIT), which the webapp only does for
+// the first page of a search so that subsequent pages stay cheap top-N index walks
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchOptions {
     pub filter: SearchFilter,
     pub order: SortMethod,
     pub limit: Option<u64>,
     pub offset: u64,
+    #[serde(default)]
+    pub with_total: bool,
+}
+
+// sql fragments for a postgres search, with every piece of user input bound as a
+// numbered parameter -- callers append these to their base query (which must end in a
+// WHERE clause) and push the parameters in the order: filter_param (if Some), limit, offset
+#[derive(Clone, Debug)]
+pub struct PgSearchSql {
+    pub filter_sql: String,
+    pub filter_param: Option<String>,
+    pub order_sql: &'static str,
+    pub page_sql: String,
+    pub limit: Option<i64>,
+    pub offset: i64,
+}
+
+// sql fragments for a mariadb search, using named parameters :filter, :limit, :offset
+#[derive(Clone, Debug)]
+pub struct MariaSearchSql {
+    pub filter_sql: String,
+    pub filter_param: String,
+    pub order_sql: &'static str,
+    pub page_sql: &'static str,
+    pub limit: u64,
+    pub offset: u64,
 }
 
 impl SearchOptions {
-    pub fn format_postgres(&self, ts_col: &str) -> String {
-        let filter = self.filter.format_postgres(ts_col);
-
-        let order = match self.order {
-            SortMethod::DateAsc => "ORDER BY media.date ASC",
-            SortMethod::DateDesc => "ORDER BY media.date DESC",
-            SortMethod::Path => "ORDER by media.path ASC",
-        };
-
-        let limit = self.limit.map_or("".to_owned(), |l| format!("LIMIT {l}"));
-
-        format!(" {filter} {order} {limit} OFFSET {};", self.offset)
+    // the media_uuid tiebreaker makes the ordering total, which offset paging depends on --
+    // media.date is a varchar with many duplicates, and without it rows sharing a date can
+    // repeat or vanish between pages.  these match the ordered indexes in db/schema.sql
+    fn order_sql(&self) -> &'static str {
+        match self.order {
+            SortMethod::DateAsc => " ORDER BY media.date ASC, media.media_uuid ASC",
+            SortMethod::DateDesc => " ORDER BY media.date DESC, media.media_uuid DESC",
+            SortMethod::Path => " ORDER BY media.path ASC, media.media_uuid ASC",
+        }
     }
 
-    pub fn format_mariadb(&self, cols: &str) -> (String, String) {
-        let (sql, param) = self.filter.format_mariadb(cols);
+    // first_param is the $N index of the first placeholder this function may use, i.e.
+    // one more than the number of parameters already used by the base query
+    pub fn postgres_sql(&self, ts_col: &str, first_param: usize) -> PgSearchSql {
+        let (filter_sql, filter_param) = self.filter.format_postgres(ts_col, first_param);
 
-        let order = match self.order {
-            SortMethod::DateAsc => "ORDER BY media.date ASC",
-            SortMethod::DateDesc => "ORDER BY media.date DESC",
-            SortMethod::Path => "ORDER by media.path ASC",
-        };
+        let next = first_param + usize::from(filter_param.is_some());
 
-        let limit = self.limit.map_or("".to_owned(), |l| format!("LIMIT {l}"));
-
-        (
-            format!(" {sql} {order} {limit} OFFSET {};", self.offset),
-            param,
-        )
+        PgSearchSql {
+            filter_sql,
+            filter_param,
+            order_sql: self.order_sql(),
+            // LIMIT NULL is equivalent to no limit in postgres
+            page_sql: format!(" LIMIT ${} OFFSET ${}", next, next + 1),
+            limit: self.limit.map(clamp_i64),
+            offset: clamp_i64(self.offset),
+        }
     }
+
+    pub fn mariadb_sql(&self, cols: &str) -> MariaSearchSql {
+        let (filter_sql, filter_param) = self.filter.format_mariadb(cols);
+
+        MariaSearchSql {
+            filter_sql,
+            filter_param,
+            order_sql: self.order_sql(),
+            page_sql: " LIMIT :limit OFFSET :offset",
+            // mariadb has no LIMIT NULL/ALL; the documented idiom is the max u64
+            limit: self.limit.unwrap_or(u64::MAX),
+            offset: self.offset,
+        }
+    }
+}
+
+fn clamp_i64(v: u64) -> i64 {
+    i64::try_from(v).unwrap_or(i64::MAX)
+}
+
+// escape LIKE wildcards so that user input is matched literally; both postgres and
+// mariadb use backslash as the default LIKE escape character
+pub fn escape_like(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 2);
+    for c in input.chars() {
+        if matches!(c, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+// quote a single term as a tsquery lexeme so that operator characters (& | ! ( ) : *)
+// inside user input are treated as text rather than tsquery syntax; embedded quotes and
+// backslashes must be doubled per the tsvector/tsquery input rules
+fn quote_tsquery_lexeme(term: &str) -> String {
+    let escaped = term.replace('\\', "\\\\").replace('\'', "''");
+    format!("'{escaped}'")
 }
 
 // this struct is a first attempt at making a more generalized search mechanism that is
@@ -100,48 +175,55 @@ impl Display for SearchFilter {
 }
 
 impl SearchFilter {
-    // postgres formatting for  queries
+    // postgres formatting for queries
     //
     // https://www.postgresql.org/docs/current/textsearch-controls.html
-    fn format_postgres(&self, ts_col: &str) -> String {
+    //
+    // returns (sql, param) where sql references the param as $idx; user input is never
+    // interpolated into the sql text itself
+    fn format_postgres(&self, ts_col: &str, idx: usize) -> (String, Option<String>) {
+        let tsquery = |filter: &HashSet<String>, op: &str| -> Option<String> {
+            let terms = filter
+                .iter()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .sorted()
+                .map(quote_tsquery_lexeme)
+                .join(op);
+
+            (!terms.is_empty()).then_some(terms)
+        };
+
         match self {
-            Self::SubstringAny { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
-            }
-
-            Self::SubstringAll { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" & ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
-            }
-
-            Self::Fulltext { filter } => {
-                if filter.is_empty() {
-                    return String::new();
-                }
-
-                format!(" AND {ts_col} @@ websearch_to_tsquery('english', '{filter}')")
-            }
-
             // use the fulltext search as keywords
-            Self::Keyword { filter } => {
-                if filter.is_empty() {
-                    return String::new();
+            Self::SubstringAny { filter } | Self::Keyword { filter } => {
+                match tsquery(filter, " | ") {
+                    Some(q) => (
+                        format!(" AND {ts_col} @@ to_tsquery('english', ${idx})"),
+                        Some(q),
+                    ),
+                    None => (String::new(), None),
+                }
+            }
+
+            Self::SubstringAll { filter } => match tsquery(filter, " & ") {
+                Some(q) => (
+                    format!(" AND {ts_col} @@ to_tsquery('english', ${idx})"),
+                    Some(q),
+                ),
+                None => (String::new(), None),
+            },
+
+            // websearch_to_tsquery never raises on malformed input
+            Self::Fulltext { filter } => {
+                if filter.trim().is_empty() {
+                    return (String::new(), None);
                 }
 
-                let ts_query = filter.iter().map(|s| s.to_owned()).join(" | ");
-
-                format!(" AND {ts_col} @@ to_tsquery('english', '{ts_query}')")
+                (
+                    format!(" AND {ts_col} @@ websearch_to_tsquery('english', ${idx})"),
+                    Some(filter.clone()),
+                )
             }
         }
     }
@@ -239,14 +321,31 @@ pub enum SortMethod {
 // the search requests causes the reverse proxy (apache) to fall over, as there is no
 // throttling or other flow control from the frontend
 //
-// unfortunately, the current implementation isn't particularly performant... and this will
-// generally be one of the most important functions in the system.  thus, we will need to
-// think very carefully about the architecture and optimizations involved.
+// the server pages the uuid search in sql (limit/offset from the inner request's opts,
+// clamped to MAX_PAGE) and hydrates only that page with a single batched media lookup
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SearchRequest {
     Media(SearchMediaReq),
     Collection(SearchMediaInCollectionReq),
     Library(SearchMediaInLibraryReq),
+}
+
+impl SearchRequest {
+    pub fn opts(&self) -> &SearchOptions {
+        match self {
+            Self::Media(r) => &r.opts,
+            Self::Collection(r) => &r.opts,
+            Self::Library(r) => &r.opts,
+        }
+    }
+
+    pub fn opts_mut(&mut self) -> &mut SearchOptions {
+        match self {
+            Self::Media(r) => &mut r.opts,
+            Self::Collection(r) => &mut r.opts,
+            Self::Library(r) => &mut r.opts,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -267,4 +366,157 @@ pub struct BatchSearchAndSortReq {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BatchSearchAndSortResp {
     pub media: Vec<SearchResponse>,
+    // only populated when the request set opts.with_total
+    #[serde(default)]
+    pub total: Option<u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set(v: &[&str]) -> HashSet<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn opts(filter: SearchFilter) -> SearchOptions {
+        SearchOptions {
+            filter,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn empty_filter_has_no_param() {
+        let q = opts(SearchFilter::default()).postgres_sql("ts", 2);
+        assert_eq!(q.filter_sql, "");
+        assert_eq!(q.filter_param, None);
+        assert_eq!(q.page_sql, " LIMIT $2 OFFSET $3");
+        assert_eq!(q.limit, None);
+        assert_eq!(q.offset, 0);
+
+        let q = opts(SearchFilter::SubstringAny {
+            filter: set(&["", "  "]),
+        })
+        .postgres_sql("ts", 2);
+        assert_eq!(q.filter_param, None);
+
+        let q = opts(SearchFilter::Fulltext {
+            filter: "   ".into(),
+        })
+        .postgres_sql("ts", 2);
+        assert_eq!(q.filter_param, None);
+    }
+
+    #[test]
+    fn placeholders_are_numbered_after_filter() {
+        let q = SearchOptions {
+            filter: SearchFilter::SubstringAll {
+                filter: set(&["cat"]),
+            },
+            limit: Some(60),
+            offset: 120,
+            ..Default::default()
+        }
+        .postgres_sql("media.ts_vec", 3);
+
+        assert_eq!(
+            q.filter_sql,
+            " AND media.ts_vec @@ to_tsquery('english', $3)"
+        );
+        assert_eq!(q.page_sql, " LIMIT $4 OFFSET $5");
+        assert_eq!(q.limit, Some(60));
+        assert_eq!(q.offset, 120);
+    }
+
+    #[test]
+    fn injection_attempts_never_reach_sql_text() {
+        let evil = "'); DROP TABLE media; --";
+        for filter in [
+            SearchFilter::SubstringAny {
+                filter: set(&[evil]),
+            },
+            SearchFilter::SubstringAll {
+                filter: set(&[evil]),
+            },
+            SearchFilter::Keyword {
+                filter: set(&[evil]),
+            },
+            SearchFilter::Fulltext {
+                filter: evil.into(),
+            },
+        ] {
+            let q = opts(filter).postgres_sql("ts", 2);
+            assert!(!q.filter_sql.contains("DROP"), "{}", q.filter_sql);
+            assert!(!q.filter_sql.contains(evil));
+            assert!(q.filter_param.unwrap().contains("DROP"));
+
+            let m = opts(SearchFilter::Fulltext {
+                filter: evil.into(),
+            })
+            .mariadb_sql("cols");
+            assert!(!m.filter_sql.contains("DROP"));
+        }
+    }
+
+    #[test]
+    fn tsquery_terms_are_quoted_lexemes() {
+        let q = opts(SearchFilter::SubstringAny {
+            filter: set(&["it's", "a&!(b", "back\\slash"]),
+        })
+        .postgres_sql("ts", 2);
+
+        // terms are sorted for deterministic output
+        assert_eq!(
+            q.filter_param.as_deref(),
+            Some("'a&!(b' | 'back\\\\slash' | 'it''s'")
+        );
+
+        let q = opts(SearchFilter::SubstringAll {
+            filter: set(&["x", "y"]),
+        })
+        .postgres_sql("ts", 2);
+        assert_eq!(q.filter_param.as_deref(), Some("'x' & 'y'"));
+    }
+
+    #[test]
+    fn order_has_uuid_tiebreaker() {
+        for order in [SortMethod::DateAsc, SortMethod::DateDesc, SortMethod::Path] {
+            let q = SearchOptions {
+                order,
+                ..Default::default()
+            }
+            .postgres_sql("ts", 1);
+            assert!(q.order_sql.ends_with("media.media_uuid ASC") || q.order_sql.ends_with("media.media_uuid DESC"));
+        }
+    }
+
+    #[test]
+    fn huge_limits_are_clamped() {
+        let q = SearchOptions {
+            limit: Some(u64::MAX),
+            offset: u64::MAX,
+            ..Default::default()
+        }
+        .postgres_sql("ts", 1);
+        assert_eq!(q.limit, Some(i64::MAX));
+        assert_eq!(q.offset, i64::MAX);
+
+        let m = SearchOptions::default().mariadb_sql("cols");
+        assert_eq!(m.limit, u64::MAX);
+    }
+
+    #[test]
+    fn like_wildcards_are_escaped() {
+        assert_eq!(escape_like("100%_off\\"), "100\\%\\_off\\\\");
+        assert_eq!(escape_like("plain"), "plain");
+    }
+
+    #[test]
+    fn with_total_defaults_false_when_missing() {
+        let o: SearchOptions =
+            serde_json::from_str(r#"{"filter":{"SubstringAny":{"filter":[]}},"order":"DateDesc","limit":null,"offset":0}"#)
+                .unwrap();
+        assert!(!o.with_total);
+    }
 }

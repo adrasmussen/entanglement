@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use api::{collection::*, comment::*, library::*, media::*, search::SearchOptions};
-use common::db::{MediaByCHash, MediaByPath};
+use common::db::{MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage};
 
 use crate::service::*;
 
@@ -22,6 +22,10 @@ pub enum DbMsg {
         #[allow(clippy::type_complexity)]
         resp: EsmResp<Option<(Media, Vec<CollectionUuid>, Vec<CommentUuid>)>>,
         media_uuid: MediaUuid,
+    },
+    GetMediaBatch {
+        resp: EsmResp<Vec<MediaDetails>>,
+        media_uuids: Vec<MediaUuid>,
     },
     GetMediaUuids {
         resp: EsmResp<Vec<MediaUuid>>,
@@ -48,7 +52,7 @@ pub enum DbMsg {
         mtime: u64,
     },
     SearchMedia {
-        resp: EsmResp<Vec<MediaUuid>>,
+        resp: EsmResp<SearchPage<MediaUuid>>,
         gid: HashSet<String>,
         opts: SearchOptions,
     },
@@ -107,12 +111,13 @@ pub enum DbMsg {
         collection_uuid: CollectionUuid,
     },
     SearchCollections {
-        resp: EsmResp<Vec<CollectionUuid>>,
+        resp: EsmResp<SearchPage<CollectionUuid>>,
         gid: HashSet<String>,
         filter: String,
+        page: PageOptions,
     },
     SearchMediaInCollection {
-        resp: EsmResp<Vec<MediaUuid>>,
+        resp: EsmResp<SearchPage<MediaUuid>>,
         gid: HashSet<String>,
         collection_uuid: CollectionUuid,
         opts: SearchOptions,
@@ -138,7 +143,7 @@ pub enum DbMsg {
         filter: String,
     },
     SearchMediaInLibrary {
-        resp: EsmResp<Vec<MediaUuid>>,
+        resp: EsmResp<SearchPage<MediaUuid>>,
         gid: HashSet<String>,
         library_uuid: LibraryUuid,
         hidden: Option<bool>,
