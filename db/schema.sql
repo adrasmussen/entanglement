@@ -101,6 +101,12 @@ CREATE INDEX "idx_media_visible_path" ON "media" ("path", "media_uuid") WHERE "h
 -- library detail (hidden filter optional); also covers lookups by library_uuid alone
 CREATE INDEX "idx_media_library_date" ON "media" ("library_uuid", "date" DESC, "media_uuid" DESC);
 
+-- count queries (see db/migrations/2026-11-13_count_indexes.sql): index-only library
+-- counts with any hidden filter, and visible-media lookups by uuid for collection counts
+CREATE INDEX "idx_media_library_hidden" ON "media" ("library_uuid", "hidden");
+
+CREATE INDEX "idx_media_visible_uuid" ON "media" ("media_uuid") WHERE "hidden" = FALSE;
+
 CREATE INDEX "idx_media_path" ON "media" ("path");
 
 CREATE INDEX "idx_media_chash" ON "media" ("chash");
