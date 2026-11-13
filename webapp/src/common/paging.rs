@@ -12,7 +12,7 @@ use futures_util::stream::{FuturesUnordered, StreamExt};
 use tracing::warn;
 
 use crate::common::grid_cache::{
-    CacheEntry, EditsSince, GRID_CACHE, LayoutKey, MEDIA_EDITS, WindowState, reset_window,
+    CacheEntry, CacheKey, EditsSince, GRID_CACHE, LayoutKey, MEDIA_EDITS, WindowState, reset_window,
 };
 use crate::common::hooks::use_on_write;
 use api::{
@@ -136,7 +136,8 @@ pub struct Pager {
 }
 
 pub struct Paged<T: 'static> {
-    pub items: Signal<Vec<T>>,
+    // shared with GRID_CACHE rather than copied into it (see PagedState::edit_items)
+    pub items: Signal<Rc<Vec<T>>>,
     // which cards of `items` the grid has mounted (see MediaGrid)
     pub window: Signal<WindowState>,
     pub pager: Pager,
@@ -393,11 +394,33 @@ fn hash_key<K: Hash>(key: &K) -> u64 {
 // a grid restored from the cache, with the reset key it was stored under
 struct Restored<K, T> {
     key: K,
-    items: Vec<T>,
+    items: Rc<Vec<T>>,
     total: Option<u64>,
     tail: Tail,
     edit_seq: u64,
     window: WindowState,
+}
+
+// the cache entry for `key`, if there is one (of this kind of item)
+fn restore<K: Hash, T: PageItem>(scope: &'static str, key: K) -> Option<Restored<K, T>> {
+    let entry = GRID_CACHE.write().get((scope, hash_key(&key)))?;
+    Some(Restored {
+        key,
+        items: entry.items.downcast::<Vec<T>>().ok()?,
+        total: entry.total,
+        tail: entry.tail,
+        edit_seq: entry.edit_seq,
+        window: entry.window.restored(LayoutKey::current()),
+    })
+}
+
+// what is kept of a restore after the first render, for use_reconcile to catch up on the
+// edits made since.  not the items: the signal and the cache are to be the only owners of
+// the list (see PagedState::edit_items)
+#[derive(Clone)]
+struct RestoredFrom<K> {
+    key: K,
+    edit_seq: u64,
 }
 
 // the signals behind one paged grid.  every fetch belongs to a generation, and a reset or a
@@ -405,7 +428,7 @@ struct Restored<K, T> {
 struct PagedState<K: 'static, T: 'static> {
     scope: Option<&'static str>,
     key: Signal<Option<K>>,
-    items: Signal<Vec<T>>,
+    items: Signal<Rc<Vec<T>>>,
     window: Signal<WindowState>,
     total: Signal<Option<u64>>,
     loading: Signal<bool>,
@@ -425,11 +448,25 @@ impl<K: 'static, T: 'static> Clone for PagedState<K, T> {
 
 impl<K: 'static, T: 'static> Copy for PagedState<K, T> {}
 
-fn use_paged_state<K: Clone + 'static, T: PageItem>(
+// the state, restored from the cache if possible.  that happens synchronously, before
+// anything renders, so that the first frame is already the full height grid
+fn use_paged_state<K: Clone + Hash + 'static, T: PageItem>(
     scope: Option<&'static str>,
-    restored: Option<&Restored<K, T>>,
-) -> PagedState<K, T> {
-    PagedState {
+    reset_key: &mut impl FnMut() -> K,
+) -> (PagedState<K, T>, Option<RestoredFrom<K>>) {
+    // only the first render restores, which is also the only one that runs the signal
+    // initializers below
+    let mut restored = None;
+    let restored_from = use_hook(|| {
+        restored = scope.and_then(|scope| restore::<K, T>(scope, reset_key()));
+        restored.as_ref().map(|r| RestoredFrom {
+            key: r.key.clone(),
+            edit_seq: r.edit_seq,
+        })
+    });
+    let restored = restored.as_ref();
+
+    let state = PagedState {
         scope,
         key: use_signal(|| restored.map(|r| r.key.clone())),
         items: use_signal(|| restored.map(|r| r.items.clone()).unwrap_or_default()),
@@ -445,7 +482,8 @@ fn use_paged_state<K: Clone + 'static, T: PageItem>(
         error: use_signal(|| None),
         generation: use_signal(|| 0),
         synced_seq: use_signal(|| restored.map(|r| r.edit_seq).unwrap_or(0)),
-    }
+    };
+    (state, restored_from)
 }
 
 impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
@@ -502,18 +540,21 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         self.loading.set(false);
     }
 
-    // write-through to the cache
+    fn cache_key(&self) -> Option<CacheKey> {
+        let scope = self.scope?;
+        let key = self.key.peek();
+        Some((scope, hash_key(key.as_ref()?)))
+    }
+
+    // write-through to the cache, which shares the item list instead of copying it
     fn store(&self) {
-        let Some(scope) = self.scope else {
-            return;
-        };
-        let Some(k) = self.key.peek().clone() else {
+        let Some(cache_key) = self.cache_key() else {
             return;
         };
         GRID_CACHE.write().put(
-            (scope, hash_key(&k)),
+            cache_key,
             CacheEntry {
-                items: Rc::new(self.items.peek().clone()),
+                items: self.items.peek().clone(),
                 total: *self.total.peek(),
                 tail: *self.tail.peek(),
                 edit_seq: *self.synced_seq.peek(),
@@ -522,10 +563,21 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         );
     }
 
+    // change the items in place.  the cache entry shares the list (see store), and has to
+    // let go of it first, or Rc::make_mut would copy the whole list; every caller stores
+    // again right after
+    fn edit_items<R>(&mut self, edit: impl FnOnce(&mut Vec<T>) -> R) -> R {
+        if let Some(cache_key) = self.cache_key() {
+            GRID_CACHE.write().remove(cache_key);
+        }
+        edit(Rc::make_mut(&mut self.items.write()))
+    }
+
     // forget everything for a new key
     fn clear(&mut self, key: K) {
         self.key.set(Some(key));
-        self.items.write().clear();
+        // a new list, since the cache may still have the old key's one
+        self.items.set(Rc::default());
         reset_window(self.window);
         self.total.set(None);
         self.tail.set(Tail::Open);
@@ -540,7 +592,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
 
         let last = is_last_page(PAGE_SIZE, page_len, list.len(), page.total);
         self.tail.set(if last { Tail::Ended } else { Tail::Open });
-        self.items.set(list);
+        self.items.set(Rc::new(list));
         self.total.set(page.total);
         self.synced_seq.set(seq);
         self.store();
@@ -555,11 +607,7 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             self.total.set(Some(t));
         }
         let page_len = page.row_count();
-        let (added, loaded) = {
-            let mut list = self.items.write();
-            let added = append_dedup(&mut list, page.items);
-            (added, list.len())
-        };
+        let (added, loaded) = self.edit_items(|list| (append_dedup(list, page.items), list.len()));
 
         let stalled = *self.tail.peek() == Tail::Stalled;
         let step = after_load(page_len, added, loaded, total, stalled);
@@ -589,12 +637,13 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
         if let Some(t) = fresh.total {
             self.total.set(Some(t));
         }
-        self.items.set(fresh.items);
+        self.items.set(Rc::new(fresh.items));
         self.tail.set(Tail::after_refresh(fresh.done, cause));
         self.synced_seq.set(seq);
         self.store();
     }
 
+    // see edit_items about storing afterwards
     fn apply_fix(&mut self, fix: Fix<T>) {
         match fix {
             Fix::Patch(key, new) => self.patch_item(&key, new),
@@ -603,21 +652,21 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
     }
 
     fn patch_item(&mut self, key: &T::Key, new: T) {
-        let mut list = self.items.write();
-        if let Some(slot) = list.iter_mut().find(|i| i.page_key() == *key) {
-            *slot = new;
-        }
+        self.edit_items(|list| {
+            if let Some(slot) = list.iter_mut().find(|i| i.page_key() == *key) {
+                *slot = new;
+            }
+        });
     }
 
     fn remove_item(&mut self, key: &T::Key) {
-        let removed_at = {
-            let mut list = self.items.write();
+        let removed_at = self.edit_items(|list| {
             let pos = list.iter().position(|i| i.page_key() == *key);
             if let Some(pos) = pos {
                 list.remove(pos);
             }
             pos
-        };
+        });
         if let Some(pos) = removed_at {
             self.total.with_mut(|t| {
                 *t = t.map(|v| v.saturating_sub(1));
@@ -628,32 +677,6 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
             }
         }
     }
-}
-
-// restore synchronously, before anything renders, so that the first frame is already the
-// full height grid
-fn use_restore<K, T>(
-    scope: Option<&'static str>,
-    reset_key: &mut impl FnMut() -> K,
-) -> Option<Rc<Restored<K, T>>>
-where
-    K: Clone + Hash + 'static,
-    T: PageItem,
-{
-    use_hook(|| {
-        let scope = scope?;
-        let key = reset_key();
-        let entry = GRID_CACHE.write().get((scope, hash_key(&key)))?;
-        let items = entry.items.downcast::<Vec<T>>().ok()?;
-        Some(Rc::new(Restored {
-            key,
-            items: (*items).clone(),
-            total: entry.total,
-            tail: entry.tail,
-            edit_seq: entry.edit_seq,
-            window: entry.window.restored(LayoutKey::current()),
-        }))
-    })
 }
 
 // the windowing state is saved as it changes
@@ -743,7 +766,7 @@ where
 fn use_reconcile<K, T>(
     state: PagedState<K, T>,
     cache: Option<Rc<CacheCfg<K, T>>>,
-    restored: Option<Rc<Restored<K, T>>>,
+    restored: Option<RestoredFrom<K>>,
     refresh: Callback<RefreshCause>,
 ) where
     K: Clone + Hash + 'static,
@@ -867,8 +890,7 @@ where
     let cache = use_hook(|| cache.map(Rc::new));
     let scope = cache.as_ref().map(|c| c.scope);
 
-    let restored = use_restore(scope, &mut reset_key);
-    let state = use_paged_state(scope, restored.as_deref());
+    let (state, restored) = use_paged_state(scope, &mut reset_key);
 
     use_window_sync(state);
     use_reset_on_key(state, reset_key, fetch.clone());

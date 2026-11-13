@@ -344,7 +344,7 @@ fn MediaGridSkeleton() -> Element {
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MediaGridProps {
-    items: Signal<Vec<SearchResponse>>,
+    items: Signal<Rc<Vec<SearchResponse>>>,
     // which of the items are mounted, see KEEP_ABOVE
     window: Signal<WindowState>,
     pager: Pager,

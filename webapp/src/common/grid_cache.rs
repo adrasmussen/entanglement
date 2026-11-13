@@ -131,7 +131,8 @@ pub fn chunk_size(cols: usize) -> usize {
 
 #[derive(Clone)]
 pub struct CacheEntry {
-    // a Vec<T> for whatever T the grid pages (downcast on restore)
+    // a Vec<T> for whatever T the grid pages (downcast on restore), shared with the grid's
+    // items signal while it is mounted
     pub items: Rc<dyn Any>,
     pub total: Option<u64>,
     pub tail: Tail,
@@ -161,6 +162,10 @@ impl GridCache {
         if self.entries.len() > MAX_ENTRIES {
             self.entries.remove(0);
         }
+    }
+
+    pub fn remove(&mut self, key: CacheKey) {
+        self.entries.retain(|(k, _)| *k != key);
     }
 
     // only the windowing part changes; entries that do not exist yet are left alone
@@ -296,6 +301,27 @@ mod tests {
         assert_eq!(cache.keys().len(), 2);
         assert_eq!(tag(&cache.get(("a", 1)).unwrap()), 3);
         assert_eq!(tag(&cache.get(("b", 1)).unwrap()), 2);
+    }
+
+    #[test]
+    fn remove_lets_go_of_the_shared_items() {
+        let mut cache = GridCache::default();
+        let mut items = Rc::new(vec![1u32, 2]);
+        cache.put(
+            ("a", 1),
+            CacheEntry {
+                items: items.clone(),
+                ..entry(0, 0)
+            },
+        );
+        cache.put(("a", 2), entry(2, 0));
+        assert_eq!(Rc::strong_count(&items), 2);
+
+        // what PagedState::edit_items relies on to change the list without copying it
+        cache.remove(("a", 1));
+        assert_eq!(Rc::strong_count(&items), 1);
+        Rc::get_mut(&mut items).unwrap().push(3);
+        assert_eq!(cache.keys(), vec![("a", 2)]);
     }
 
     #[test]
