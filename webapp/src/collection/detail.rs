@@ -7,8 +7,9 @@ use crate::{
     Route,
     collection::MEDIA_SEARCH_KEY,
     common::{
-        paging::use_paged,
-        search::{fetch_media_page, search_opts},
+        grid_cache::COLLECTION_META,
+        paging::{CacheCfg, use_paged},
+        search::{GridScope, fetch_media_page, reconcile_media, search_opts},
         storage::*,
     },
     components::{
@@ -19,7 +20,12 @@ use crate::{
         sidebar::AdvancedSidebar,
     },
 };
-use api::{UuidSource, collection::*, fold_set, search::SearchRequest};
+use api::{
+    UuidSource,
+    collection::*,
+    fold_set,
+    search::{SearchRequest, SearchResponse},
+};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionDetailProps {
@@ -91,7 +97,13 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         update_signal();
         let collection_uuid = collection_uuid();
 
-        get_collection(&GetCollectionReq { collection_uuid }).await
+        let resp = get_collection(&GetCollectionReq { collection_uuid }).await;
+        if let Ok(resp) = &resp {
+            COLLECTION_META
+                .write()
+                .insert(collection_uuid, resp.clone());
+        }
+        resp
     });
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
@@ -103,6 +115,12 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     let paged = use_paged(
         move || (collection_uuid(), media_search_signal()),
         update_signal,
+        Some(CacheCfg::new(
+            "collection",
+            |(collection_uuid, search): (CollectionUuid, String), old: SearchResponse| async move {
+                reconcile_media(GridScope::Collection(collection_uuid), &search, old).await
+            },
+        )),
         |(collection_uuid, search): (CollectionUuid, String), offset, limit, with_total| async move {
             fetch_media_page(
                 SearchRequest::Collection(SearchMediaInCollectionReq {
@@ -133,11 +151,16 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
             CollectionError { message: format!("There was an error fetching the collection metadata: {error}") }
         }
     })? {
-        None => {
-            return rsx! {
-                CollectionDetailSkeleton {}
+        // remembered from the last visit, so that coming back does not flash a skeleton (and
+        // shrink the page under the restored scroll position); the resource refreshes it
+        None => match COLLECTION_META.peek().get(&collection_uuid()).cloned() {
+            Some(v) => v,
+            None => {
+                return rsx! {
+                    CollectionDetailSkeleton {}
+                };
             }
-        }
+        },
         Some(v) => v,
     };
 
@@ -246,6 +269,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
             div { class: "scrollable-content",
                 MediaGrid {
                     items: paged.items,
+                    window: paged.window,
                     pager: paged.pager,
                     bulk_edit_signal,
                     collection_color_signal,

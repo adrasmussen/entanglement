@@ -4,8 +4,8 @@ use dioxus::prelude::*;
 
 use crate::{
     common::{
-        paging::use_paged,
-        search::{fetch_media_page, search_opts},
+        paging::{CacheCfg, use_paged},
+        search::{GridScope, fetch_media_page, reconcile_media, search_opts},
         storage::try_local_storage,
     },
     components::{
@@ -17,7 +17,10 @@ use crate::{
     },
     gallery::MEDIA_SEARCH_KEY,
 };
-use api::{media::SearchMediaReq, search::SearchRequest};
+use api::{
+    media::SearchMediaReq,
+    search::{SearchRequest, SearchResponse},
+};
 
 #[component]
 pub fn GallerySearch() -> Element {
@@ -31,6 +34,12 @@ pub fn GallerySearch() -> Element {
     let paged = use_paged(
         move || media_search_signal.cloned(),
         update_signal,
+        Some(CacheCfg::new(
+            "gallery",
+            |search: String, old: SearchResponse| async move {
+                reconcile_media(GridScope::Gallery, &search, old).await
+            },
+        )),
         |search: String, offset, limit, with_total| async move {
             fetch_media_page(
                 SearchRequest::Media(SearchMediaReq {
@@ -114,6 +123,7 @@ pub fn GallerySearch() -> Element {
             div { class: "scrollable-content",
                 MediaGrid {
                     items: paged.items,
+                    window: paged.window,
                     pager: paged.pager,
                     bulk_edit_signal,
                     collection_color_signal,
