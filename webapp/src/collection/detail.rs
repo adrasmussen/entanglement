@@ -13,7 +13,7 @@ use crate::{
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_grid::{GridDensityToggle, MediaGrid},
+        media_grid::{GridDensityMenu, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -148,7 +148,6 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; gap: var(--space-2); margin-left: auto;",
-            GridDensityToggle {}
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -196,7 +195,8 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                             }
                         }
 
-                        div { style: "display: flex; gap: var(--space-2);",
+                        div { style: "display: flex; gap: var(--space-2); align-items: center;",
+                            GridDensityMenu {}
                             button {
                                 class: "btn btn-secondary",
                                 onclick: move |_| {

@@ -10,7 +10,7 @@ use crate::{
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
-        media_grid::{GridDensityToggle, MediaGrid},
+        media_grid::{GridDensityMenu, MediaGrid},
         modal::ModalBox,
         search::SearchBar,
         sidebar::AdvancedSidebar,
@@ -52,7 +52,6 @@ pub fn GallerySearch() -> Element {
 
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; gap: var(--space-2);",
-            GridDensityToggle {}
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -79,8 +78,9 @@ pub fn GallerySearch() -> Element {
             div { class: "sticky-header",
                 div {
                     class: "page-header",
-                    style: "margin-bottom: var(--space-4);",
+                    style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
                     p { "Browse and search all accessible media" }
+                    GridDensityMenu {}
                 }
 
                 SearchBar {

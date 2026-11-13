@@ -38,23 +38,32 @@ impl GridDensity {
 pub static GRID_DENSITY: GlobalSignal<GridDensity> =
     Signal::global(|| try_local_storage(GRID_DENSITY_KEY));
 
-// segmented control for the page toolbars
+// compact icon menu for the page headers: a grid icon that opens a small popover
+// with the two densities.  closes on selection, Escape, or a click anywhere else
+// (via a transparent full-viewport backdrop behind the popover).
 #[component]
-pub fn GridDensityToggle() -> Element {
+pub fn GridDensityMenu() -> Element {
+    let mut open = use_signal(|| false);
     let current = GRID_DENSITY();
 
-    let option = move |density: GridDensity, label: &'static str, title: &'static str| {
+    let item = move |density: GridDensity, label: &'static str| {
         let active = current == density;
         rsx! {
             button {
                 r#type: "button",
-                class: if active { "btn btn-primary" } else { "btn btn-secondary" },
-                title,
-                aria_pressed: if active { "true" } else { "false" },
+                class: "menu-item",
+                role: "menuitemradio",
+                aria_checked: if active { "true" } else { "false" },
                 onclick: move |_| {
                     *GRID_DENSITY.write() = density;
                     set_local_storage(GRID_DENSITY_KEY, density);
+                    open.set(false);
                 },
+                span { class: "menu-item-check", aria_hidden: "true",
+                    if active {
+                        "✓"
+                    }
+                }
                 "{label}"
             }
         }
@@ -62,11 +71,48 @@ pub fn GridDensityToggle() -> Element {
 
     rsx! {
         div {
-            class: "grid-density-toggle",
-            role: "group",
-            aria_label: "Thumbnail size",
-            {option(GridDensity::Comfortable, "Large", "Larger thumbnails")}
-            {option(GridDensity::Compact, "Compact", "Smaller thumbnails, more per row")}
+            class: "grid-density-menu",
+            onkeydown: move |evt| {
+                if evt.key() == Key::Escape {
+                    open.set(false);
+                }
+            },
+            button {
+                r#type: "button",
+                class: "icon-btn",
+                title: "Thumbnail size",
+                aria_label: "Thumbnail size",
+                aria_haspopup: "menu",
+                aria_expanded: if open() { "true" } else { "false" },
+                onclick: move |_| open.toggle(),
+                // 2x2 grid glyph, drawn in currentColor so it follows the theme
+                svg {
+                    width: "18",
+                    height: "18",
+                    view_box: "0 0 24 24",
+                    fill: "none",
+                    stroke: "currentColor",
+                    stroke_width: "2",
+                    stroke_linecap: "round",
+                    stroke_linejoin: "round",
+                    "aria-hidden": "true",
+                    rect { x: "3", y: "3", width: "7", height: "7", rx: "1" }
+                    rect { x: "14", y: "3", width: "7", height: "7", rx: "1" }
+                    rect { x: "3", y: "14", width: "7", height: "7", rx: "1" }
+                    rect { x: "14", y: "14", width: "7", height: "7", rx: "1" }
+                }
+            }
+            if open() {
+                div { class: "menu-backdrop", onclick: move |_| open.set(false) }
+                div {
+                    class: "menu-popover",
+                    role: "menu",
+                    aria_label: "Thumbnail size",
+                    div { class: "menu-label", "Thumbnail size" }
+                    {item(GridDensity::Comfortable, "Large")}
+                    {item(GridDensity::Compact, "Compact")}
+                }
+            }
         }
     }
 }
