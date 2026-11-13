@@ -1,5 +1,4 @@
 use std::{
-    cell::Cell,
     collections::HashSet,
     collections::hash_map::DefaultHasher,
     future::Future,
@@ -14,6 +13,7 @@ use tracing::warn;
 use crate::common::grid_cache::{
     CacheEntry, EditsSince, GRID_CACHE, LayoutKey, MEDIA_EDITS, WindowState, reset_window,
 };
+use crate::common::hooks::use_on_write;
 use api::{
     WebError,
     collection::CollectionUuid,
@@ -666,19 +666,6 @@ where
     })
 }
 
-// refresh whenever `trigger` is written (after modal edits etc.), but not on the first run
-fn use_refresh_on(trigger: Signal<()>, refresh: Callback<RefreshCause>) {
-    let first_run = use_hook(|| Rc::new(Cell::new(true)));
-    use_effect(move || {
-        trigger();
-
-        if first_run.replace(false) {
-            return;
-        }
-        refresh.call(RefreshCause::Requested);
-    });
-}
-
 // a restored grid that is behind the edit log gets just the edited items fixed up
 fn use_reconcile<K, T>(
     state: PagedState<K, T>,
@@ -835,7 +822,8 @@ where
     use_window_sync(state);
     use_reset_on_key(state, reset_key, fetch.clone());
     let refresh_all = use_refresh(state, fetch.clone());
-    use_refresh_on(refresh, refresh_all);
+    // after modal edits etc.
+    use_on_write(refresh, move || refresh_all.call(RefreshCause::Requested));
     use_reconcile(state, cache, restored, refresh_all);
     let load_more = use_load_more(state, fetch, refresh_all);
     let requested_refresh = use_callback(move |_: ()| refresh_all.call(RefreshCause::Requested));

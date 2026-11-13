@@ -3,7 +3,7 @@ use dioxus_router::prelude::*;
 
 use crate::{
     Route,
-    common::grid_cache::mark_media_edited,
+    common::{grid_cache::mark_media_edited, hooks::use_on_write},
     components::modal::{MODAL_STACK, Modal, ModalBox},
     gallery::{collections::CollectionTable, comments::CommentList, similar::SimilarMedia},
 };
@@ -93,15 +93,8 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
     // every edit made on this page (the form, modals, comments) fires update_signal, which
     // is the cue for any cached grid containing this media to fix up its copy when the user
-    // goes back to it (see GRID_CACHE).  the first run is just the mount
-    let first_run = use_hook(|| std::rc::Rc::new(std::cell::Cell::new(true)));
-    use_effect(move || {
-        update_signal();
-        if first_run.replace(false) {
-            return;
-        }
-        mark_media_edited(*media_uuid.peek());
-    });
+    // goes back to it (see GRID_CACHE)
+    use_on_write(update_signal, move || mark_media_edited(*media_uuid.peek()));
 
     // this subscribes the whole component to the use_resource() reactive variable
     let media_data = &*media_future.read();
