@@ -107,7 +107,7 @@ fn CollectionTableInner(props: CollectionTableInnerProps) -> Element {
                                         tr {
                                             th { "Name" }
                                             th { "Group" }
-                                            th { "Note" }
+                                            th { "Description" }
                                             th { style: "width: 100px;", "Actions" }
                                         }
                                     }

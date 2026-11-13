@@ -108,7 +108,7 @@ pub fn AdvancedSearchTab(props: AdvancedSearchTabProps) -> Element {
                 div {
                     class: "form-help",
                     style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-1);",
-                    "Search in file names, descriptions, and tags"
+                    "Search dates, descriptions and tags"
                 }
             }
             div { style: "display: flex; gap: var(--space-4); margin-top: var(--space-4);",

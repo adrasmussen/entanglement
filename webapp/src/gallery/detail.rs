@@ -297,7 +297,7 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
                             }
 
                             div { class: "form-group",
-                                label { class: "form-label", "Note" }
+                                label { class: "form-label", "Description" }
                                 textarea {
                                     class: "form-textarea",
                                     name: "note",

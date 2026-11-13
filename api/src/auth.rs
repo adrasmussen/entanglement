@@ -20,3 +20,16 @@ pub struct GetUsersInGroupReq {
 pub struct GetUsersInGroupResp {
     pub uids: HashSet<String>,
 }
+
+// look up the current user and the groups they belong to
+http_endpoint!(GetCurrentUser);
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GetCurrentUserReq {}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GetCurrentUserResp {
+    pub uid: String,
+    // sorted, so that the order is deterministic (the server keeps them in a set)
+    pub groups: Vec<String>,
+}
