@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid, search::SearchOptions, uuid_newtype};
+use crate::{
+    http_endpoint,
+    media::MediaUuid,
+    page::{PageMeta, PageRequest, PagedResp},
+    search::SearchOptions,
+    uuid_newtype,
+};
 
 // structs
 uuid_newtype!(Library);
@@ -48,14 +54,26 @@ pub struct GetLibraryResp {
 // find libraries
 http_endpoint!(SearchLibraries);
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchLibrariesReq {
     pub filter: String,
+    #[serde(flatten)]
+    pub page: PageRequest,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchLibrariesResp {
     pub libraries: Vec<LibraryUuid>,
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for SearchLibrariesResp {
+    type Item = LibraryUuid;
+
+    fn into_parts(self) -> (Vec<LibraryUuid>, PageMeta) {
+        (self.libraries, self.meta)
+    }
 }
 
 // find media inside of a library
@@ -73,4 +91,14 @@ pub struct SearchMediaInLibraryResp {
     pub media: Vec<MediaUuid>,
     #[serde(default)]
     pub total: Option<u64>,
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for SearchMediaInLibraryResp {
+    type Item = MediaUuid;
+
+    fn into_parts(self) -> (Vec<MediaUuid>, PageMeta) {
+        (self.media, self.meta)
+    }
 }

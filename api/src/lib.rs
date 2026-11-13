@@ -9,6 +9,7 @@ pub mod collection;
 pub mod comment;
 pub mod library;
 pub mod media;
+pub mod page;
 pub mod search;
 pub mod task;
 

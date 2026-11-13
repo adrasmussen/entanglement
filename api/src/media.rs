@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     collection::CollectionUuid, comment::CommentUuid, http_endpoint, library::LibraryUuid,
-    search::SearchOptions, uuid_newtype,
+    page::{PageMeta, PagedResp},
+    search::SearchOptions,
+    uuid_newtype,
 };
 
 // structs
@@ -96,9 +98,19 @@ pub struct SearchMediaReq {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct SearchMediaResp {
     pub media: Vec<MediaUuid>,
-    // only populated when the request set opts.with_total
+    // only populated when the request set opts.page.with_total
     #[serde(default)]
     pub total: Option<u64>,
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for SearchMediaResp {
+    type Item = MediaUuid;
+
+    fn into_parts(self) -> (Vec<MediaUuid>, PageMeta) {
+        (self.media, self.meta)
+    }
 }
 
 // find similar media

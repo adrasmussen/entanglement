@@ -13,6 +13,7 @@ use crate::{
     http_endpoint,
     library::SearchMediaInLibraryReq,
     media::{Media, MediaUuid, SearchMediaReq},
+    page::{PageMeta, PageRequest, PagedResp},
 };
 
 // paging limits
@@ -27,17 +28,16 @@ pub const MAX_PAGE: u64 = 200;
 
 // search options
 //
-// limit = None means "no limit"; with_total asks the backend to run an additional
-// COUNT(*) over the filtered set (without ORDER/LIMIT), which the webapp only does for
-// the first page of a search so that subsequent pages stay cheap top-N index walks
+// page.limit = None means "no limit"; page.with_total asks the backend to run an
+// additional COUNT(*) over the filtered set (without ORDER/LIMIT), which the webapp only
+// does for the first page of a search so that subsequent pages stay cheap top-N index
+// walks.  the page fields are flattened, so the wire keys are unchanged
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchOptions {
     pub filter: SearchFilter,
     pub order: SortMethod,
-    pub limit: Option<u64>,
-    pub offset: u64,
-    #[serde(default)]
-    pub with_total: bool,
+    #[serde(flatten)]
+    pub page: PageRequest,
 }
 
 // sql fragments for a postgres search, with every piece of user input bound as a
@@ -89,8 +89,8 @@ impl SearchOptions {
             order_sql: self.order_sql(),
             // LIMIT NULL is equivalent to no limit in postgres
             page_sql: format!(" LIMIT ${} OFFSET ${}", next, next + 1),
-            limit: self.limit.map(clamp_i64),
-            offset: clamp_i64(self.offset),
+            limit: self.page.limit.map(clamp_i64),
+            offset: clamp_i64(self.page.offset),
         }
     }
 
@@ -103,8 +103,8 @@ impl SearchOptions {
             order_sql: self.order_sql(),
             page_sql: " LIMIT :limit OFFSET :offset",
             // mariadb has no LIMIT NULL/ALL; the documented idiom is the max u64
-            limit: self.limit.unwrap_or(u64::MAX),
-            offset: self.offset,
+            limit: self.page.limit.unwrap_or(u64::MAX),
+            offset: self.page.offset,
         }
     }
 }
@@ -376,6 +376,17 @@ pub struct BatchSearchAndSortResp {
     // None from older servers, in which case media.len() is the best guess
     #[serde(default)]
     pub page_len: Option<u64>,
+    // paging metadata; meta.row_count is the same pre-hydration count as page_len
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for BatchSearchAndSortResp {
+    type Item = SearchResponse;
+
+    fn into_parts(self) -> (Vec<SearchResponse>, PageMeta) {
+        (self.media, self.meta)
+    }
 }
 
 #[cfg(test)]
@@ -421,8 +432,11 @@ mod tests {
             filter: SearchFilter::SubstringAll {
                 filter: set(&["cat"]),
             },
-            limit: Some(60),
-            offset: 120,
+            page: PageRequest {
+                limit: Some(60),
+                offset: 120,
+                ..Default::default()
+            },
             ..Default::default()
         }
         .postgres_sql("media.ts_vec", 3);
@@ -504,8 +518,11 @@ mod tests {
     #[test]
     fn huge_limits_are_clamped() {
         let q = SearchOptions {
-            limit: Some(u64::MAX),
-            offset: u64::MAX,
+            page: PageRequest {
+                limit: Some(u64::MAX),
+                offset: u64::MAX,
+                ..Default::default()
+            },
             ..Default::default()
         }
         .postgres_sql("ts", 1);
@@ -534,6 +551,101 @@ mod tests {
         let o: SearchOptions =
             serde_json::from_str(r#"{"filter":{"SubstringAny":{"filter":[]}},"order":"DateDesc","limit":null,"offset":0}"#)
                 .unwrap();
-        assert!(!o.with_total);
+        assert!(!o.page.with_total);
+    }
+
+    // the flattened PageRequest must not change the wire format of the requests
+    #[test]
+    fn options_keep_flat_page_keys() {
+        let o: SearchOptions = serde_json::from_str(
+            r#"{"filter":{"SubstringAny":{"filter":[]}},"order":"DateDesc","limit":60,"offset":120,"with_total":true}"#,
+        )
+        .unwrap();
+        assert_eq!(o.page.limit, Some(60));
+        assert_eq!(o.page.offset, 120);
+        assert!(o.page.with_total);
+
+        let v = serde_json::to_value(&o).unwrap();
+        assert_eq!(v["limit"], 60);
+        assert_eq!(v["offset"], 120);
+        assert_eq!(v["with_total"], true);
+        assert!(v.get("page").is_none());
+        assert!(v.get("cursor").is_none());
+
+        let back: SearchOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back.page, o.page);
+    }
+
+    #[test]
+    fn other_requests_keep_flat_page_keys() {
+        use crate::{collection::SearchCollectionsReq, library::SearchLibrariesReq};
+
+        let r: SearchCollectionsReq =
+            serde_json::from_str(r#"{"filter":"a","limit":5,"offset":10,"with_total":true}"#)
+                .unwrap();
+        assert_eq!(r.page.limit, Some(5));
+        assert_eq!(r.page.offset, 10);
+        assert!(r.page.with_total);
+
+        // every page field is optional
+        let r: SearchCollectionsReq = serde_json::from_str(r#"{"filter":"a"}"#).unwrap();
+        assert_eq!(r.page, PageRequest::default());
+        let r: SearchLibrariesReq = serde_json::from_str(r#"{"filter":""}"#).unwrap();
+        assert_eq!(r.page, PageRequest::default());
+
+        let v = serde_json::to_value(SearchLibrariesReq {
+            filter: "x".into(),
+            page: PageRequest::first(3, true),
+        })
+        .unwrap();
+        assert_eq!(v["limit"], 3);
+        assert_eq!(v["with_total"], true);
+    }
+
+    #[test]
+    fn responses_without_meta_get_a_default() {
+        use crate::{
+            collection::{SearchCollectionsResp, SearchMediaInCollectionResp},
+            library::{SearchLibrariesResp, SearchMediaInLibraryResp},
+            media::SearchMediaResp,
+        };
+
+        let r: BatchSearchAndSortResp =
+            serde_json::from_str(r#"{"media":[],"total":5,"page_len":0}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+
+        let r: SearchMediaResp = serde_json::from_str(r#"{"media":[],"total":1}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchMediaInCollectionResp = serde_json::from_str(r#"{"media":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchMediaInLibraryResp = serde_json::from_str(r#"{"media":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchCollectionsResp = serde_json::from_str(r#"{"collections":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchLibrariesResp = serde_json::from_str(r#"{"libraries":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+    }
+
+    #[test]
+    fn meta_round_trips_and_into_parts() {
+        use crate::{media::SearchMediaResp, page::PageCursor};
+
+        let meta = PageMeta {
+            total: Some(10),
+            row_count: 2,
+            offset: 4,
+            limit: Some(2),
+            has_more: Some(true),
+            next_cursor: Some(PageCursor("c".into())),
+        };
+        let resp = SearchMediaResp {
+            media: Vec::new(),
+            total: Some(10),
+            meta: meta.clone(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let back: SearchMediaResp = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, resp);
+        assert_eq!(back.into_parts().1, meta);
     }
 }
