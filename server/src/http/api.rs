@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use futures::future::BoxFuture;
 use tracing::instrument;
 
 use crate::{
@@ -14,7 +15,9 @@ use crate::{
     http::{AppError, auth::CurrentUser, svc::HttpEndpoint},
     task::msg::TaskMsg,
 };
-use api::{auth::*, collection::*, comment::*, library::*, media::*, search::*, task::*};
+use api::{
+    auth::*, collection::*, comment::*, library::*, media::*, page::PageRequest, search::*, task::*,
+};
 
 // http api endpoints
 //
@@ -753,6 +756,97 @@ pub(super) async fn search_media_in_library(
         total: result.total,
     })
     .into_response())
+}
+
+// counts are the totals of the ordinary searches with an empty filter and a count-only
+// page, so they run exactly the same gid-filtered queries as the lists and the two can
+// never disagree.  every scope is sent before any is awaited, so they run concurrently
+#[instrument(skip_all)]
+pub(super) async fn get_counts(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<GetCountsReq>,
+) -> Result<Response, AppError> {
+    if message.scopes.len() > MAX_COUNT_SCOPES {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            format!("at most {MAX_COUNT_SCOPES} count scopes per request"),
+        )
+            .into_response());
+    }
+
+    // auth handled as part of the db searches
+    let gid = state.groups_for_user(&current_user.uid).await?;
+
+    let opts = || SearchOptions {
+        page: PageRequest::count_only(),
+        ..Default::default()
+    };
+
+    let mut pending: Vec<BoxFuture<'static, anyhow::Result<Option<u64>>>> = Vec::new();
+
+    // each use sends its message and queues the receiver; the SearchPage item types
+    // differ, so only the total is kept
+    macro_rules! send {
+        ($msg:ident { $($field:ident : $val:expr),* $(,)? }) => {{
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            state
+                .db_svc_sender
+                .send(DbMsg::$msg { resp: tx, $($field: $val),* }.into())
+                .await?;
+            pending.push(Box::pin(async move { Ok(rx.await??.total) }));
+        }};
+    }
+
+    for scope in &message.scopes {
+        match scope {
+            CountScope::Media => send!(SearchMedia {
+                gid: gid.clone(),
+                opts: opts(),
+            }),
+            CountScope::Collections => send!(SearchCollections {
+                gid: gid.clone(),
+                filter: String::new(),
+                page: PageRequest::count_only(),
+            }),
+            CountScope::Libraries => send!(SearchLibraries {
+                gid: gid.clone(),
+                filter: String::new(),
+                page: PageRequest::count_only(),
+            }),
+            CountScope::MediaInCollection { collection_uuid } => {
+                send!(SearchMediaInCollection {
+                    gid: gid.clone(),
+                    collection_uuid: *collection_uuid,
+                    opts: opts(),
+                })
+            }
+            CountScope::MediaInLibrary {
+                library_uuid,
+                hidden,
+            } => send!(SearchMediaInLibrary {
+                gid: gid.clone(),
+                library_uuid: *library_uuid,
+                hidden: *hidden,
+                opts: opts(),
+            }),
+        }
+    }
+
+    let totals = futures::future::try_join_all(pending).await?;
+
+    let counts = message
+        .scopes
+        .into_iter()
+        .zip(totals)
+        .map(|(scope, total)| {
+            total
+                .map(|count| ScopeCount { scope, count })
+                .ok_or_else(|| anyhow::Error::msg("count response is missing the total"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    Ok(Json(GetCountsResp { counts }).into_response())
 }
 
 #[instrument(skip_all)]

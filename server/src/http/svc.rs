@@ -258,6 +258,7 @@ impl HttpEndpoint {
             .route("/StartTask", post(start_task))
             .route("/StopTask", post(stop_task))
             .route("/ShowTasks", post(show_tasks))
+            .route("/GetCounts", post(get_counts))
             .route("/BatchSearchAndSort", post(batch_search_and_sort))
             .with_state(state.clone());
 
