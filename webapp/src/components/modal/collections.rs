@@ -40,6 +40,21 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
     let mut name_error = use_signal(String::new);
     let mut group_error = use_signal(String::new);
 
+    // the groups the current user belongs to; the server only allows creating
+    // a collection in a group the user is a member of
+    let groups_resource =
+        use_resource(|| async move { get_current_user(&GetCurrentUserReq {}).await });
+
+    // with exactly one group, there is nothing to choose, so preselect it
+    use_effect(move || {
+        if let Some(Ok(resp)) = &*groups_resource.read()
+            && resp.groups.len() == 1
+            && collection_group.peek().is_empty()
+        {
+            collection_group.set(resp.groups[0].clone());
+        }
+    });
+
     let handle_submit = move |_| async move {
         name_error.set(String::new());
         group_error.set(String::new());
@@ -53,7 +68,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         }
 
         if collection_group().trim().is_empty() {
-            group_error.set("Group ID is required".into());
+            group_error.set("Please select a group".into());
             is_valid = false;
         }
 
@@ -91,15 +106,16 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         }
     };
 
-    // Display the users of the given group
-    //
-    // TODO -- this needs debounced, or maybe a button to check explicity
+    // Display the users of the selected group; this only reruns when the
+    // selection changes
     let group_future = use_resource(move || async move {
         let gid = collection_group();
 
         if gid.trim().is_empty() {
             return HashSet::new();
         }
+
+        group_error.set(String::new());
 
         match get_users_in_group(&GetUsersInGroupReq { gid }).await {
             Ok(resp) => resp.uids,
@@ -117,6 +133,15 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
         None => false,
     };
 
+    // creation requires the groups to have loaded and at least one to exist
+    let (groups, groups_loading, groups_failed): (Vec<String>, bool, Option<String>) =
+        match &*groups_resource.read() {
+            None => (Vec::new(), true, None),
+            Some(Ok(resp)) => (resp.groups.clone(), false, None),
+            Some(Err(err)) => (Vec::new(), false, Some(err.to_string())),
+        };
+    let can_create = !groups.is_empty();
+
     let footer = rsx! {
         span { class: "status-message", "{status_signal}" }
         div {
@@ -126,7 +151,12 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 onclick: move |_| close_modal(),
                 "Cancel"
             }
-            button { class: "btn btn-primary", onclick: handle_submit, "Create Collection" }
+            button {
+                class: "btn btn-primary",
+                disabled: !can_create,
+                onclick: handle_submit,
+                "Create Collection"
+            }
         }
     };
 
@@ -154,15 +184,41 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 }
 
                 div { class: "form-group",
-                    label { class: "form-label", "Group ID" }
-                    div { style: "display: flex; gap: var(--space-2);",
-                        input {
+                    label { class: "form-label", r#for: "collection-group", "Share with group" }
+                    if groups_loading {
+                        select {
                             class: "form-input",
-                            r#type: "text",
+                            id: "collection-group",
+                            disabled: true,
+                            option { "Loading groups…" }
+                        }
+                    } else if let Some(err) = groups_failed {
+                        div { class: "form-error", "Could not load your groups: {err}" }
+                    } else if groups.is_empty() {
+                        div { class: "form-help",
+                            "You are not a member of any group. Ask an administrator to add you to a group before creating a collection."
+                        }
+                    } else {
+                        select {
+                            class: "form-input",
+                            id: "collection-group",
                             value: "{collection_group}",
-                            oninput: move |evt| collection_group.set(evt.value().clone()),
-                            placeholder: "group name",
-                            style: "flex: 1;",
+                            onchange: move |evt| collection_group.set(evt.value()),
+                            if groups.len() > 1 {
+                                option {
+                                    value: "",
+                                    disabled: true,
+                                    selected: collection_group().is_empty(),
+                                    "Select a group…"
+                                }
+                            }
+                            for group in groups.iter() {
+                                option {
+                                    value: "{group}",
+                                    selected: *group == collection_group(),
+                                    "{group}"
+                                }
+                            }
                         }
                     }
                     if !group_error().is_empty() {
@@ -173,7 +229,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                     }
                     div {
                         class: "form-help",
-                        "Group ID determines who can access this collection"
+                        "Members of this group can see and edit this collection"
                     }
                 }
 
