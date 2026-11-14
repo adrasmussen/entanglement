@@ -9,7 +9,7 @@ use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ServiceType};
 use api::{
     collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid,
-    page::PageRequest, task::TaskType,
+    page::PageRequest, search::ListFilter, task::TaskType,
 };
 
 // common auth routines
@@ -88,7 +88,7 @@ pub trait AuthCheck: ESInner + Debug {
                 DbMsg::SearchCollections {
                     resp: tx,
                     gid,
-                    filter: String::new(),
+                    filter: ListFilter::Literal(String::new()),
                     page: PageRequest::default(),
                 }
                 .into(),
