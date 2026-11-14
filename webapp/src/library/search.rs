@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::{
-    common::storage::*,
+    common::{search::parse_query, storage::*},
     components::{modal::ModalBox, search::SearchBar},
     library::{LIBRARY_SEARCH_KEY, table::LibraryTable},
 };
@@ -16,9 +16,9 @@ pub fn LibrarySearch() -> Element {
     let library_future = use_resource(move || async move {
         update_signal();
 
-        let filter = library_search_signal();
+        let search = library_search_signal();
         search_libraries(&SearchLibrariesReq {
-            filter,
+            query: Some(parse_query::<Library>(&search)),
             ..Default::default()
         })
         .await
