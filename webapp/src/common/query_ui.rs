@@ -261,6 +261,30 @@ pub fn suggest<C: SearchClass>(draft: &str) -> Vec<Suggestion> {
 
 // the draft with the token under the cursor replaced by a suggestion; a finished value
 // (as opposed to a field name or an operator) gets a space after it
+// every field of the class, for the hint list a double-click on the search bar opens
+pub fn all_fields<C: SearchClass>() -> Vec<Suggestion> {
+    C::FIELDS
+        .iter()
+        .map(|f| Suggestion {
+            title: f.label.to_string(),
+            help: f.help.to_string(),
+            example: f.example.to_string(),
+            insert: format!("{}:", f.name),
+        })
+        .collect()
+}
+
+// add a suggestion after what is already typed (rather than replacing the last token, as
+// accept does), separated by a space
+pub fn append(draft: &str, suggestion: &Suggestion) -> String {
+    let mut out = draft.to_string();
+    if !out.is_empty() && !out.ends_with(char::is_whitespace) {
+        out.push(' ');
+    }
+    out.push_str(&suggestion.insert);
+    out
+}
+
 pub fn accept(draft: &str, suggestion: &Suggestion) -> String {
     let start = last_token(draft).map(|(s, _)| s).unwrap_or(draft.len());
     let mut out = format!("{}{}", &draft[..start], suggestion.insert);
@@ -306,6 +330,25 @@ pub fn q_from_param(param: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn all_fields_lists_every_field_and_append_keeps_the_text() {
+        use api::media::Media;
+        let all = all_fields::<Media>();
+        assert_eq!(
+            all.iter().map(|s| s.insert.as_str()).collect::<Vec<_>>(),
+            Media::FIELDS
+                .iter()
+                .map(|f| format!("{}:", f.name))
+                .collect::<Vec<_>>()
+        );
+        let tag = all.iter().find(|s| s.insert == "tag:").unwrap();
+        assert_eq!(append("", tag), "tag:");
+        assert_eq!(append("beach", tag), "beach tag:");
+        assert_eq!(append("beach ", tag), "beach tag:");
+        assert_eq!(append("date:2020 be", tag), "date:2020 be tag:");
+    }
+
     use super::*;
     use api::{collection::Collection, library::Library, media::Media};
 

@@ -279,6 +279,32 @@ async function submit(page, text) {
     fields: ['Tag', 'Description', 'Date', 'Type'].map(f => helpText.includes(f)),
     examples: ['tag:holiday', 'description:sunset', 'date:2020-06..2020-08', 'type:Image'].map(e => helpText.includes(e)),
   }, { fields: [true, true, true, true], examples: [true, true, true, true] });
+  await page.click('[data-testid=query-help-toggle]');
+
+  // a double-click opens the hint list of every field, whatever is typed, and picking one
+  // appends it rather than replacing the last word
+  await page.fill(INPUT, 'beach');
+  await page.keyboard.press('Escape');
+  await page.dblclick(INPUT);
+  await sleep(300);
+  const hints = await suggestions(page);
+  const hintRow = await page.$eval('[data-testid=query-suggestion]', e => ({
+    title: !!e.querySelector('.query-suggestion-title'), help: !!e.querySelector('.query-suggestion-help'),
+  })).catch(() => null);
+  await page.click('[data-testid=query-suggestion][data-insert="tag:"]');
+  await sleep(200);
+  const afterPick = await inputValue(page);
+  await page.dblclick(INPUT);
+  await sleep(200);
+  await page.keyboard.press('Escape');
+  await sleep(200);
+  check(s, 'double-click lists every field; picking appends', '-', {
+    inserts: hints, row_has_title_and_help: !!(hintRow && hintRow.title && hintRow.help),
+    input_after_pick: afterPick, open_after_esc: (await suggestions(page)).length > 0,
+  }, {
+    inserts: ['tag:', 'description:', 'date:', 'type:'], row_has_title_and_help: true,
+    input_after_pick: 'beach tag:', open_after_esc: false,
+  });
 
   // ================================================================ 3. issues
   s = section('gallery: parse issues', HEADER);

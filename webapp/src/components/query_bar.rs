@@ -4,7 +4,8 @@ use dioxus::prelude::*;
 
 use crate::common::{
     query_ui::{
-        accept, chips, issue_line, op_label, placeholder, q_from_param, suggest, text_without_chip,
+        Suggestion, accept, all_fields, append, chips, issue_line, op_label, placeholder,
+        q_from_param, suggest, text_without_chip,
     },
     storage::{set_local_storage, try_local_storage},
 };
@@ -164,6 +165,8 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
     let mut dismissed = use_signal(|| false);
     let mut active = use_signal(|| None::<usize>);
     let mut show_help = use_signal(|| false);
+    // a double-click opens the list of every searchable field, whatever is typed
+    let mut field_hints = use_signal(|| false);
 
     // chip edits, the filter builder and a new ?q= all change the committed text
     use_effect(move || {
@@ -171,11 +174,26 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
         draft.set(committed);
     });
 
+    // the open list: every field after a double-click, otherwise completions for the typing
+    let current_list = move |text: &str| -> Vec<Suggestion> {
+        if *field_hints.peek() {
+            all_fields::<C>()
+        } else {
+            suggest::<C>(text)
+        }
+    };
+
     let accept_at = use_callback(move |i: usize| {
         let text = draft.peek().clone();
-        if let Some(s) = suggest::<C>(&text).get(i) {
-            draft.set(accept(&text, s));
+        let hints = *field_hints.peek();
+        if let Some(s) = current_list(&text).get(i) {
+            draft.set(if hints {
+                append(&text, s)
+            } else {
+                accept(&text, s)
+            });
         }
+        field_hints.set(false);
         active.set(None);
     });
 
@@ -189,7 +207,11 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
     let has_chips = !parsed.query.is_empty();
 
     let suggestions = if focused() && !dismissed() {
-        suggest::<C>(&draft())
+        if field_hints() {
+            all_fields::<C>()
+        } else {
+            suggest::<C>(&draft())
+        }
     } else {
         Vec::new()
     };
@@ -222,11 +244,20 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
                             draft.set(evt.value());
                             active.set(None);
                             dismissed.set(false);
+                            field_hints.set(false);
+                        },
+                        ondoubleclick: move |_| {
+                            field_hints.set(true);
+                            dismissed.set(false);
+                            active.set(None);
                         },
                         onfocus: move |_| focused.set(true),
-                        onblur: move |_| focused.set(false),
+                        onblur: move |_| {
+                            focused.set(false);
+                            field_hints.set(false);
+                        },
                         onkeydown: move |evt| {
-                            let n = suggest::<C>(&draft.peek()).len();
+                            let n = current_list(&draft.peek()).len();
                             let open = *focused.peek() && !*dismissed.peek() && n > 0;
                             let current = *active.peek();
                             match evt.key() {
@@ -246,7 +277,10 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
                                     evt.prevent_default();
                                     accept_at.call(current.unwrap_or(0));
                                 }
-                                Key::Escape => dismissed.set(true),
+                                Key::Escape => {
+                                    dismissed.set(true);
+                                    field_hints.set(false);
+                                }
                                 _ => {}
                             }
                         },
