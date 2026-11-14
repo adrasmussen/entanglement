@@ -379,6 +379,12 @@ def raw_type(var):
 
 
 def raw_text(*vars_):
+    """plain words of a structured query: each word is a prefix, ORed (phase 4)."""
+    return "m.ts_vec @@ (" + " || ".join(f"to_tsquery('english', quote_literal(:'{v}') || ':*')" for v in vars_) + ")"
+
+
+def raw_text_whole(*vars_):
+    """the older SubstringAny filter: whole words, ORed."""
     return "m.ts_vec @@ (" + " || ".join(f"plainto_tsquery('english', :'{v}')" for v in vars_) + ")"
 
 
@@ -529,16 +535,35 @@ grid("phase 3: hostile values (raw SQL on the literal vs endpoint; free text onl
      ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 show_legend(legend)
 
+# phase 4: plain words of a structured query match as prefixes.  the seed puts checkpoint /
+# checko / checkpt on counttest items 2001..2003; whole words would match none of them for
+# "check", and "eckp" (inside a word) is a phase 5 pg_trgm case, so it matches nothing yet
+rows, legend = [], []
+for words, expect_nonzero in ((["check"], True), (["checkp"], True), (["checkpoint"], True),
+                              (["lighthou"], True), (["check", "sunse"], True), (["eckp"], False)):
+    vs = {f"w{i}": w for i, w in enumerate(words)}
+    want, raw_sql = count_with(sql_media_visible, [raw_text(*vs)], **vs)
+    whole, _ = count_with(sql_media_visible, [raw_text_whole(*vs)], **vs)
+    code, d = post("SearchMedia", {"opts": opts(filt=query(words), limit=0, with_total=True)})
+    got = d["meta"]["total"] if code == 200 else f"http {code}"
+    check(rows, legend, f"text: {' '.join(words)}", raw_sql + " " + kv(vs), want,
+          {"count_only": got, "nonzero": (got or 0) > 0 if isinstance(got, int) else None, "whole_word_count": whole},
+          {"count_only": want, "nonzero": expect_nonzero, "whole_word_count": whole})
+grid("phase 4: plain words match as prefixes (raw SQL uses 'word':*)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
 # the older request shapes are untouched
 rows, legend = [], []
 old_any = {"SubstringAny": {"filter": ["lighthouse", "beach"]}}
-want, raw_sql = count_with(sql_media_visible, [raw_text("w0", "w1")], w0="lighthouse", w1="beach")
+want, raw_sql = count_with(sql_media_visible, [raw_text_whole("w0", "w1")], w0="lighthouse", w1="beach")
 code, d = post("SearchMedia", {"opts": opts(filt=old_any, limit=0, with_total=True)})
+check(rows, legend, "SubstringAny stays whole words (OR)", raw_sql, want,
+      {"SubstringAny": d["meta"]["total"] if code == 200 else f"http {code}"}, {"SubstringAny": want})
+want, raw_sql = count_with(sql_media_visible, [raw_text("w0", "w1")], w0="lighthouse", w1="beach")
 code2, d2 = post("SearchMedia", {"opts": opts(filt=query(["lighthouse", "beach"]), limit=0, with_total=True)})
-check(rows, legend, "SubstringAny == Query text (OR)", raw_sql, want,
-      {"SubstringAny": d["meta"]["total"] if code == 200 else f"http {code}",
-       "Query": d2["meta"]["total"] if code2 == 200 else f"http {code2}"},
-      {"SubstringAny": want, "Query": want})
+check(rows, legend, "Query text: prefixes (OR)", raw_sql, want,
+      {"Query": d2["meta"]["total"] if code2 == 200 else f"http {code2}"}, {"Query": want})
 code, d = post("SearchMedia", {"opts": opts(limit=0, with_total=True)})
 check(rows, legend, "empty SubstringAny", sql_media_visible(), N,
       {"total": d["meta"]["total"] if code == 200 else f"http {code}"}, {"total": N})

@@ -45,7 +45,7 @@ const rawTag = v => `m.tags ? :'${v}'`;
 const rawDatePrefix = v => `left(m.date, length(:'${v}')) = :'${v}'`;
 const rawDateRange = (a, b) => `(m.date >= :'${a}' AND (m.date <= :'${b}' OR ${rawDatePrefix(b)}))`;
 const rawType = v => `m.media_type::text = :'${v}'`;
-const rawText = v => `m.ts_vec @@ to_tsquery('english', quote_literal(:'${v}'))`;
+const rawText = v => `m.ts_vec @@ to_tsquery('english', quote_literal(:'${v}') || ':*')`;
 const media = (...conds) => MEDIA_VISIBLE + conds.map(c => ' AND ' + c).join('');
 
 const lookup = (q, what) => {
@@ -488,7 +488,7 @@ async function submit(page, text) {
   await page.goto(BASE + '/gallery');
   await page.waitForSelector(INPUT);
   await sleep(600);
-  raw = count(media("m.ts_vec @@ (to_tsquery('english', quote_literal(:'v0')) || to_tsquery('english', quote_literal(:'v1')))"), { v0: 'lighthouse', v1: 'beach' });
+  raw = count(media("m.ts_vec @@ (to_tsquery('english', quote_literal(:'v0') || ':*') || to_tsquery('english', quote_literal(:'v1') || ':*'))"), { v0: 'lighthouse', v1: 'beach' });
   got = await settleTotal(page, raw);
   check(s, 'an old saved search of plain words still works', 'ts_vec @@ lighthouse | beach', {
     input: await inputValue(page),

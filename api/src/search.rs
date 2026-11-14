@@ -457,7 +457,14 @@ impl Resolver {
 
         match self.dialect {
             Dialect::Postgres => {
-                let q = terms.iter().map(|t| quote_tsquery_lexeme(t)).join(" | ");
+                // each word is a prefix (`'check':*` matches checkpoint, checko, checkpt), so
+                // partial words match as the user types; the GIN index on ts_vec still applies.
+                // to_tsquery stems the prefix like any lexeme, so a prefix that stems
+                // differently from the full word (rare) can miss it
+                let q = terms
+                    .iter()
+                    .map(|t| format!("{}:*", quote_tsquery_lexeme(t)))
+                    .join(" | ");
                 let p = self.bind(q);
                 Some(format!("{cols} @@ to_tsquery('english', {p})"))
             }
@@ -883,7 +890,7 @@ mod tests {
             sql,
             " AND media.ts_vec @@ to_tsquery('english', $2) AND media.tags ? $3"
         );
-        assert_eq!(params, ["'beach'", "holiday"]);
+        assert_eq!(params, ["'beach':*", "holiday"]);
 
         let (sql, params) = maria("beach tag:holiday");
         assert_eq!(
@@ -955,7 +962,7 @@ mod tests {
     fn query_text_terms_are_or_and_deduped() {
         let (sql, params) = pg("b a b \"c d\"", 1);
         assert_eq!(sql, " AND media.ts_vec @@ to_tsquery('english', $1)");
-        assert_eq!(params, ["'a' | 'b' | 'c d'"]);
+        assert_eq!(params, ["'a':* | 'b':* | 'c d':*"]);
 
         let (_, params) = maria("b a b \"c d\" x.y");
         assert_eq!(params, named(&[("f0", "(?i)a|b|c d|x\\.y")]));

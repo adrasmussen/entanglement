@@ -8,6 +8,7 @@
 --
 -- tags:        ct-even / ct-odd on every item, ct-mod7 on every 7th, ct-rare on n % 500 = 3
 -- description: one of sunset/beach/mountain/forest by n % 4, and "lighthouse" on n % 1000 = 3
+-- items 2001..2003 carry the words checkpoint / checko / checkpt, for prefix matching of plain words
 -- items 1001..1006 carry a tag equal to, and a note containing, a LIKE/SQL-hostile value
 -- (the safety grid searches for each literally; none of them is hidden)
 
@@ -31,6 +32,7 @@ UPDATE media m SET
   note = '[counttest] item ' || items.n
          || ' ' || (ARRAY['sunset', 'beach', 'mountain', 'forest'])[items.n % 4 + 1]
          || CASE WHEN items.n % 1000 = 3 THEN ' lighthouse' ELSE '' END
+         || CASE items.n WHEN 2001 THEN ' checkpoint' WHEN 2002 THEN ' checko' WHEN 2003 THEN ' checkpt' ELSE '' END
          || COALESCE(' x' || items.v || 'x', ''),
   tags = hstore(CASE WHEN items.n % 2 = 0 THEN 'ct-even' ELSE 'ct-odd' END, NULL)
          || CASE WHEN items.n % 7 = 0 THEN hstore('ct-mod7', NULL) ELSE ''::hstore END
