@@ -22,8 +22,8 @@ Setup for humans is in `docker/QUICKSTART.md`. For testing help (what to run, wr
   ```
 
 - **Never build `-p tools`** unless asked; rocksdb is very slow.
-- **Deploy to the dev stack:** `docker compose build server && docker compose up -d server`. The image also compiles the wasm webapp. A warm build takes about 15 minutes, a cold one about 30.
-- **Docker build cache fills the VM disk** (about 2 GB left behind per build). Watch `docker system df`. When it fills, `docker builder prune -a -f` frees it without touching volumes; plain `--reserved-space` pruning may free nothing.
+- **Deploy to the dev stack:** `docker compose build server && docker compose up -d server`. The image also compiles the wasm webapp. The `Dockerfile` keeps the cargo registry and each stage's `target/` in BuildKit cache mounts (`entg-*`), so dependencies compile once: a cold build takes about 27 minutes, and a rebuild after code changes about 2 minutes.
+- **Watch the Docker VM disk** with `docker system df`. To free space while keeping the cargo caches, run `docker builder prune -f --filter 'type!=exec.cachemount'`. `docker builder prune -a -f` frees everything, including those caches, so the next build is cold. Never prune volumes.
 - **Never delete Docker volumes:** the project's `entanglement_*` and `entg-*` volumes, and another project's `ysera-dev_*` volumes on the same machine.
 
 ## Dev stack
