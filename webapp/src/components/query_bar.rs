@@ -200,8 +200,9 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
         div { class: "search-bar query-bar",
             form {
                 class: "query-form",
-                onsubmit: move |event| {
-                    event.prevent_default();
+                onsubmit: move |_| {
+                    // no prevent_default: in dioxus-web 0.6 forms never submit natively,
+                    // and calling it on a submit event re-enables the native submission
                     dismissed.set(true);
                     search.commit(draft.peek().clone());
                 },

@@ -145,8 +145,9 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
         div { class: "text-search-options",
             form {
                 class: "filter-builder",
-                onsubmit: move |event| {
-                    event.prevent_default();
+                onsubmit: move |_| {
+                    // no prevent_default: in dioxus-web 0.6 forms never submit natively,
+                    // and calling it on a submit event re-enables the native submission
                     match add_clause::<C>(&search.text(), spec.name, current_op, &value(), &to()) {
                         Ok(text) => {
                             search.commit(text);
