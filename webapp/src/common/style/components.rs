@@ -93,6 +93,7 @@ pub const BASE_COMPONENTS: &str = r#"
 .form-textarea,
 .form-select {
   width: 100%;
+  font: inherit;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -737,6 +738,9 @@ body:has(.modal-overlay) {
   background-color: var(--surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+  /* fill up to the size's max-width (set inline), keeping a margin on narrow screens;
+     without a width the modal shrinks to its content */
+  width: calc(100% - 2 * var(--space-4));
   max-width: 90%;
   max-height: 90%;
   overflow: auto;
@@ -758,20 +762,60 @@ body:has(.modal-overlay) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--border);
 }
 
 .modal-body {
-  padding: var(--space-4);
+  padding: var(--space-5) var(--space-6);
 }
 
 .modal-footer {
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* the modal's close button: a square icon button with hover and focus states */
+.btn-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast) var(--easing-standard),
+              color var(--transition-fast) var(--easing-standard),
+              border-color var(--transition-fast) var(--easing-standard);
+}
+
+.btn-close:hover {
+  background-color: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.btn-close:active {
+  transform: scale(0.95);
+}
+
+.btn-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.btn-close svg {
+  width: 20px;
+  height: 20px;
 }
 
 .modal-buttons {

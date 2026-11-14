@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
+use crate::common::tags::format_tags;
 use crate::{
     Route,
     collection::MEDIA_SEARCH_KEY,
@@ -23,7 +24,6 @@ use crate::{
 use api::{
     UuidSource,
     collection::*,
-    fold_set,
     media::Media,
     search::{SearchRequest, SearchResponse},
 };
@@ -182,8 +182,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
 
     let collection = collection_data.collection;
 
-    let formatted_tags = fold_set(collection.tags.clone())
-        .unwrap_or_else(|_| "invalid tags, contact admins".to_string());
+    let formatted_tags = format_tags(&collection.tags);
 
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; gap: var(--space-2); margin-left: auto;",
@@ -207,8 +206,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     };
 
     rsx! {
+        // the ModalBox is in CollectionDetail, outside the error boundary; a second one here
+        // drew every modal twice
         div { class: "container with-sticky",
-            ModalBox { update_signal }
 
             div { class: "sticky-header",
                 div {
