@@ -26,9 +26,9 @@ pub fn LibrarySearch(q: String) -> Element {
     let library_future = use_resource(move || async move {
         update_signal();
 
-        let search = library_search_signal();
+        let text = library_search_signal();
         search_libraries(&SearchLibrariesReq {
-            query: Some(parse_query::<Library>(&search)),
+            query: Some(parse_query::<Library>(&text)),
             ..Default::default()
         })
         .await
@@ -41,62 +41,61 @@ pub fn LibrarySearch(q: String) -> Element {
     };
 
     rsx! {
-            div { class: "container with-sticky",
-                ModalBox { update_signal }
+        div { class: "container with-sticky",
+            ModalBox { update_signal }
 
-                div { class: "sticky-header",
-                    div {
-                        class: "page-header",
-                        style: "margin-bottom: var(--space-4);",
-                        p { "Manage your media source libraries" }
-                    }
-
-                    QueryBar::<Library> {
-     search,
-    status,
-                    }
+            div { class: "sticky-header",
+                div {
+                    class: "page-header",
+                    style: "margin-bottom: var(--space-4);",
+                    p { "Manage your media source libraries" }
                 }
 
-                div { class: "scrollable-content",
-                    match &*library_future.read() {
-                        Some(Ok(resp)) => {
-                            rsx! {
-                                LibraryTable { libraries: resp.libraries.clone() }
-                            }
+                QueryBar::<Library> {
+                    search,
+                    status,
+                }
+            }
+
+            div { class: "scrollable-content",
+                match &*library_future.read() {
+                    Some(Ok(resp)) => {
+                        rsx! {
+                            LibraryTable { libraries: resp.libraries.clone() }
                         }
-                        Some(Err(err)) => rsx! {
-                            div {
-                                class: "error-state",
-                                style: "padding: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4); color: var(--error); text-align: center;",
-                                "Error: {err}"
-                            }
-                        },
-                        None => rsx! {
-                            div {
-                                class: "loading-state libraries-table",
-                                style: "margin-top: var(--space-4);  background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);",
-                                table { style: "width: 100%; border-collapse: collapse;",
-                                    thead {
-                                        tr {
-                                            for _ in 0..4 {
-                                                th {
-                                                    div {
-                                                        class: "skeleton",
-                                                        style: "height: 24px; width: 100%;",
-                                                    }
+                    }
+                    Some(Err(err)) => rsx! {
+                        div {
+                            class: "error-state",
+                            style: "padding: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4); color: var(--error); text-align: center;",
+                            "Error: {err}"
+                        }
+                    },
+                    None => rsx! {
+                        div {
+                            class: "loading-state libraries-table",
+                            style: "margin-top: var(--space-4);  background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);",
+                            table { style: "width: 100%; border-collapse: collapse;",
+                                thead {
+                                    tr {
+                                        for _ in 0..4 {
+                                            th {
+                                                div {
+                                                    class: "skeleton",
+                                                    style: "height: 24px; width: 100%;",
                                                 }
                                             }
                                         }
                                     }
-                                    tbody {
-                                        for _ in 0..5 {
-                                            tr {
-                                                for _ in 0..4 {
-                                                    td {
-                                                        div {
-                                                            class: "skeleton",
-                                                            style: "height: 18px; width: 90%;",
-                                                        }
+                                }
+                                tbody {
+                                    for _ in 0..5 {
+                                        tr {
+                                            for _ in 0..4 {
+                                                td {
+                                                    div {
+                                                        class: "skeleton",
+                                                        style: "height: 18px; width: 90%;",
                                                     }
                                                 }
                                             }
@@ -104,9 +103,10 @@ pub fn LibrarySearch(q: String) -> Element {
                                     }
                                 }
                             }
-                        },
-                    }
+                        }
+                    },
                 }
             }
         }
+    }
 }

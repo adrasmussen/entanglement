@@ -88,9 +88,9 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
     let collection = collection_data.collection;
 
     rsx! {
-           div {
-               class: "collection-card",
-               style: "
+        div {
+            class: "collection-card",
+            style: "
                 background-color: var(--surface);
                 border-radius: var(--radius-lg);
                 overflow: hidden;
@@ -101,14 +101,14 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                 display: flex;
                 flex-direction: column;
             ",
-               Link {
-                   to: Route::CollectionDetail {
-                       collection_uuid: collection_uuid.to_string(),
-    q: String::new(),
-                   },
-                   div {
-                       class: "collection-thumbnail",
-                       style: "
+            Link {
+                to: Route::CollectionDetail {
+                    collection_uuid: collection_uuid.to_string(),
+                    q: String::new(),
+                },
+                div {
+                    class: "collection-thumbnail",
+                    style: "
                         height: 180px;
                         background-color: var(--neutral-200);
                         display: flex;
@@ -119,46 +119,46 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                         transition: background-color var(--transition-normal) var(--easing-standard);
                     ",
 
-                       if let Some(media_uuid) = collection.cover {
-                           img {
-                               src: thumbnail_link(media_uuid),
-                               alt: format!("Cover for {}", collection.name),
-                               style: "width: 100%; height: 100%; object-fit: cover;",
-                           }
-                       } else {
-                           div { style: "width: 64px; height: 64px; border-radius: var(--radius-lg); background-color: var(--surface-raised); display: flex; align-items: center; justify-content: center;",
-                               "🖼️"
-                           }
-                       }
-                   }
-               }
+                    if let Some(media_uuid) = collection.cover {
+                        img {
+                            src: thumbnail_link(media_uuid),
+                            alt: format!("Cover for {}", collection.name),
+                            style: "width: 100%; height: 100%; object-fit: cover;",
+                        }
+                    } else {
+                        div { style: "width: 64px; height: 64px; border-radius: var(--radius-lg); background-color: var(--surface-raised); display: flex; align-items: center; justify-content: center;",
+                            "🖼️"
+                        }
+                    }
+                }
+            }
 
-               div {
-                   class: "collection-info",
-                   style: "padding: var(--space-3); flex-grow: 1; display: flex; flex-direction: column;",
+            div {
+                class: "collection-info",
+                style: "padding: var(--space-3); flex-grow: 1; display: flex; flex-direction: column;",
 
-                   Link {
-                       to: Route::CollectionDetail {
-                           collection_uuid: collection_uuid.to_string(),
-    q: String::new(),
-                       },
-                       h3 {
-                           class: "collection-title",
-                           style: "margin: 0 0 var(--space-1) 0; font-size: 1.125rem; font-weight: 600; color: var(--text-primary);",
-                           "{collection.name}"
-                       }
-                   }
+                Link {
+                    to: Route::CollectionDetail {
+                        collection_uuid: collection_uuid.to_string(),
+                        q: String::new(),
+                    },
+                    h3 {
+                        class: "collection-title",
+                        style: "margin: 0 0 var(--space-1) 0; font-size: 1.125rem; font-weight: 600; color: var(--text-primary);",
+                        "{collection.name}"
+                    }
+                }
 
-                   div {
-                       class: "collection-metadata",
-                       style: "display: flex; justify-content: space-between; margin-bottom: var(--space-1); font-size: 0.875rem; color: var(--text-tertiary);",
-                       span { "Owner: {collection.uid}" }
-                       span { "Group: {collection.gid}" }
-                   }
+                div {
+                    class: "collection-metadata",
+                    style: "display: flex; justify-content: space-between; margin-bottom: var(--space-1); font-size: 0.875rem; color: var(--text-tertiary);",
+                    span { "Owner: {collection.uid}" }
+                    span { "Group: {collection.gid}" }
+                }
 
-                   p {
-                       class: "collection-note",
-                       style: "
+                p {
+                    class: "collection-note",
+                    style: "
                         margin: var(--space-2) 0;
                         font-size: 0.875rem;
                         color: var(--text-secondary);
@@ -168,15 +168,15 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                         -webkit-line-clamp: 2;
                         -webkit-box-orient: vertical;
                     ",
-                       if collection.note.is_empty() {
-                           "(No description)"
-                       } else {
-                           "{collection.note}"
-                       }
-                   }
-               }
-           }
-       }
+                    if collection.note.is_empty() {
+                        "(No description)"
+                    } else {
+                        "{collection.note}"
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[component]

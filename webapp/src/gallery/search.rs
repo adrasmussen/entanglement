@@ -88,57 +88,57 @@ pub fn GallerySearch(q: String) -> Element {
     };
 
     rsx! {
-            div { class: "container with-sticky",
-                ModalBox { update_signal }
+        div { class: "container with-sticky",
+            ModalBox { update_signal }
 
-                div { class: "sticky-header",
-                    div {
-                        class: "page-header",
-                        style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
-                        p { "Browse and search all accessible media" }
-                        GridDensityMenu {}
-                    }
-
-                    QueryBar::<Media> {
-     search,
-    status: paged.pager.status(paged.items.read().len(), "results"),
-                        action_button,
-                    }
-
-                    AdvancedSidebar {
-                        show_signal: advanced_expanded,
-                        tabs: HashMap::from([
-                            ("Advanced Search".to_owned(), rsx! {
-                                AdvancedSearchTab::<Media> { search }
-                            }),
-                            ("Bulk Edit".to_owned(), rsx! {
-                                BulkEditTab {
-                                    bulk_edit_signal,
-                                    search_req,
-                                    modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
-                                }
-                            }),
-                            ("Collection Labels".to_owned(), rsx! {
-                                CollectionColorTab { collection_color_signal }
-                            }),
-                        ]),
-                    }
+            div { class: "sticky-header",
+                div {
+                    class: "page-header",
+                    style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
+                    p { "Browse and search all accessible media" }
+                    GridDensityMenu {}
                 }
 
-                div { class: "scrollable-content",
-                    MediaGrid {
-                        items: paged.items,
-                        window: paged.window,
-                        pager: paged.pager,
-                        bulk_edit_signal,
-                        collection_color_signal,
-                        empty: rsx! {
-                            div { class: "empty-state",
-                                p { "No media found matching your search criteria." }
+                QueryBar::<Media> {
+                    search,
+                    status: paged.pager.status(paged.items.read().len(), "results"),
+                    action_button,
+                }
+
+                AdvancedSidebar {
+                    show_signal: advanced_expanded,
+                    tabs: HashMap::from([
+                        ("Advanced Search".to_owned(), rsx! {
+                            AdvancedSearchTab::<Media> { search }
+                        }),
+                        ("Bulk Edit".to_owned(), rsx! {
+                            BulkEditTab {
+                                bulk_edit_signal,
+                                search_req,
+                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
                             }
-                        },
-                    }
+                        }),
+                        ("Collection Labels".to_owned(), rsx! {
+                            CollectionColorTab { collection_color_signal }
+                        }),
+                    ]),
+                }
+            }
+
+            div { class: "scrollable-content",
+                MediaGrid {
+                    items: paged.items,
+                    window: paged.window,
+                    pager: paged.pager,
+                    bulk_edit_signal,
+                    collection_color_signal,
+                    empty: rsx! {
+                        div { class: "empty-state",
+                            p { "No media found matching your search criteria." }
+                        }
+                    },
                 }
             }
         }
+    }
 }

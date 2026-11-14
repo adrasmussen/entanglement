@@ -67,78 +67,78 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
     match libraries {
         Some(library_details) => {
             rsx! {
-                           div {
-                               class: "table-container",
-                               style: "margin-top: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);",
-                               table { style: "width: 100%; border-collapse: collapse;",
-                                   thead {
-                                       tr { style: "background-color: var(--primary); color: white;",
-                                           th { style: "padding: var(--space-3); text-align: left;",
-                                               "Path"
-                                           }
-                                           th { style: "padding: var(--space-3); text-align: left;",
-                                               "Group"
-                                           }
-                                           th { style: "padding: var(--space-3); text-align: left;",
-                                               "File Count"
-                                           }
-                                           th { style: "padding: var(--space-3); text-align: right;",
-                                               "Actions"
-                                           }
-                                       }
-                                   }
-                                   tbody {
-                                       for (library_uuid , library) in library_details {
-                                           tr {
-                                               key: "{library_uuid}",
-                                               style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
-                                               onmouseenter: move |_| {},
+                div {
+                    class: "table-container",
+                    style: "margin-top: var(--space-4); background-color: var(--surface); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm);",
+                    table { style: "width: 100%; border-collapse: collapse;",
+                        thead {
+                            tr { style: "background-color: var(--primary); color: white;",
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "Path"
+                                }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "Group"
+                                }
+                                th { style: "padding: var(--space-3); text-align: left;",
+                                    "File Count"
+                                }
+                                th { style: "padding: var(--space-3); text-align: right;",
+                                    "Actions"
+                                }
+                            }
+                        }
+                        tbody {
+                            for (library_uuid , library) in library_details {
+                                tr {
+                                    key: "{library_uuid}",
+                                    style: "border-bottom: 1px solid var(--border); transition: background-color var(--transition-fast) var(--easing-standard);",
+                                    onmouseenter: move |_| {},
 
-                                               td { style: "padding: var(--space-3);",
-                                                   Link {
-                                                       to: Route::LibraryDetail {
-                                                           library_uuid: library_uuid.to_string(),
-            q: String::new(),
-                                                       },
-                                                       style: "color: var(--primary); font-weight: 500; text-decoration: none;",
-                                                       "{library.path}"
-                                                   }
-                                               }
+                                    td { style: "padding: var(--space-3);",
+                                        Link {
+                                            to: Route::LibraryDetail {
+                                                library_uuid: library_uuid.to_string(),
+                                                q: String::new(),
+                                            },
+                                            style: "color: var(--primary); font-weight: 500; text-decoration: none;",
+                                            "{library.path}"
+                                        }
+                                    }
 
-                                               td { style: "padding: var(--space-3);",
-                                                   span {
-                                                       class: "group-badge",
-                                                       style: "display: inline-block; padding: var(--space-1) var(--space-2); background-color: var(--neutral-100); border-radius: var(--radius-full); font-size: 0.875rem;",
-                                                       "{library.gid}"
-                                                   }
-                                               }
+                                    td { style: "padding: var(--space-3);",
+                                        span {
+                                            class: "group-badge",
+                                            style: "display: inline-block; padding: var(--space-1) var(--space-2); background-color: var(--neutral-100); border-radius: var(--radius-full); font-size: 0.875rem;",
+                                            "{library.gid}"
+                                        }
+                                    }
 
-                                               td { style: "padding: var(--space-3);", "{library.count}" }
+                                    td { style: "padding: var(--space-3);", "{library.count}" }
 
-                                               td { style: "padding: var(--space-3); display: flex; justify-content: right;",
-                                                   button {
-                                                       class: "btn btn-secondary",
-                                                       style: "margin-right: var(--space-2);",
-                                                       onclick: move |_| {
-                                                           MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid)));
-                                                       },
-                                                       "Start Task"
-                                                   }
-                                                   button {
-                                                       class: "btn btn-secondary",
-                                                       style: "margin-right: var(--space-2);",
-                                                       onclick: move |_| {
-                                                           MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid)));
-                                                       },
-                                                       "Task History"
-                                                   }
-                                               }
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                       }
+                                    td { style: "padding: var(--space-3); display: flex; justify-content: right;",
+                                        button {
+                                            class: "btn btn-secondary",
+                                            style: "margin-right: var(--space-2);",
+                                            onclick: move |_| {
+                                                MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid)));
+                                            },
+                                            "Start Task"
+                                        }
+                                        button {
+                                            class: "btn btn-secondary",
+                                            style: "margin-right: var(--space-2);",
+                                            onclick: move |_| {
+                                                MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid)));
+                                            },
+                                            "Task History"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         None => {
             rsx! {
