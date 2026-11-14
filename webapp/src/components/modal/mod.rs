@@ -221,9 +221,19 @@ pub fn ModalInner(props: ModalInnerProps) -> Element {
                     if !disable_close {
                         button {
                             class: "btn-close",
+                            r#type: "button",
                             "aria-label": "Close",
+                            title: "Close",
                             onclick: move |_| close_modal(),
-                            "×"
+                            svg {
+                                view_box: "0 0 24 24",
+                                fill: "none",
+                                stroke: "currentColor",
+                                stroke_width: "2",
+                                stroke_linecap: "round",
+                                "aria-hidden": "true",
+                                path { d: "M6 6l12 12M18 6L6 18" }
+                            }
                         }
                     }
                 }
