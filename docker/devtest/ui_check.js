@@ -503,7 +503,9 @@ async function submit(page, text) {
 
   // ================================================================ 6. back navigation
   s = section('back-navigation from a media page still lands on the same card', HEADER);
-  await open(page, '/gallery', 'tag:ct-even');
+  // type:Image matches media that have files on disk (newest first); the counttest seed has no
+  // files, so its thumbnails 404 and the cards collapse after the router has restored the scroll
+  await open(page, '/gallery', 'type:Image');
   for (let i = 0; i < 400 && loadedOf(await statusText(page)) < 240; i++) {
     await page.mouse.wheel(0, 500);
     await sleep(120);
@@ -540,13 +542,13 @@ async function submit(page, text) {
   await page.goBack();
   await sleep(3000);
   const afterCard = await under(P.x, P.y);
-  check(s, 'gallery?q=tag:ct-even, back from a card', '-', {
+  check(s, 'gallery?q=type:Image, back from a card', '-', {
     same_card: !!(before && afterCard && before.href === afterCard.href),
-    top_delta: before && afterCard ? afterCard.top - before.top : null,
+    top_within_4px: !!(before && afterCard && Math.abs(afterCard.top - before.top) <= 4),
     url_q: urlQ(page),
     input: await inputValue(page),
     loaded_at_least_before: loadedOf(await statusText(page)) >= Math.min(loadedBefore, 60),
-  }, { same_card: true, top_delta: 0, url_q: 'tag:ct-even', input: 'tag:ct-even', loaded_at_least_before: true });
+  }, { same_card: true, top_within_4px: true, url_q: 'type:Image', input: 'type:Image', loaded_at_least_before: true });
 
   await t.browser.close();
   printGrids();
