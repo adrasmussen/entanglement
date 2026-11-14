@@ -13,6 +13,9 @@
 # dependencies never do (unless Cargo.lock changes).  the target dirs are not part of the image,
 # so the binaries are copied out to /out.
 #
+# the registry mounts are shared between the two stages (cargo locks its own registry), the
+# target mounts are per stage and locked, so the stages build in parallel.
+#
 # `docker builder prune -a` also deletes these cache mounts (the next build is cold again);
 # to free disk while keeping them:  docker builder prune -f --filter 'type!=exec.cachemount'
 
@@ -41,8 +44,8 @@ COPY webapp/Cargo.toml ./webapp/Cargo.toml
 # crate skeleton to resolve the workspace without pulling it into this stage.
 RUN mkdir -p webapp/src && echo "fn main() {}" > webapp/src/main.rs
 
-RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=shared \
+    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=shared \
     --mount=type=cache,id=entg-native-target,target=/build/target,sharing=locked \
     find api common server tools -name '*.rs' -exec touch {} + \
     && cargo build --release -p server -p tools \
@@ -69,8 +72,8 @@ COPY tools ./tools
 COPY webapp ./webapp
 
 WORKDIR /build/webapp
-RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=shared \
+    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=shared \
     --mount=type=cache,id=entg-wasm-target,target=/build/target,sharing=locked \
     find /build/api /build/webapp -name '*.rs' -exec touch {} + \
     && rm -rf /build/target/dx/webapp/release/web/public \
