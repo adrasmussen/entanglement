@@ -550,6 +550,45 @@ async function submit(page, text) {
     loaded_at_least_before: loadedOf(await statusText(page)) >= Math.min(loadedBefore, 60),
   }, { same_card: true, top_within_4px: true, url_q: 'type:Image', input: 'type:Image', loaded_at_least_before: true });
 
+  // the counttest seed has no files: its thumbnails 404 and show a placeholder tile of the same
+  // size, so the cards keep their height and back-navigation still lands on the same card
+  await open(page, '/gallery', 'tag:ct-even');
+  for (let i = 0; i < 400 && loadedOf(await statusText(page)) < 240; i++) {
+    await page.mouse.wheel(0, 500);
+    await sleep(120);
+  }
+  await sleep(1500);
+  const tiles = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.media-card')];
+    const hs = cards.map(c => Math.round(c.querySelector('.media-card-image').getBoundingClientRect().height));
+    return {
+      placeholders: document.querySelectorAll('.media-card-placeholder').length,
+      broken_imgs: cards.filter(c => { const i = c.querySelector('img'); return i && i.complete && i.naturalWidth === 0; }).length,
+      frame_heights_equal: new Set(hs).size === 1,
+      frame_ratio_4_3: hs.length > 0 && Math.abs(cards[0].querySelector('.media-card-image').getBoundingClientRect().width / hs[0] - 4 / 3) < 0.02,
+    };
+  });
+  check(s, 'gallery?q=tag:ct-even: missing thumbnails become placeholder tiles', '-', {
+    placeholders_shown: tiles.placeholders > 0,
+    broken_imgs: tiles.broken_imgs,
+    frame_heights_equal: tiles.frame_heights_equal,
+    frame_ratio_4_3: tiles.frame_ratio_4_3,
+  }, { placeholders_shown: true, broken_imgs: 0, frame_heights_equal: true, frame_ratio_4_3: true });
+  await page.mouse.wheel(0, 300);
+  await sleep(1200);
+  const P2 = await pickCard();
+  const before2 = await under(P2.x, P2.y);
+  await page.mouse.click(P2.x, P2.y);
+  await page.waitForURL(/gallery\/[0-9a-f-]{36}/);
+  await sleep(1500);
+  await page.goBack();
+  await sleep(3000);
+  const after2 = await under(P2.x, P2.y);
+  check(s, 'gallery?q=tag:ct-even (no files), back from a card', '-', {
+    same_card: !!(before2 && after2 && before2.href === after2.href),
+    top_within_4px: !!(before2 && after2 && Math.abs(after2.top - before2.top) <= 4),
+  }, { same_card: true, top_within_4px: true });
+
   await t.browser.close();
   printGrids();
   process.exit(FAILED ? 1 : 0);

@@ -131,17 +131,41 @@ pub const BASE_COMPONENTS: &str = r#"
   box-shadow: var(--shadow-md);
 }
 
+/* the frame carries the aspect ratio, so a card's height never depends on its image having
+   loaded (a broken <img> has no natural size and ignores aspect-ratio) */
 .media-card-image {
   position: relative;
   overflow: hidden;
   width: 100%;
+  aspect-ratio: 4/3;
 }
 
 .media-card-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  aspect-ratio: 4/3;
+  height: 100%;
   object-fit: cover;
   transition: transform var(--transition-slow) var(--easing-standard);
+}
+
+/* shown in place of a thumbnail that failed to load */
+.media-card-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  background-color: var(--surface-raised);
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.media-card-placeholder-icon {
+  font-size: 1.75rem;
+  opacity: 0.6;
 }
 
 .media-card:hover .media-card-image img {
@@ -535,7 +559,7 @@ pub const BASE_COMPONENTS: &str = r#"
 
 /* flatter crop than the default 4:3 -- cards are ~17% shorter regardless of how
    many columns fit (object-fit: cover crops rather than squashes) */
-.media-grid.compact .media-card-image img {
+.media-grid.compact .media-card-image {
   aspect-ratio: 16 / 10;
 }
 

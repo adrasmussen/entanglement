@@ -94,6 +94,11 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
         )
     };
 
+    // a thumbnail that fails to load (missing file, no thumbnail yet) shows a placeholder tile
+    // of the same size, so the card keeps its height and the grid does not reflow under the
+    // user -- which would also throw off the router's scroll restore on back-navigation
+    let mut thumb_failed = use_signal(|| false);
+
     rsx! {
         div {
             class: "media-card",
@@ -126,10 +131,20 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                     }
                 },
                 div { class: "media-card-image",
-                    img {
-                        src: thumbnail_link(media_uuid),
-                        alt: if media.note.is_empty() { format!("Media {}", media_uuid) } else { media.note.clone() },
-                        loading: "lazy",
+                    if thumb_failed() {
+                        div {
+                            class: "media-card-placeholder",
+                            title: "No preview available",
+                            span { class: "media-card-placeholder-icon", "🖼" }
+                            span { "No preview" }
+                        }
+                    } else {
+                        img {
+                            src: thumbnail_link(media_uuid),
+                            alt: if media.note.is_empty() { format!("Media {}", media_uuid) } else { media.note.clone() },
+                            loading: "lazy",
+                            onerror: move |_| thumb_failed.set(true),
+                        }
                     }
                 }
                 div { class: "media-card-info", style: info_background_style,
