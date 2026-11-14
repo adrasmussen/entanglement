@@ -1,8 +1,23 @@
+# syntax=docker/dockerfile:1.7
 # multi-stage build for entanglement: native server/tools binaries + the Dioxus
 # WASM webapp, combined into one runtime image used for local docker-compose dev.
 #
 # this is new tooling for local development only -- it does not modify anything
 # under api/, common/, server/, tools/, or webapp/.
+#
+# build caching: the cargo registry and each stage's target/ live in BuildKit cache mounts
+# (id entg-*), so third-party crates -- about 640 of them, rocksdb's C++ among them -- compile
+# once and later builds only recompile the workspace crates.  cargo trusts file mtimes, and a
+# branch switch can bring in a source file that is older than the cached artifact, so the
+# workspace sources are touched before each build: the workspace always recompiles, the
+# dependencies never do (unless Cargo.lock changes).  the target dirs are not part of the image,
+# so the binaries are copied out to /out.
+#
+# the registry mounts are shared between the two stages (cargo locks its own registry), the
+# target mounts are per stage and locked, so the stages build in parallel.
+#
+# `docker builder prune -a` also deletes these cache mounts (the next build is cold again);
+# to free disk while keeping them:  docker builder prune -f --filter 'type!=exec.cachemount'
 
 # ---- stage 1: native binaries (server, entg-db, entg-auth, entg-gss, entg-http) ----
 FROM rust:bookworm AS rust-builder
@@ -29,7 +44,14 @@ COPY webapp/Cargo.toml ./webapp/Cargo.toml
 # crate skeleton to resolve the workspace without pulling it into this stage.
 RUN mkdir -p webapp/src && echo "fn main() {}" > webapp/src/main.rs
 
-RUN cargo build --release -p server -p tools
+RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=shared \
+    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=shared \
+    --mount=type=cache,id=entg-native-target,target=/build/target,sharing=locked \
+    find api common server tools -name '*.rs' -exec touch {} + \
+    && cargo build --release -p server -p tools \
+    && mkdir -p /out \
+    && cp target/release/server target/release/entg-db target/release/entg-auth \
+          target/release/entg-gss target/release/entg-http /out/
 
 # ---- stage 2: Dioxus WASM webapp build ----
 FROM rust:bookworm AS wasm-builder
@@ -50,7 +72,14 @@ COPY tools ./tools
 COPY webapp ./webapp
 
 WORKDIR /build/webapp
-RUN dx build --platform web --release
+RUN --mount=type=cache,id=entg-cargo-registry,target=/usr/local/cargo/registry,sharing=shared \
+    --mount=type=cache,id=entg-cargo-git,target=/usr/local/cargo/git,sharing=shared \
+    --mount=type=cache,id=entg-wasm-target,target=/build/target,sharing=locked \
+    find /build/api /build/webapp -name '*.rs' -exec touch {} + \
+    && rm -rf /build/target/dx/webapp/release/web/public \
+    && dx build --platform web --release \
+    && mkdir -p /out \
+    && cp -r /build/target/dx/webapp/release/web/public /out/public
 
 # ---- stage 3: runtime ----
 FROM debian:bookworm-slim AS runtime
@@ -62,16 +91,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=rust-builder /build/target/release/server /usr/local/bin/server
-COPY --from=rust-builder /build/target/release/entg-db /usr/local/bin/entg-db
-COPY --from=rust-builder /build/target/release/entg-auth /usr/local/bin/entg-auth
-COPY --from=rust-builder /build/target/release/entg-gss /usr/local/bin/entg-gss
-COPY --from=rust-builder /build/target/release/entg-http /usr/local/bin/entg-http
+COPY --from=rust-builder /out/server /out/entg-db /out/entg-auth /out/entg-gss /out/entg-http /usr/local/bin/
 
 # dx build (even pinned to 0.6.3) writes release output under target/dx/..., not
 # the dist/ folder Dioxus.toml's out_dir names -- that setting isn't honored for
 # release web builds in this CLI version, so we copy from where it actually lands.
-COPY --from=wasm-builder /build/target/dx/webapp/release/web/public /srv/entanglement/webapp-dist
+COPY --from=wasm-builder /out/public /srv/entanglement/webapp-dist
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
