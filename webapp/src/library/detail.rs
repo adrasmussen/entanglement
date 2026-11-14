@@ -9,13 +9,12 @@ use crate::{
         grid_cache::{LIBRARY_META, LIBRARY_SHOW_HIDDEN},
         paging::{CacheCfg, use_paged},
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
-        storage::*,
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
+        query_bar::{QueryBar, use_search_state},
         sidebar::AdvancedSidebar,
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
@@ -23,6 +22,7 @@ use crate::{
 use api::{
     UuidSource,
     library::*,
+    media::Media,
     search::{SearchRequest, SearchResponse},
 };
 
@@ -113,7 +113,8 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         let v = show_hidden();
         LIBRARY_SHOW_HIDDEN.write().insert(*library_uuid.peek(), v);
     });
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let search = use_search_state(MEDIA_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
@@ -208,115 +209,113 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     };
 
     rsx! {
-        div { class: "container with-sticky",
-            ModalBox { update_signal }
+            div { class: "container with-sticky",
+                ModalBox { update_signal }
 
-            div { class: "sticky-header",
-                // library detail view header
-                div {
-                    class: "library-detail-header",
-                    style: "background-color: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); margin-bottom: var(--space-4); box-shadow: var(--shadow-sm);",
-                    div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
-                        // Library info
-                        div {
-                            h1 { style: "margin: 0 0 var(--space-2) 0;", "Library: {library.path}" }
-                            div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary) font-size: 0.875rem;",
-                                span { "Owner: {library.uid}" }
-                                span { "Group: {library.gid}" }
-                                //span { "Last scanned: {formatted_time}" }
-                                span { "File count: {library.count}" }
+                div { class: "sticky-header",
+                    // library detail view header
+                    div {
+                        class: "library-detail-header",
+                        style: "background-color: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); margin-bottom: var(--space-4); box-shadow: var(--shadow-sm);",
+                        div { style: "display: flex; justify-content: space-between; align-items: flex-start;",
+                            // Library info
+                            div {
+                                h1 { style: "margin: 0 0 var(--space-2) 0;", "Library: {library.path}" }
+                                div { style: "display: flex; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary) font-size: 0.875rem;",
+                                    span { "Owner: {library.uid}" }
+                                    span { "Group: {library.gid}" }
+                                    //span { "Last scanned: {formatted_time}" }
+                                    span { "File count: {library.count}" }
+                                }
+                                TaskBar { update_signal, library_uuid }
                             }
-                            TaskBar { update_signal, library_uuid }
-                        }
-                        // Action buttons
-                        div { style: "display: flex; gap: var(--space-2); align-items: center;",
-                            GridDensityMenu {}
-                            button {
-                                class: "btn btn-secondary",
-                                onclick: move |_| {
-                                    MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid())));
-                                },
-                                "Start Task"
-                            }
-                            button {
-                                class: "btn btn-secondary",
-                                onclick: move |_| {
-                                    MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid())));
-                                },
-                                "Task History"
+                            // Action buttons
+                            div { style: "display: flex; gap: var(--space-2); align-items: center;",
+                                GridDensityMenu {}
+                                button {
+                                    class: "btn btn-secondary",
+                                    onclick: move |_| {
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::StartTask(library_uuid())));
+                                    },
+                                    "Start Task"
+                                }
+                                button {
+                                    class: "btn btn-secondary",
+                                    onclick: move |_| {
+                                        MODAL_STACK.with_mut(|v| v.push(Modal::TaskHistory(library_uuid())));
+                                    },
+                                    "Task History"
+                                }
                             }
                         }
                     }
+
+                    QueryBar::<Media> {
+     search,
+    status: paged.pager.status(paged.items.read().len(), if show_hidden() { "hidden results" } else { "results" }),
+                        action_button,
+                    }
+
+                    AdvancedSidebar {
+                        show_signal: advanced_expanded,
+                        tabs: HashMap::from([
+                            ("Advanced Search".to_owned(), rsx! {
+                                AdvancedSearchTab { media_search_signal }
+                            }),
+                            ("Bulk Edit".to_owned(), rsx! {
+                                BulkEditTab {
+                                    bulk_edit_signal,
+                                    search_req,
+                                    modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                                }
+                            }),
+                            ("Collection Labels".to_owned(), rsx! {
+                                CollectionColorTab { collection_color_signal }
+                            }),
+                        ]),
+                    }
                 }
 
-                SearchBar {
-                    search_signal: media_search_signal,
-                    storage_key: MEDIA_SEARCH_KEY,
-                    placeholder: "Search media in this library...",
-                    status: paged.pager.status(paged.items.read().len(), if show_hidden() { "hidden results" } else { "results" }),
-                    action_button,
-                }
-
-                AdvancedSidebar {
-                    show_signal: advanced_expanded,
-                    tabs: HashMap::from([
-                        ("Advanced Search".to_owned(), rsx! {
-                            AdvancedSearchTab { media_search_signal }
-                        }),
-                        ("Bulk Edit".to_owned(), rsx! {
-                            BulkEditTab {
-                                bulk_edit_signal,
-                                search_req,
-                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
-                            }
-                        }),
-                        ("Collection Labels".to_owned(), rsx! {
-                            CollectionColorTab { collection_color_signal }
-                        }),
-                    ]),
-                }
-            }
-
-            div { class: "scrollable-content",
-                MediaGrid {
-                    items: paged.items,
-                    window: paged.window,
-                    pager: paged.pager,
-                    bulk_edit_signal,
-                    collection_color_signal,
-                    empty: rsx! {
-                        div {
-                            class: "empty-state",
-                            style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
-                            div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
-                                "🖼️"
-                            }
-                            h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
-                                "No Media Found"
-                            }
-                            p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
-                                if show_hidden() {
-                                    "No media matches your search criteria in this library."
-                                } else {
-                                    "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                div { class: "scrollable-content",
+                    MediaGrid {
+                        items: paged.items,
+                        window: paged.window,
+                        pager: paged.pager,
+                        bulk_edit_signal,
+                        collection_color_signal,
+                        empty: rsx! {
+                            div {
+                                class: "empty-state",
+                                style: "padding: var(--space-8) var(--space-4); text-align: center; background-color: var(--surface); border-radius: var(--radius-lg); margin-top: var(--space-4);",
+                                div { style: "font-size: 4rem; margin-bottom: var(--space-4); color: var(--neutral-400);",
+                                    "🖼️"
+                                }
+                                h3 { style: "margin-bottom: var(--space-2); color: var(--text-primary);",
+                                    "No Media Found"
+                                }
+                                p { style: "color: var(--text-secondary); max-width: 500px; margin: 0 auto;",
+                                    if show_hidden() {
+                                        "No media matches your search criteria in this library."
+                                    } else {
+                                        "No media matches your search criteria. Try different search terms or check the 'Show hidden files' option."
+                                    }
+                                }
+                                if !show_hidden() {
+                                    button {
+                                        class: "btn btn-secondary",
+                                        style: "margin-top: var(--space-4);",
+                                        onclick: move |_| {
+                                            show_hidden.set(true);
+                                        },
+                                        "Show Hidden Files"
+                                    }
                                 }
                             }
-                            if !show_hidden() {
-                                button {
-                                    class: "btn btn-secondary",
-                                    style: "margin-top: var(--space-4);",
-                                    onclick: move |_| {
-                                        show_hidden.set(true);
-                                    },
-                                    "Show Hidden Files"
-                                }
-                            }
-                        }
-                    },
+                        },
+                    }
                 }
             }
         }
-    }
 }
 
 #[component]

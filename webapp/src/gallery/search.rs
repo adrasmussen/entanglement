@@ -6,19 +6,18 @@ use crate::{
     common::{
         paging::{CacheCfg, use_paged},
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
-        storage::try_local_storage,
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::ModalBox,
-        search::SearchBar,
+        query_bar::{QueryBar, use_search_state},
         sidebar::AdvancedSidebar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::{
-    media::SearchMediaReq,
+    media::{Media, SearchMediaReq},
     search::{SearchRequest, SearchResponse},
 };
 
@@ -26,7 +25,8 @@ use api::{
 pub fn GallerySearch() -> Element {
     let update_signal = use_signal(|| ());
 
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let search = use_search_state(MEDIA_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
@@ -81,59 +81,57 @@ pub fn GallerySearch() -> Element {
     };
 
     rsx! {
-        div { class: "container with-sticky",
-            ModalBox { update_signal }
+            div { class: "container with-sticky",
+                ModalBox { update_signal }
 
-            div { class: "sticky-header",
-                div {
-                    class: "page-header",
-                    style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
-                    p { "Browse and search all accessible media" }
-                    GridDensityMenu {}
+                div { class: "sticky-header",
+                    div {
+                        class: "page-header",
+                        style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
+                        p { "Browse and search all accessible media" }
+                        GridDensityMenu {}
+                    }
+
+                    QueryBar::<Media> {
+     search,
+    status: paged.pager.status(paged.items.read().len(), "results"),
+                        action_button,
+                    }
+
+                    AdvancedSidebar {
+                        show_signal: advanced_expanded,
+                        tabs: HashMap::from([
+                            ("Advanced Search".to_owned(), rsx! {
+                                AdvancedSearchTab { media_search_signal }
+                            }),
+                            ("Bulk Edit".to_owned(), rsx! {
+                                BulkEditTab {
+                                    bulk_edit_signal,
+                                    search_req,
+                                    modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                                }
+                            }),
+                            ("Collection Labels".to_owned(), rsx! {
+                                CollectionColorTab { collection_color_signal }
+                            }),
+                        ]),
+                    }
                 }
 
-                SearchBar {
-                    search_signal: media_search_signal,
-                    storage_key: MEDIA_SEARCH_KEY,
-                    placeholder: "Search by date, description or tags...",
-                    status: paged.pager.status(paged.items.read().len(), "results"),
-                    action_button,
-                }
-
-                AdvancedSidebar {
-                    show_signal: advanced_expanded,
-                    tabs: HashMap::from([
-                        ("Advanced Search".to_owned(), rsx! {
-                            AdvancedSearchTab { media_search_signal }
-                        }),
-                        ("Bulk Edit".to_owned(), rsx! {
-                            BulkEditTab {
-                                bulk_edit_signal,
-                                search_req,
-                                modes: Vec::from([BulkEditMode::EditTags, BulkEditMode::AddToCollection]),
+                div { class: "scrollable-content",
+                    MediaGrid {
+                        items: paged.items,
+                        window: paged.window,
+                        pager: paged.pager,
+                        bulk_edit_signal,
+                        collection_color_signal,
+                        empty: rsx! {
+                            div { class: "empty-state",
+                                p { "No media found matching your search criteria." }
                             }
-                        }),
-                        ("Collection Labels".to_owned(), rsx! {
-                            CollectionColorTab { collection_color_signal }
-                        }),
-                    ]),
-                }
-            }
-
-            div { class: "scrollable-content",
-                MediaGrid {
-                    items: paged.items,
-                    window: paged.window,
-                    pager: paged.pager,
-                    bulk_edit_signal,
-                    collection_color_signal,
-                    empty: rsx! {
-                        div { class: "empty-state",
-                            p { "No media found matching your search criteria." }
-                        }
-                    },
+                        },
+                    }
                 }
             }
         }
-    }
 }

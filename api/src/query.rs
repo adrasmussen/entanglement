@@ -475,7 +475,7 @@ fn check_value(spec: &FieldSpec, op: Op, value: &str) -> Result<(), String> {
 }
 
 // split the input on whitespace outside quotes, returning each token's byte span and text
-fn tokenize(input: &str) -> Vec<(Range<usize>, String)> {
+pub fn tokenize(input: &str) -> Vec<(Range<usize>, String)> {
     let mut tokens = Vec::new();
     let mut start: Option<usize> = None;
     let mut in_quote = false;
