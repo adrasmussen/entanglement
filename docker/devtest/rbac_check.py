@@ -133,6 +133,11 @@ for label, flt, where in [
     ("text rbac", q(text=["rbac"]), "m.ts_vec @@ to_tsquery('english', '''rbac''')"),
     ("description:lighthouse", q(clauses=[("description", "Contains", "lighthouse")]), "m.note ILIKE '%lighthouse%'"),
     ("old SubstringAny rbac", {"SubstringAny": {"filter": ["rbac"]}}, "m.ts_vec @@ to_tsquery('english', '''rbac''')"),
+    # the hand-testing tags and phrases are on every foreign item too
+    ("tag:sunshine", q(clauses=[("tag", "Has", "sunshine")]), "m.tags ? 'sunshine'"),
+    ("tag:cheer", q(clauses=[("tag", "Has", "cheer")]), "m.tags ? 'cheer'"),
+    ('description:"quiet morning"', q(clauses=[("description", "Contains", "quiet morning")]), "m.note ILIKE '%quiet morning%'"),
+    ("text bakery (prefix)", q(text=["baker"]), "m.ts_vec @@ to_tsquery('english', '''baker'':*')"),
 ]:
     code, d = call("SearchMedia", {"opts": opts(flt, limit=None)})
     cases.append([f"SearchMedia {label}", raw_count(where), d["meta"]["total"], leaked(d["media"])])

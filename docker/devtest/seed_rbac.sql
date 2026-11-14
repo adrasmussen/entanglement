@@ -38,9 +38,16 @@ SELECT
     1794534907,
     n % 10 = 0,
     to_char(date '2020-01-01' + (n * 7 % 2500), 'YYYY-MM-DD'),
-    format('[counttest] rbac item %s lighthouse beach', n),
-    CASE WHEN n % 2 = 0 THEN hstore(ARRAY['ct-rbac-secret', 'ct-even', 'ct-mod7'], ARRAY[NULL, NULL, NULL])
-         ELSE hstore(ARRAY['ct-rbac-secret', 'ct-odd', 'ct-mod7'], ARRAY[NULL, NULL, NULL]) END,
+    -- the same happy tags and phrases as seed_search.sql's hand-testing set, on every foreign
+    -- item, so searching for them must still surface only dev's own and the bridged media
+    format('[counttest] rbac item %s lighthouse beach / %s', n,
+           (ARRAY['a quiet morning by the lake', 'the old bridge at dusk', 'children playing in the park',
+                  'fresh bread from the corner bakery', 'a long walk through autumn leaves',
+                  'rain on the kitchen window', 'friends laughing around the campfire',
+                  'the city lights after midnight'])[n % 8 + 1]),
+    (CASE WHEN n % 2 = 0 THEN hstore(ARRAY['ct-rbac-secret', 'ct-even', 'ct-mod7'], ARRAY[NULL, NULL, NULL])
+          ELSE hstore(ARRAY['ct-rbac-secret', 'ct-odd', 'ct-mod7'], ARRAY[NULL, NULL, NULL]) END)
+      || hstore((ARRAY['sunshine', 'joyful', 'delight', 'cheer'])[n % 4 + 1], NULL),
     'Image'
 FROM generate_series(1, 300) AS n;
 
