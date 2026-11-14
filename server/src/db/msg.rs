@@ -1,7 +1,12 @@
 use std::collections::HashSet;
 
 use api::{
-    collection::*, comment::*, library::*, media::*, page::PageRequest, search::SearchOptions,
+    collection::*,
+    comment::*,
+    library::*,
+    media::*,
+    page::PageRequest,
+    search::{ListFilter, SearchOptions},
 };
 use common::db::{MediaByCHash, MediaByPath, MediaDetails, SearchPage};
 
@@ -115,7 +120,7 @@ pub enum DbMsg {
     SearchCollections {
         resp: EsmResp<SearchPage<CollectionUuid>>,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     },
     SearchMediaInCollection {
@@ -142,7 +147,7 @@ pub enum DbMsg {
     SearchLibraries {
         resp: EsmResp<SearchPage<LibraryUuid>>,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     },
     SearchMediaInLibrary {

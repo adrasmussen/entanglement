@@ -16,7 +16,8 @@ use crate::{
     task::msg::TaskMsg,
 };
 use api::{
-    auth::*, collection::*, comment::*, library::*, media::*, page::PageRequest, search::*, task::*,
+    auth::*, collection::*, comment::*, library::*, media::*, page::PageRequest,
+    query::SearchClass, search::*, task::*,
 };
 
 // http api endpoints
@@ -157,6 +158,13 @@ pub(super) async fn update_media(
 fn check_media_filter(filter: &SearchFilter) -> Result<(), Response> {
     filter
         .validate_media()
+        .map_err(|msg| (StatusCode::BAD_REQUEST, msg).into_response())
+}
+
+// the same for the collection and library list searches
+fn check_list_filter<C: SearchClass>(filter: &ListFilter) -> Result<(), Response> {
+    filter
+        .validate::<C>()
         .map_err(|msg| (StatusCode::BAD_REQUEST, msg).into_response())
 }
 
@@ -597,6 +605,12 @@ pub(super) async fn search_collections(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchCollectionsReq>,
 ) -> Result<Response, AppError> {
+    let filter = ListFilter::from_req(message.filter, message.query);
+
+    if let Err(response) = check_list_filter::<Collection>(&filter) {
+        return Ok(response);
+    }
+
     // auth handled in db search
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -609,7 +623,7 @@ pub(super) async fn search_collections(
             DbMsg::SearchCollections {
                 resp: tx,
                 gid,
-                filter: message.filter,
+                filter,
                 // uuid-only like the other search endpoints, so None (used by the
                 // collection pickers) is left unbounded; the collections page pages itself
                 page: message.page.clone(),
@@ -708,6 +722,12 @@ pub(super) async fn search_libraries(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SearchLibrariesReq>,
 ) -> Result<Response, AppError> {
+    let filter = ListFilter::from_req(message.filter, message.query);
+
+    if let Err(response) = check_list_filter::<Library>(&filter) {
+        return Ok(response);
+    }
+
     // auth handled as part of the db search
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -720,7 +740,7 @@ pub(super) async fn search_libraries(
             DbMsg::SearchLibraries {
                 resp: tx,
                 gid,
-                filter: message.filter,
+                filter,
                 page: message.page.clone(),
             }
             .into(),
@@ -826,12 +846,12 @@ pub(super) async fn get_counts(
             }),
             CountScope::Collections => send!(SearchCollections {
                 gid: gid.clone(),
-                filter: String::new(),
+                filter: ListFilter::Literal(String::new()),
                 page: PageRequest::count_only(),
             }),
             CountScope::Libraries => send!(SearchLibraries {
                 gid: gid.clone(),
-                filter: String::new(),
+                filter: ListFilter::Literal(String::new()),
                 page: PageRequest::count_only(),
             }),
             CountScope::MediaInCollection { collection_uuid } => {
