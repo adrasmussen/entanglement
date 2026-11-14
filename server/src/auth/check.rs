@@ -9,7 +9,7 @@ use crate::db::msg::DbMsg;
 use crate::service::{ESInner, ServiceType};
 use api::{
     collection::CollectionUuid, comment::CommentUuid, library::LibraryUuid, media::MediaUuid,
-    task::TaskType,
+    page::PageRequest, task::TaskType,
 };
 
 // common auth routines
@@ -73,6 +73,29 @@ pub trait AuthCheck: ESInner + Debug {
             .await?;
 
         rx.await?
+    }
+
+    // the collections that the groups can see, for trimming the collection lists attached to
+    // media records -- a media item can be visible through one collection while also sitting
+    // in collections of groups the user is not in, and those must not be revealed
+    #[instrument(skip(self))]
+    async fn visible_collections(&self, gid: HashSet<String>) -> Result<HashSet<CollectionUuid>> {
+        let db_svc_sender = self.registry().get(&ServiceType::Db)?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        db_svc_sender
+            .send(
+                DbMsg::SearchCollections {
+                    resp: tx,
+                    gid,
+                    filter: String::new(),
+                    page: PageRequest::default(),
+                }
+                .into(),
+            )
+            .await?;
+
+        Ok(rx.await??.items.into_iter().collect())
     }
 
     #[instrument(skip(self))]
