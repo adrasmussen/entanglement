@@ -112,9 +112,17 @@ pub(super) async fn get_media(
         .await??
         .ok_or_else(|| anyhow::Error::msg("unknown media_uuid"))?;
 
+    // only list the collections that the user's groups can see
+    let gid = state.groups_for_user(&current_user.uid).await?;
+    let visible = state.visible_collections(gid).await?;
+
     Ok(Json(GetMediaResp {
         media: result.0,
-        collections: result.1,
+        collections: result
+            .1
+            .into_iter()
+            .filter(|c| visible.contains(c))
+            .collect(),
         comments: result.2,
     })
     .into_response())
@@ -206,7 +214,14 @@ pub(super) async fn similar_media(
     Extension(current_user): Extension<CurrentUser>,
     Json(message): Json<SimilarMediaReq>,
 ) -> Result<Response, AppError> {
-    // auth handled as part of the db search
+    // the results are filtered by the db search, but the source media must be checked here,
+    // otherwise any media_uuid can be used to probe for similar items
+    if !state
+        .can_access_media(&current_user.uid, &message.media_uuid)
+        .await?
+    {
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
 
     let gid = state.groups_for_user(&current_user.uid).await?;
 
@@ -999,6 +1014,9 @@ pub(super) async fn batch_search_and_sort(
     // actually used
     let page_req = req.opts().page.clone();
 
+    // collections attached to each media record are trimmed to the ones these groups can see
+    let visible = state.visible_collections(gid.clone()).await?;
+
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     let msg = match req {
@@ -1060,7 +1078,11 @@ pub(super) async fn batch_search_and_sort(
         .map(|d| SearchResponse {
             media_uuid: d.media_uuid,
             media: d.media,
-            collections: d.collections,
+            collections: d
+                .collections
+                .into_iter()
+                .filter(|c| visible.contains(c))
+                .collect(),
             comments: d.comments,
         })
         .collect();
