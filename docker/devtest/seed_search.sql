@@ -40,3 +40,44 @@ FROM items
 WHERE m.media_uuid = items.media_uuid;
 
 ANALYZE media;
+
+-- phase 4: collections (api_check.sh's collection and library grids).  every row has a name
+-- starting with counttest-, so the counttest cleanup deletes them all.  the libraries need no
+-- seed: the four existing paths (testlib, pagetest, bulktest, /counttest) are enough
+--
+-- counttest-cNN: ct-even / ct-odd on every one, ct-mod7 on every 7th; the description is
+--   sunset/beach/mountain/forest by n % 4, plus "harbour" on n % 10 = 3
+-- counttest-phrase big wave: a name with spaces, for name:"phrase big"
+-- counttest-evil <v>: a collection per LIKE/SQL-hostile value, whose name, note and tag all
+--   contain it (the safety grid searches for each literally)
+
+UPDATE collections c SET
+  note = '[counttest] collection ' || s.n
+         || ' ' || (ARRAY['sunset', 'beach', 'mountain', 'forest'])[s.n % 4 + 1]
+         || CASE WHEN s.n % 10 = 3 THEN ' harbour' ELSE '' END,
+  tags = hstore(CASE WHEN s.n % 2 = 0 THEN 'ct-even' ELSE 'ct-odd' END, NULL)
+         || CASE WHEN s.n % 7 = 0 THEN hstore('ct-mod7', NULL) ELSE ''::hstore END
+FROM (
+  SELECT collection_uuid, substring(name from 'counttest-c([0-9]+)')::int AS n
+  FROM collections
+  WHERE name ~ '^counttest-c[0-9]+$'
+) s
+WHERE c.collection_uuid = s.collection_uuid;
+
+INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
+SELECT gen_random_uuid(), 'dev', 'devgroup', 'counttest-' || x.suffix,
+       '[counttest] ' || x.note, hstore(x.tag, NULL), NULL
+FROM (
+  VALUES
+    ('phrase big wave', 'a name with spaces', 'ct-phrase'),
+    ($q$evil '$q$, $q$evil x'x$q$, $q$'$q$),
+    ('evil %', 'evil x%x', '%'),
+    ('evil _', 'evil x_x', '_'),
+    ($q$evil \$q$, $q$evil x\x$q$, $q$\$q$),
+    ($q$evil '; DROP TABLE collections; --$q$, $q$evil x'; DROP TABLE collections; --x$q$,
+     $q$'; DROP TABLE collections; --$q$),
+    ('evil $1', 'evil x$1x', '$1')
+) AS x(suffix, note, tag)
+ON CONFLICT (uid, name) DO UPDATE SET note = EXCLUDED.note, tags = EXCLUDED.tags;
+
+ANALYZE collections;

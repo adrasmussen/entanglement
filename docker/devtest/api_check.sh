@@ -12,7 +12,9 @@
 # any case does not match.
 #
 # phase 3 (structured queries) also needs the tags and description words of
-# docker/devtest/seed_search.sql, which touches only the counttest media.
+# docker/devtest/seed_search.sql, which touches only the counttest media.  phase 4 (collection
+# and library queries) needs the same file's counttest collections: notes, tags, a phrase name
+# and one collection per hostile value, all named counttest-%, so the cleanup below finds them.
 #
 # the counttest records carry one identifier, so cleanup is (in this order):
 #
@@ -572,6 +574,258 @@ for order in ORDERS:
           {"unpaged": raw, "paged": raw, "equal": True, "dups": 0, "requests": -(-raw // 200)})
 grid("phase 3: paging integrity, structured query (pages of 200 vs the unpaged list)",
      ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+# ---------------------------------------------------------------- phase 4: collection and library queries
+# the counttest collections carry the notes and tags of docker/devtest/seed_search.sql
+if not one("SELECT count(*) FROM collections WHERE name LIKE 'counttest-%' AND tags ? 'ct-even'"):
+    sys.exit("phase 4 needs the search seed: docker exec -i " + PG +
+             " psql -U entanglement -d entanglement -v ON_ERROR_STOP=1 < docker/devtest/seed_search.sql")
+
+
+def list_query(text, *clauses):
+    """the `query` of a SearchCollectionsReq / SearchLibrariesReq."""
+    return {"text": list(text), "clauses": [{"field": f, "op": o, "value": v} for f, o, v in clauses]}
+
+
+# raw SQL conditions, again written independently of the resolver (position() on lower() for
+# ILIKE) and taking every value as a psql variable.  c is collections, l is libraries
+def c_text(*vars_):
+    return "(" + " OR ".join(f"position(lower(:'{v}') in lower(c.name)) > 0" for v in vars_) + ")"
+
+
+def c_name(var):
+    return f"position(lower(:'{var}') in lower(c.name)) > 0"
+
+
+def c_note(var):
+    return f"position(lower(:'{var}') in lower(c.note)) > 0"
+
+
+def c_tag(var):
+    return f"c.tags ? :'{var}'"
+
+
+def l_text(*vars_):
+    return "(" + " OR ".join(f"position(lower(:'{v}') in lower(l.path)) > 0" for v in vars_) + ")"
+
+
+def l_path(var):
+    return f"position(lower(:'{var}') in lower(l.path)) > 0"
+
+
+def count_collections(conds, **vars_):
+    text = f"SELECT count(*) FROM collections c WHERE c.gid = '{GID}'" + "".join(f" AND {c}" for c in conds)
+    return int(sql(text, **vars_)), text
+
+
+def count_libraries(conds, **vars_):
+    text = f"SELECT count(*) FROM libraries l WHERE l.gid = '{GID}'" + "".join(f" AND {c}" for c in conds)
+    return int(sql(text, **vars_)), text
+
+
+def list_total(ep, query_=None, filter_="", **kw):
+    """the meta.total of a count-only search (or the http status as text)."""
+    body = {"filter": filter_, "limit": 0, "offset": 0, "with_total": True, **kw}
+    if query_ is not None:
+        body["query"] = query_
+    code, d = post(ep, body)
+    return d["meta"]["total"] if code == 200 else f"http {code}"
+
+
+# (case, endpoint, query text words, clauses, raw conditions on c/l, psql vars)
+P4 = [
+    ("empty query", "SearchCollections", [], [], [], {}),
+    ("text: one word (c01)", "SearchCollections", ["c01"], [], [c_text("w0")], {"w0": "c01"}),
+    ("text: two words (OR)", "SearchCollections", ["c01", "c02"], [], [c_text("w0", "w1")],
+     {"w0": "c01", "w1": "c02"}),
+    ("text: case", "SearchCollections", ["PHRASE"], [], [c_text("w0")], {"w0": "PHRASE"}),
+    ('name:"phrase big" (spaces)', "SearchCollections", [], [("name", "Contains", "phrase big")],
+     [c_name("v0")], {"v0": "phrase big"}),
+    ('name:"bulk big" (no such name)', "SearchCollections", [], [("name", "Contains", "bulk big")],
+     [c_name("v0")], {"v0": "bulk big"}),
+    ("description:harbour", "SearchCollections", [], [("description", "Contains", "harbour")],
+     [c_note("v0")], {"v0": "harbour"}),
+    ("description:SUNSET (case)", "SearchCollections", [], [("description", "Contains", "SUNSET")],
+     [c_note("v0")], {"v0": "SUNSET"}),
+    ("tag:ct-mod7", "SearchCollections", [], [("tag", "Has", "ct-mod7")], [c_tag("v0")], {"v0": "ct-mod7"}),
+    ("tag:ct-even", "SearchCollections", [], [("tag", "Has", "ct-even")], [c_tag("v0")], {"v0": "ct-even"}),
+    ("tag:ct-nonesuch", "SearchCollections", [], [("tag", "Has", "ct-nonesuch")], [c_tag("v0")],
+     {"v0": "ct-nonesuch"}),
+    ("tag + description + text", "SearchCollections", ["c02"],
+     [("tag", "Has", "ct-even"), ("description", "Contains", "sunset")],
+     [c_text("w0"), c_tag("v0"), c_note("v1")], {"w0": "c02", "v0": "ct-even", "v1": "sunset"}),
+    ("name + tag", "SearchCollections", [], [("name", "Contains", "counttest-c0"), ("tag", "Has", "ct-mod7")],
+     [c_name("v0"), c_tag("v1")], {"v0": "counttest-c0", "v1": "ct-mod7"}),
+    ("empty query", "SearchLibraries", [], [], [], {}),
+    ("text: one word (count)", "SearchLibraries", ["count"], [], [l_text("w0")], {"w0": "count"}),
+    ("text: one word (test, all)", "SearchLibraries", ["test"], [], [l_text("w0")], {"w0": "test"}),
+    ("text: two words (OR)", "SearchLibraries", ["pagetest", "bulktest"], [], [l_text("w0", "w1")],
+     {"w0": "pagetest", "w1": "bulktest"}),
+    ("path:count", "SearchLibraries", [], [("path", "Contains", "count")], [l_path("v0")], {"v0": "count"}),
+    ("path:BULK (case)", "SearchLibraries", [], [("path", "Contains", "BULK")], [l_path("v0")], {"v0": "BULK"}),
+    ("text + path", "SearchLibraries", ["test"], [("path", "Contains", "bulk")],
+     [l_text("w0"), l_path("v0")], {"w0": "test", "v0": "bulk"}),
+    ("path:/counttest", "SearchLibraries", [], [("path", "Contains", "/counttest")], [l_path("v0")],
+     {"v0": "/counttest"}),
+]
+
+rows, legend, raws4 = [], [], {}
+for name, ep, text, clauses, conds, vars_ in P4:
+    counter = count_collections if ep == "SearchCollections" else count_libraries
+    raw, raw_sql = counter(conds, **vars_)
+    raws4[(name, ep)] = raw
+    q_ = list_query(text, *clauses)
+    counted = list_total(ep, q_)
+    # a page of 10 with the total, as the collections page asks for it
+    code, d = post(ep, {"filter": "", "query": q_, "limit": 10, "offset": 0, "with_total": True})
+    key = "collections" if ep == "SearchCollections" else "libraries"
+    paged = ({"total": d["meta"]["total"], "items": len(d[key]), "has_more": d["meta"]["has_more"]}
+             if code == 200 else {"http": code})
+    check(rows, legend, f"{name} [{ep}]", f"{raw_sql} {kv(vars_)}", raw,
+          {"count_only": counted, **paged},
+          {"count_only": raw, "total": raw, "items": min(10, raw), "has_more": raw > 10})
+grid("phase 4: collection and library queries (raw SQL vs count-only vs a page of 10)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+# the seed makes these non-empty, so agreement on zero cannot pass for success
+rows, legend = [], []
+for name, ep in (("text: one word (c01)", "SearchCollections"), ("text: two words (OR)", "SearchCollections"),
+                 ('name:"phrase big" (spaces)', "SearchCollections"), ("description:harbour", "SearchCollections"),
+                 ("tag:ct-mod7", "SearchCollections"), ("tag + description + text", "SearchCollections"),
+                 ("path:count", "SearchLibraries"), ("text: two words (OR)", "SearchLibraries")):
+    raw = raws4[(name, ep)]
+    check(rows, legend, f"{name} [{ep}] is non-empty", "(raw count above)", raw, {"nonzero": raw > 0}, {"nonzero": True})
+for name, ep in (('name:"bulk big" (no such name)', "SearchCollections"), ("tag:ct-nonesuch", "SearchCollections")):
+    raw = raws4[(name, ep)]
+    check(rows, legend, f"{name} [{ep}] is empty", "(raw count above)", raw, {"zero": raw == 0}, {"zero": True})
+# the OR must be wider than either word, and the words are not ANDed
+o1 = raws4[("text: one word (c01)", "SearchCollections")]
+o2 = raws4[("text: two words (OR)", "SearchCollections")]
+check(rows, legend, "OR of c01 and c02 is wider than c01", "(raw counts above)", f"{o1} < {o2}",
+      {"wider": o1 < o2}, {"wider": True})
+grid("phase 4: the cases above are not vacuous", ("case", "raw SQL", "observed", "expected", "match"), rows)
+
+# the older request shapes: no query means the old literal filter, and a query replaces the filter
+rows, legend = [], []
+for ep, key, raw_fn, count in (
+    ("SearchCollections", "collections", lambda v: f"position(:'{v}' in c.name) > 0", count_collections),
+    ("SearchLibraries", "libraries", lambda v: f"position(:'{v}' in l.path) > 0", count_libraries),
+):
+    words = ["c01", "phrase big", "test", ""] if ep == "SearchCollections" else ["test", "count", "bulktest", ""]
+    for w in words:
+        raw, raw_sql = count([raw_fn("v0")] if w else [], v0=w)
+        code, d = post(ep, {"filter": w, "limit": 0, "offset": 0, "with_total": True})
+        code2, d2 = post(ep, {"filter": w, "query": None, "limit": 0, "offset": 0, "with_total": True})
+        code3, d3 = post(ep, {"filter": w})
+        check(rows, legend, f"{ep} old filter {w!r}", f"{raw_sql} {kv({'v0': w})}", raw,
+              {"filter": d["meta"]["total"] if code == 200 else f"http {code}",
+               "query_null": d2["meta"]["total"] if code2 == 200 else f"http {code2}",
+               "no_with_total_items": len(d3[key]) if code3 == 200 else f"http {code3}"},
+              {"filter": raw, "query_null": raw, "no_with_total_items": raw})
+# the old filter is one literal substring (spaces kept), not words
+check(rows, legend, "old filter keeps the spaces: 'phrase big'", "(counted above)", "-",
+      {"total": list_total("SearchCollections", filter_="phrase big")},
+      {"total": raws4[('name:"phrase big" (spaces)', "SearchCollections")]})
+# a query wins over the filter text
+raw = raws4[("text: one word (c01)", "SearchCollections")]
+check(rows, legend, "query replaces filter", "(counted above)", raw,
+      {"total": list_total("SearchCollections", list_query(["c01"]), filter_="zzz-nothing")}, {"total": raw})
+grid("phase 4: older request shapes (raw SQL on the literal vs endpoint)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+# rejections: a field of another class, a bad operator or value
+rows, legend = [], []
+BAD_COLLECTION = [
+    ("media-only field date", list_query([], ("date", "Eq", "2020"))),
+    ("media-only field type", list_query([], ("type", "Eq", "Image"))),
+    ("library-only field path", list_query([], ("path", "Contains", "x"))),
+    ("unknown field", list_query([], ("color", "Eq", "red"))),
+    ("bad op: tag >", list_query([], ("tag", "Gt", "x"))),
+    ("bad op: name =", list_query([], ("name", "Eq", "x"))),
+    ("bad op: description has", list_query([], ("description", "Has", "x"))),
+    ("tag containing the separator", list_query([], ("tag", "Has", "a|b"))),
+    ("empty value", list_query([], ("name", "Contains", ""))),
+    ("too many words", list_query(["w"] * 33)),
+]
+BAD_LIBRARY = [
+    ("collection-only field name", list_query([], ("name", "Contains", "x"))),
+    ("collection-only field tag", list_query([], ("tag", "Has", "x"))),
+    ("media-only field description", list_query([], ("description", "Contains", "x"))),
+    ("media-only field date", list_query([], ("date", "Eq", "2020"))),
+    ("unknown field", list_query([], ("color", "Eq", "red"))),
+    ("bad op: path >", list_query([], ("path", "Gt", "x"))),
+    ("bad op: path has", list_query([], ("path", "Has", "x"))),
+    ("empty value", list_query([], ("path", "Contains", ""))),
+]
+for ep, bad in (("SearchCollections", BAD_COLLECTION), ("SearchLibraries", BAD_LIBRARY)):
+    for name, q_ in bad:
+        code, d = post(ep, {"filter": "", "query": q_, "limit": 10, "offset": 0, "with_total": True})
+        check(rows, legend, f"{name} -> {ep}", "-", "-", {"http": code}, {"http": 400})
+# the same fields are fine on their own class
+for ep, q_ in (("SearchCollections", list_query(["a"], ("tag", "Has", "x"), ("name", "Contains", "y"),
+                                                  ("description", "Contains", "z"))),
+               ("SearchLibraries", list_query(["a"], ("path", "Contains", "y")))):
+    code, d = post(ep, {"filter": "", "query": q_, "limit": 10, "offset": 0, "with_total": True})
+    check(rows, legend, f"valid query -> {ep}", "-", "-", {"http": code}, {"http": 200})
+grid("phase 4: rejections (raw SQL column is '-', expected values are constants)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+
+# hostile values on name:, description:, tag: and path: are matched literally.  the seed gives
+# every hostile value a collection whose name, note and tag contain it, so those counts are not
+# zero; no library path has one, so the library counts are zero, and for % and _ that differs
+# from the total (a LIKE wildcard would match every path)
+rows, legend = [], []
+for field, op, raw_fn in (("name", "Contains", c_name), ("description", "Contains", c_note), ("tag", "Has", c_tag)):
+    for evil in EVIL:
+        raw, raw_sql = count_collections([raw_fn("v0")], v0=evil)
+        total = list_total("SearchCollections", list_query([], (field, op, evil)))
+        check(rows, legend, f"collections {field}:{evil}", f"{raw_sql} {kv({'v0': evil})}", raw,
+              {"count_only": total, "nonzero": raw > 0, "not_all": raw < NC},
+              {"count_only": raw, "nonzero": True, "not_all": True})
+for evil in EVIL:
+    raw, raw_sql = count_libraries([l_path("v0")], v0=evil)
+    total = list_total("SearchLibraries", list_query([], ("path", "Contains", evil)))
+    check(rows, legend, f"libraries path:{evil}", f"{raw_sql} {kv({'v0': evil})}", raw,
+          {"count_only": total, "not_all": raw < NL}, {"count_only": raw, "not_all": True})
+# as free text, which goes through the same LIKE pattern
+for evil in EVIL:
+    raw, raw_sql = count_collections([c_text("v0")], v0=evil)
+    total = list_total("SearchCollections", list_query([evil]))
+    check(rows, legend, f"collections text:{evil}", f"{raw_sql} {kv({'v0': evil})}", raw,
+          {"count_only": total, "nonzero": raw > 0}, {"count_only": raw, "nonzero": True})
+    raw, raw_sql = count_libraries([l_text("v0")], v0=evil)
+    total = list_total("SearchLibraries", list_query([evil]))
+    check(rows, legend, f"libraries text:{evil}", f"{raw_sql} {kv({'v0': evil})}", raw,
+          {"count_only": total}, {"count_only": raw})
+check(rows, legend, "collections and libraries intact afterwards",
+      "SELECT count(*) FROM collections / libraries", f"{NC} / {NL}",
+      {"collections": one("SELECT count(*) FROM collections"), "libraries": one("SELECT count(*) FROM libraries")},
+      {"collections": NC, "libraries": NL})
+grid("phase 4: hostile values (raw SQL on the literal vs endpoint)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+# paging integrity for a structured collection query: pages of 7 vs the unpaged list
+rows, legend = [], []
+q_ = list_query(["c0"], ("tag", "Has", "ct-even"))
+raw, raw_sql = count_collections([c_text("w0"), c_tag("v0")], w0="c0", v0="ct-even")
+code, full = post("SearchCollections", {"filter": "", "query": q_})
+got, off, reqs = [], 0, 0
+while True:
+    code, r = post("SearchCollections", {"filter": "", "query": q_, "limit": 7, "offset": off, "with_total": off == 0})
+    reqs += 1
+    got += r["collections"]
+    off += len(r["collections"])
+    if not r["meta"]["has_more"]:
+        break
+check(rows, legend, "text c0 + tag:ct-even, pages of 7", raw_sql, raw,
+      {"unpaged": len(full["collections"]), "paged": len(got), "equal": full["collections"] == got,
+       "dups": len(got) - len(set(got)), "requests": reqs},
+      {"unpaged": raw, "paged": raw, "equal": True, "dups": 0, "requests": -(-raw // 7)})
+grid("phase 4: paging integrity, collection query", ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 show_legend(legend)
 
 print(f"\n{'ALL CASES MATCH' if FAILED == 0 else f'{FAILED} CASE(S) FAILED'}")
