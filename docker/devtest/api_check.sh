@@ -166,6 +166,9 @@ NIL = "00000000-0000-0000-0000-000000000000"
 N = one(sql_media_visible())
 NC = one(sql_collections())
 NL = one(sql_libraries())
+# whole-table row counts, every group included, for the "intact afterwards" checks
+NC_ALL = one("SELECT count(*) FROM collections")
+NL_ALL = one("SELECT count(*) FROM libraries")
 
 # ---------------------------------------------------------------- phase 1: meta
 rows, legend = [], []
@@ -801,9 +804,9 @@ for evil in EVIL:
     check(rows, legend, f"libraries text:{evil}", f"{raw_sql} {kv({'v0': evil})}", raw,
           {"count_only": total}, {"count_only": raw})
 check(rows, legend, "collections and libraries intact afterwards",
-      "SELECT count(*) FROM collections / libraries", f"{NC} / {NL}",
+      "SELECT count(*) FROM collections / libraries", f"{NC_ALL} / {NL_ALL}",
       {"collections": one("SELECT count(*) FROM collections"), "libraries": one("SELECT count(*) FROM libraries")},
-      {"collections": NC, "libraries": NL})
+      {"collections": NC_ALL, "libraries": NL_ALL})
 grid("phase 4: hostile values (raw SQL on the literal vs endpoint)",
      ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 show_legend(legend)

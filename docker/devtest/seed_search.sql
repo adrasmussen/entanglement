@@ -74,8 +74,8 @@ FROM (
     ('evil %', 'evil x%x', '%'),
     ('evil _', 'evil x_x', '_'),
     ($q$evil \$q$, $q$evil x\x$q$, $q$\$q$),
-    ($q$evil '; DROP TABLE collections; --$q$, $q$evil x'; DROP TABLE collections; --x$q$,
-     $q$'; DROP TABLE collections; --$q$),
+    ($q$evil '; DROP TABLE media; --$q$, $q$evil x'; DROP TABLE media; --x$q$,
+     $q$'; DROP TABLE media; --$q$),
     ('evil $1', 'evil x$1x', '$1')
 ) AS x(suffix, note, tag)
 ON CONFLICT (uid, name) DO UPDATE SET note = EXCLUDED.note, tags = EXCLUDED.tags;
