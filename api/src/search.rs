@@ -19,7 +19,9 @@ use crate::{
 //
 // PAGE_SIZE is what the webapp requests per infinite-scroll page (divisible by the
 // common 2/3/4/5/6 column grid layouts), while MAX_PAGE is the server-side clamp for
-// the endpoints that hydrate full media records (BatchSearchAndSort, SearchCollections)
+// the endpoint that hydrates full media records (BatchSearchAndSort).  the uuid-only
+// searches, SearchCollections included, are deliberately left unbounded since the
+// pickers ask for everything at once
 pub const PAGE_SIZE: u64 = 60;
 pub const MAX_PAGE: u64 = 200;
 
@@ -369,6 +371,11 @@ pub struct BatchSearchAndSortResp {
     // only populated when the request set opts.with_total
     #[serde(default)]
     pub total: Option<u64>,
+    // how many uuids the search page held before hydration.  media deleted in between is
+    // skipped, so `media` can come up short of the limit without this being the last page;
+    // None from older servers, in which case media.len() is the best guess
+    #[serde(default)]
+    pub page_len: Option<u64>,
 }
 
 #[cfg(test)]
@@ -513,6 +520,13 @@ mod tests {
     fn like_wildcards_are_escaped() {
         assert_eq!(escape_like("100%_off\\"), "100\\%\\_off\\\\");
         assert_eq!(escape_like("plain"), "plain");
+    }
+
+    #[test]
+    fn page_len_defaults_to_none_when_missing() {
+        let r: BatchSearchAndSortResp = serde_json::from_str(r#"{"media":[],"total":5}"#).unwrap();
+        assert_eq!(r.total, Some(5));
+        assert_eq!(r.page_len, None);
     }
 
     #[test]

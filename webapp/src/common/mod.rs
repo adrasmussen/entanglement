@@ -1,9 +1,11 @@
 pub mod colors;
 pub mod grid_cache;
+pub mod hooks;
 pub mod paging;
 pub mod search;
 pub mod storage;
 pub mod style;
+pub mod tags;
 
 use chrono::{Local, TimeZone};
 

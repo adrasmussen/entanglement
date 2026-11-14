@@ -911,6 +911,17 @@ pub(super) async fn batch_search_and_sort(
     state.db_svc_sender.send(msg.into()).await?;
 
     let page = rx.await??;
+    let page_len = page.items.len() as u64;
+
+    // past the end of the results there is nothing to hydrate
+    if page.items.is_empty() {
+        return Ok(Json(BatchSearchAndSortResp {
+            media: Vec::new(),
+            total: page.total,
+            page_len: Some(0),
+        })
+        .into_response());
+    }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -925,7 +936,8 @@ pub(super) async fn batch_search_and_sort(
         )
         .await?;
 
-    // media deleted between the two queries is simply skipped
+    // media deleted between the two queries is simply skipped, which is why the client is
+    // told the length of the page before hydration
     let media = rx
         .await??
         .into_iter()
@@ -944,6 +956,7 @@ pub(super) async fn batch_search_and_sort(
     Ok(Json(BatchSearchAndSortResp {
         media,
         total: page.total,
+        page_len: Some(page_len),
     })
     .into_response())
 }

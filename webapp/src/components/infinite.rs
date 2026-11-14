@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::common::paging::Pager;
+use crate::common::paging::{Pager, Tail};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct InfiniteScrollSentinelProps {
@@ -18,7 +18,7 @@ pub fn InfiniteScrollSentinel(props: InfiniteScrollSentinelProps) -> Element {
         if visible()
             && (pager.initialized)()
             && !(pager.loading)()
-            && !(pager.exhausted)()
+            && !pager.exhausted()
             && (pager.error)().is_none()
         {
             pager.load_more.call(());
@@ -26,7 +26,7 @@ pub fn InfiniteScrollSentinel(props: InfiniteScrollSentinelProps) -> Element {
     });
 
     let loading = (pager.loading)();
-    let exhausted = (pager.exhausted)();
+    let tail = (pager.tail)();
     let error = (pager.error)();
 
     rsx! {
@@ -47,9 +47,18 @@ pub fn InfiniteScrollSentinel(props: InfiniteScrollSentinelProps) -> Element {
                 }
             } else if loading {
                 p { "aria-live": "polite", style: "margin: 0;", "Loading more…" }
-            } else if exhausted {
+            } else if tail == Tail::Ended {
                 p { style: "margin: 0; font-size: 0.75rem; color: var(--text-secondary);",
                     "End of results"
+                }
+            } else if tail == Tail::GaveUp {
+                p { style: "margin: 0;",
+                    "Stopped loading: the results kept changing while loading more"
+                }
+                button {
+                    class: "btn btn-secondary",
+                    onclick: move |_| pager.refresh.call(()),
+                    "Retry"
                 }
             } else {
                 button {

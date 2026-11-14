@@ -461,6 +461,7 @@ impl DbBackend for PostgresBackend {
 
         Ok(page)
     }
+
     #[instrument(skip(self))]
     async fn similar_media(
         &self,
@@ -892,6 +893,8 @@ impl DbBackend for PostgresBackend {
 
         Ok(page)
     }
+
+    // library functions
     #[instrument(skip(self, library))]
     async fn add_library(&self, library: Library) -> Result<LibraryUuid> {
         debug!({ library_path = library.path }, "adding library");
@@ -1016,6 +1019,7 @@ impl DbBackend for PostgresBackend {
 
         Ok(libraries)
     }
+
     #[instrument(skip(self, hidden, opts))]
     async fn search_media_in_library(
         &self,

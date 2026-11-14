@@ -1,16 +1,25 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
+use tracing::error;
 
 use crate::{
     Route,
     components::modal::{MODAL_STACK, Modal, ModalBox},
 };
 use api::{
+    WebError,
     collection::{SearchCollectionsReq, search_collections},
     library::{SearchLibrariesReq, search_libraries},
     media::{SearchMediaReq, search_media},
     search::SearchOptions,
 };
+
+// with_total was asked for, so a response without one is broken rather than empty
+fn missing_total() -> WebError {
+    let err = WebError::msg(String::from("search response is missing the total count"));
+    error!("{err}");
+    err
+}
 
 #[component]
 pub fn ModernHome() -> Element {
@@ -29,7 +38,7 @@ pub fn ModernHome() -> Element {
             },
         })
         .await
-        .map(|resp| resp.total.unwrap_or(0))
+        .and_then(|resp| resp.total.ok_or_else(missing_total))
     });
 
     let collections_count = use_resource(move || async move {
@@ -42,7 +51,7 @@ pub fn ModernHome() -> Element {
             ..Default::default()
         })
         .await
-        .map(|resp| resp.total.unwrap_or(0))
+        .and_then(|resp| resp.total.ok_or_else(missing_total))
     });
 
     let libraries_count = use_resource(|| async move {
