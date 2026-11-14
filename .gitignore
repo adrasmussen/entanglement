@@ -23,3 +23,7 @@
 
 # local docker-compose overrides
 .env
+
+# claude code: worktrees and local settings stay local; .claude/skills is shared
+/.claude/worktrees/
+/.claude/settings.local.json
