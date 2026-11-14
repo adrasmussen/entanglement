@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+};
 
 use dioxus::prelude::*;
 use tracing::error;
@@ -6,14 +9,22 @@ use tracing::error;
 use crate::{
     common::{
         colors::CollectionColor,
+        query_ui::{add_clause, op_label},
         search::{fetch_all_uuids, literal_filter},
     },
     components::{
         modal::{MODAL_STACK, Modal},
+        query_bar::{QueryChips, SearchState},
         search::CompactSearchBar,
     },
 };
-use api::{WebError, collection::*, media::MediaUuid, search::SearchRequest};
+use api::{
+    WebError,
+    collection::*,
+    media::MediaUuid,
+    query::{FieldSpec, FieldType, Op, SearchClass, SearchQuery, field_spec},
+    search::SearchRequest,
+};
 
 // TODO -- use show_signal for consistent cleanup... or move to a button?
 #[derive(Clone, PartialEq, Props)]
@@ -90,52 +101,198 @@ pub fn AdvancedTabs(props: AdvancedTabsProps) -> Element {
     }
 }
 
-#[derive(Clone, PartialEq, Props)]
-pub struct AdvancedSearchTabProps {
-    media_search_signal: Signal<String>,
+#[derive(Props)]
+pub struct AdvancedSearchTabProps<C: SearchClass + 'static> {
+    search: SearchState,
+    #[props(default)]
+    class: PhantomData<fn() -> C>,
 }
 
+impl<C: SearchClass + 'static> Clone for AdvancedSearchTabProps<C> {
+    fn clone(&self) -> Self {
+        Self {
+            search: self.search,
+            class: PhantomData,
+        }
+    }
+}
+
+impl<C: SearchClass + 'static> PartialEq for AdvancedSearchTabProps<C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.search == other.search
+    }
+}
+
+// a filter builder generated from the class's field metadata: pick a field, one of its
+// operators and a value, and the clause is added to the search text
 #[component]
-pub fn AdvancedSearchTab(props: AdvancedSearchTabProps) -> Element {
-    let mut media_search_signal = props.media_search_signal;
+pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps<C>) -> Element {
+    let search = props.search;
+
+    let mut field = use_signal(|| C::FIELDS.first().map(|f| f.name).unwrap_or_default());
+    let mut op = use_signal(|| C::FIELDS.first().map(|f| f.default_op()));
+    let mut value = use_signal(String::new);
+    let mut to = use_signal(String::new);
+    let mut error = use_signal(|| None::<String>);
+
+    let (Some(spec), Some(current_op)) = (field_spec::<C>(&field()), op()) else {
+        return rsx! {};
+    };
+
+    let has_filters = !SearchQuery::parse::<C>(&(search.signal)()).query.is_empty();
+
     rsx! {
         div { class: "text-search-options",
-            div { class: "form-group",
-                label { class: "form-label", "Search Terms" }
-                input {
-                    class: "form-input",
-                    placeholder: "Enter keywords separated by spaces...",
-                    value: "{media_search_signal()}",
-                    oninput: move |evt| media_search_signal.set(evt.value().clone()),
+            form {
+                class: "filter-builder",
+                onsubmit: move |event| {
+                    event.prevent_default();
+                    match add_clause::<C>(&search.text(), spec.name, current_op, &value(), &to()) {
+                        Ok(text) => {
+                            search.commit(text);
+                            value.set(String::new());
+                            to.set(String::new());
+                            error.set(None);
+                        }
+                        Err(message) => error.set(Some(message)),
+                    }
+                },
+                div { class: "filter-builder-row",
+                    div { class: "form-group",
+                        label { class: "form-label", "Field" }
+                        select {
+                            class: "form-select",
+                            "data-testid": "builder-field",
+                            value: "{spec.name}",
+                            onchange: move |evt| {
+                                if let Some(f) = field_spec::<C>(&evt.value()) {
+                                    field.set(f.name);
+                                    op.set(Some(f.default_op()));
+                                    value.set(String::new());
+                                    to.set(String::new());
+                                    error.set(None);
+                                }
+                            },
+                            for f in C::FIELDS.iter() {
+                                option {
+                                    key: "{f.name}",
+                                    value: "{f.name}",
+                                    selected: f.name == spec.name,
+                                    "{f.label}"
+                                }
+                            }
+                        }
+                    }
+                    div { class: "form-group",
+                        label { class: "form-label", "Matches" }
+                        select {
+                            class: "form-select",
+                            "data-testid": "builder-op",
+                            value: "{current_op:?}",
+                            onchange: move |evt| {
+                                let chosen = field_spec::<C>(&field())
+                                    .and_then(|f| {
+                                        f.ops.iter().find(|o| format!("{o:?}") == evt.value()).copied()
+                                    });
+                                if chosen.is_some() {
+                                    op.set(chosen);
+                                }
+                            },
+                            for o in spec.ops.iter() {
+                                option {
+                                    key: "{o:?}",
+                                    value: "{o:?}",
+                                    selected: *o == current_op,
+                                    "{op_label(*o)}"
+                                }
+                            }
+                        }
+                    }
+                    div { class: "form-group",
+                        label { class: "form-label",
+                            if current_op == Op::Range {
+                                "From"
+                            } else {
+                                "Value"
+                            }
+                        }
+                        {builder_input(spec, value, "builder-value")}
+                    }
+                    if current_op == Op::Range {
+                        div { class: "form-group",
+                            label { class: "form-label", "To" }
+                            {builder_input(spec, to, "builder-value-to")}
+                        }
+                    }
+                    button {
+                        class: "btn btn-primary",
+                        r#type: "submit",
+                        "data-testid": "builder-add",
+                        "Add filter"
+                    }
                 }
                 div {
                     class: "form-help",
-                    style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-1);",
-                    "Search dates, descriptions and tags"
+                    style: "font-size: 0.875rem; color: var(--text-tertiary); margin-top: var(--space-2);",
+                    "data-testid": "builder-help",
+                    "{spec.help} (for example "
+                    code { "{spec.example}" }
+                    ")"
+                }
+                if let Some(message) = error() {
+                    div { class: "filter-builder-error", "data-testid": "builder-error", "{message}" }
                 }
             }
-            div { style: "display: flex; gap: var(--space-4); margin-top: var(--space-4);",
-                div { class: "form-group", style: "flex: 1;",
-                    label { class: "form-label", "Search Mode" }
-                    select { class: "form-select",
-                        option { value: "all", selected: true, "Match All Words" }
-                        option { value: "any", "Match Any Word" }
-                        option { value: "exact", "Exact Phrase" }
-                    }
-                }
-                div { class: "form-group", style: "flex: 1;",
-                    label { class: "form-label", "Case Sensitive" }
-                    div { style: "display: flex; align-items: center; height: 38px;",
-                        input {
-                            r#type: "checkbox",
-                            id: "case-sensitive",
-                            style: "margin-right: var(--space-2);",
+
+            div { style: "margin-top: var(--space-4);",
+                label { class: "form-label", "Current filters" }
+                div { class: "query-chips", "data-testid": "builder-chips",
+                    if has_filters {
+                        QueryChips::<C> { search }
+                    } else {
+                        span { style: "font-size: 0.875rem; color: var(--text-tertiary);",
+                            "None. {C::FREE_TEXT_HELP}."
                         }
-                        label { r#for: "case-sensitive", "Enable case sensitivity" }
                     }
                 }
             }
         }
+    }
+}
+
+// the value input for a field: a select for an enum, a text input otherwise
+fn builder_input(
+    spec: &'static FieldSpec,
+    mut value: Signal<String>,
+    testid: &'static str,
+) -> Element {
+    match spec.ty {
+        FieldType::Enum(allowed) => rsx! {
+            select {
+                class: "form-select",
+                "data-testid": testid,
+                value: "{value}",
+                onchange: move |evt| value.set(evt.value()),
+                option { value: "", selected: value().is_empty(), "Choose..." }
+                for a in allowed.iter() {
+                    option {
+                        key: "{a}",
+                        value: "{a}",
+                        selected: value() == *a,
+                        "{a}"
+                    }
+                }
+            }
+        },
+        _ => rsx! {
+            input {
+                class: "form-input",
+                "data-testid": testid,
+                placeholder: if spec.ty == FieldType::Date { "2020-06" } else { "text" },
+                value: "{value}",
+                oninput: move |evt| value.set(evt.value()),
+            }
+        },
     }
 }
 

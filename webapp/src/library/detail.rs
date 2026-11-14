@@ -260,7 +260,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                         show_signal: advanced_expanded,
                         tabs: HashMap::from([
                             ("Advanced Search".to_owned(), rsx! {
-                                AdvancedSearchTab { media_search_signal }
+                                AdvancedSearchTab::<Media> { search }
                             }),
                             ("Bulk Edit".to_owned(), rsx! {
                                 BulkEditTab {
