@@ -1,22 +1,26 @@
 use std::{
-    cell::Cell,
     collections::{HashMap, HashSet},
     rc::Rc,
 };
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::{
     common::{
         colors::CollectionColor,
-        grid_cache::{LayoutKey, WindowState, chunk_size},
+        grid_cache::{LayoutKey, WindowState, reset_window},
         paging::Pager,
         storage::{set_local_storage, try_local_storage},
     },
     components::{infinite::InfiniteScrollSentinel, media_card::MediaCard},
 };
-use api::{collection::CollectionUuid, media::MediaUuid, search::SearchResponse};
+use api::{
+    collection::CollectionUuid,
+    media::MediaUuid,
+    search::{PAGE_SIZE, SearchResponse},
+};
 
 // thumbnail grid density, shared by every MediaGrid (gallery, collection and library
 // detail) and remembered per browser.  comfortable is the original 280px-minimum
@@ -136,87 +140,79 @@ const KEEP_ABOVE: usize = 200;
 
 const GRID_ID: &str = "media-grid";
 
-// the number of columns the grid currently lays out
-async fn measure_cols() -> Option<usize> {
-    let mut eval = document::eval(&format!(
-        r#"
-        const g = document.getElementById("{GRID_ID}");
-        dioxus.send(g
-            ? getComputedStyle(g).gridTemplateColumns.split(" ").filter((s) => s).length
-            : null);
-        "#
-    ));
-    eval.recv::<Option<usize>>().await.ok().flatten()
+// defines trimProbe() in JS: if the topmost chunk of cards can be unmounted, because more
+// than KEEP_ABOVE cards besides it are above the viewport, {chunk, px} with the number of
+// cards in it (whole rows, about a page worth, so that the cards that remain keep their
+// columns) and the distance between its first card and the next chunk's (rows and gaps
+// included, which is exactly the height its spacer has to be); otherwise null
+const TRIM_PROBE_JS: &str = r#"
+    const trimProbe = () => {
+        const g = document.getElementById("GRID_ID");
+        if (!g) return null;
+        const cols = getComputedStyle(g).gridTemplateColumns.split(" ").filter((s) => s).length;
+        if (cols === 0) return null;
+        const chunk = Math.max(cols, Math.floor(PAGE_SIZE / cols) * cols);
+        const probe = KEEP_ABOVE + chunk;
+        if (g.children.length <= probe || g.children[probe].getBoundingClientRect().bottom >= 0) {
+            return null;
+        }
+        const px = g.children[chunk].offsetTop - g.children[0].offsetTop;
+        return px > 0 ? { chunk, px } : null;
+    };
+"#;
+
+// fills in the constants of the JS above and below
+fn with_constants(js: &str) -> String {
+    js.replace("GRID_ID", GRID_ID)
+        .replace("KEEP_ABOVE", &KEEP_ABOVE.to_string())
+        .replace("PAGE_SIZE", &PAGE_SIZE.to_string())
 }
 
-// is the card `probe` places after the first mounted one entirely above the viewport?  if
-// so, the distance in px between the first card and the `chunk`th one (rows and gaps
-// included, which is exactly the height their spacer has to be)
-async fn measure_trim(probe: usize, chunk: usize) -> Option<f64> {
-    let mut eval = document::eval(&format!(
-        r#"
-        const g = document.getElementById("{GRID_ID}");
-        dioxus.send(g && g.children.length > {probe} && g.children[{probe}].getBoundingClientRect().bottom < 0
-            ? g.children[{chunk}].offsetTop - g.children[0].offsetTop
-            : null);
-        "#
-    ));
-    eval.recv::<Option<f64>>().await.ok().flatten()
+#[derive(Deserialize)]
+struct Trim {
+    chunk: usize,
+    px: f64,
 }
 
-// resolves once the browser has painted a frame, by which time any render we caused is done
-async fn next_frame() {
-    let mut eval = document::eval(
-        "requestAnimationFrame(() => requestAnimationFrame(() => dioxus.send(true)));",
-    );
-    let _ = eval.recv::<bool>().await;
+// trimProbe(), once the browser has painted a frame, by which time any trim we made has
+// rendered
+async fn probe_trim() -> Option<Trim> {
+    let mut eval = document::eval(&with_constants(&format!(
+        "{TRIM_PROBE_JS}
+        requestAnimationFrame(() => requestAnimationFrame(() => dioxus.send(trimProbe())));"
+    )));
+    eval.recv::<Option<Trim>>().await.ok().flatten()
 }
 
-// unmount chunks of cards at the top for as long as more than KEEP_ABOVE (plus the chunk
-// itself) of them are above the viewport
+// unmount chunks of cards at the top for as long as trimProbe() finds one
 async fn trim_while_above(mut window: Signal<WindowState>) {
     loop {
         let before = window.peek().clone();
-
-        // whole rows only, so the cards that remain keep their columns
-        let Some(cols) = measure_cols().await.filter(|c| *c > 0) else {
+        let Some(Trim { chunk, px }) = probe_trim().await else {
             return;
         };
-        let chunk = chunk_size(cols);
-        let Some(px) = measure_trim(KEEP_ABOVE + chunk, chunk)
-            .await
-            .filter(|px| *px > 0.0)
-        else {
-            return;
-        };
-
         // anything that happened while we were measuring invalidates the measurement
         if *window.peek() != before {
             return;
         }
         window.write().trim(chunk, px);
-
-        // let the trim render before measuring again
-        next_frame().await;
     }
 }
 
-// tells us (at most four times a second) when scrolling has put at least KEEP_ABOVE cards
-// above the viewport.  an IntersectionObserver on a card can't do this, since it only
-// reports changes and a fast scroll can carry the card from below the viewport to above it
-// without it ever intersecting.  window.__gridWatchers[id] removes this grid's watcher, which
-// is also how the grid cleans up after itself.  watchers are keyed by WATCH_ID, unique
-// per mounted grid, so an outgoing grid's drop can never stop the incoming grid's watcher
-// (the drop of one page and the mount of the next aren't ordered)
+// tells us (at most four times a second) when scrolling has put enough cards above the
+// viewport for trimProbe() to find a chunk to unmount.  an IntersectionObserver on a card
+// can't do this, since it only reports changes and a fast scroll can carry the card from
+// below the viewport to above it without it ever intersecting.  window.__gridWatchers[id]
+// removes this grid's watcher, which is also how the grid cleans up after itself.  watchers
+// are keyed by WATCH_ID, unique per mounted grid, so an outgoing grid's drop can never stop
+// the incoming grid's watcher (the drop of one page and the mount of the next aren't ordered)
 const WATCH_JS: &str = r#"
     window.__gridWatchers = window.__gridWatchers || {};
     let queued = false;
     let last = 0;
     const check = () => {
         queued = false;
-        const g = document.getElementById("media-grid");
-        if (g && g.children.length > KEEP_ABOVE
-            && g.children[KEEP_ABOVE].getBoundingClientRect().bottom < 0) {
+        if (trimProbe()) {
             last = performance.now();
             dioxus.send(true);
         }
@@ -235,34 +231,34 @@ const WATCH_JS: &str = r#"
     onScroll();
 "#;
 
-#[derive(Clone, PartialEq, Props)]
-pub struct MediaGridProps {
-    items: Signal<Vec<SearchResponse>>,
-    // which of the items are mounted, see KEEP_ABOVE
-    window: Signal<WindowState>,
-    pager: Pager,
-    bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
-    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
-    #[props(default)]
-    collection_uuid: Option<CollectionUuid>,
-    // page-specific empty state
-    empty: Element,
+// keeps the grid's DOM to a window around the viewport (see KEEP_ABOVE): a scroll watcher
+// trims cards above the viewport, while the returned handlers remount them when the spacer
+// comes into view and start over when the layout changes under the measured heights
+struct GridWindowing {
+    // how many cards at the top are unmounted, and the height of their spacer
+    trimmed: Memo<(usize, f64)>,
+    on_spacer_visible: Callback<VisibleEvent>,
+    on_resize: Callback<ResizeEvent>,
 }
 
-#[component]
-pub fn MediaGrid(props: MediaGridProps) -> Element {
-    let items = props.items;
-    let mut window = props.window;
-    let pager = props.pager;
-
-    let trimming = use_hook(|| Rc::new(Cell::new(false)));
-
+fn use_grid_windowing(mut window: Signal<WindowState>) -> GridWindowing {
     // heights measured in one density mean nothing in the other
-    let compact = GRID_DENSITY().is_compact();
     use_effect(move || {
         let compact = GRID_DENSITY().is_compact();
         if window.peek().compact != compact {
-            window.set(WindowState::fresh(LayoutKey::current()));
+            reset_window(window);
+        }
+    });
+
+    // what the grid renders of the window.  a memo, so that window writes that change
+    // neither (a resize with nothing trimmed) don't re-render the grid.  until the effect
+    // above has reset a window measured in the other density, nothing counts as trimmed
+    let trimmed = use_memo(move || {
+        let w = window.read();
+        if w.compact == GRID_DENSITY().is_compact() {
+            (w.start, w.spacer_px())
+        } else {
+            (0, 0.0)
         }
     });
 
@@ -271,23 +267,23 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     });
-    use_hook({
-        let trimming = trimming.clone();
-        move || {
-            let mut watcher = document::eval(
-                &WATCH_JS
-                    .replace("KEEP_ABOVE", &KEEP_ABOVE.to_string())
-                    .replace("WATCH_ID", &watch_id.to_string()),
-            );
-            spawn(async move {
-                while watcher.recv::<bool>().await.is_ok() {
-                    if !trimming.replace(true) {
-                        trim_while_above(window).await;
-                        trimming.set(false);
-                    }
+    use_hook(move || {
+        let mut watcher = document::eval(&with_constants(&format!(
+            "{TRIM_PROBE_JS}{}",
+            WATCH_JS.replace("WATCH_ID", &watch_id.to_string())
+        )));
+        spawn(async move {
+            // reports that arrive while trimming wait for it, and then usually find nothing
+            // left to trim
+            let err = loop {
+                match watcher.recv::<bool>().await {
+                    Ok(_) => trim_while_above(window).await,
+                    Err(err) => break err,
                 }
-            });
-        }
+            };
+            // the grid keeps working, but every card stays mounted from here on
+            warn!("grid scroll watcher {watch_id} stopped, no more windowing: {err:?}");
+        });
     });
     use_drop(move || {
         let _ = document::eval(&format!(
@@ -313,11 +309,68 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         if known == 0.0 {
             window.write().grid_width = width;
         } else if (known - width).abs() > 1.0 {
-            let mut fresh = WindowState::fresh(LayoutKey::current());
-            fresh.grid_width = width;
-            window.set(fresh);
+            let mut next = window.peek().reset(LayoutKey::current());
+            next.grid_width = width;
+            window.set(next);
         }
     });
+
+    GridWindowing {
+        trimmed,
+        on_spacer_visible,
+        on_resize,
+    }
+}
+
+// placeholder cards for a grid whose first page is still loading
+#[component]
+fn MediaGridSkeleton() -> Element {
+    let grid_class = GRID_DENSITY().grid_class();
+
+    rsx! {
+        div { class: "loading-state {grid_class}",
+            for _ in 0..8 {
+                div { class: "skeleton-card",
+                    div { class: "skeleton", style: "height: 200px;" }
+                    div {
+                        class: "skeleton",
+                        style: "height: 24px; width: 40%; margin-top: 12px;",
+                    }
+                    div {
+                        class: "skeleton",
+                        style: "height: 18px; width: 80%; margin-top: 8px;",
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Props)]
+pub struct MediaGridProps {
+    items: Signal<Rc<Vec<SearchResponse>>>,
+    // which of the items are mounted, see KEEP_ABOVE
+    window: Signal<WindowState>,
+    pager: Pager,
+    bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
+    collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+    #[props(default)]
+    collection_uuid: Option<CollectionUuid>,
+    // page-specific empty state
+    empty: Element,
+}
+
+#[component]
+pub fn MediaGrid(props: MediaGridProps) -> Element {
+    let items = props.items;
+    let window = props.window;
+    let pager = props.pager;
+
+    let GridWindowing {
+        trimmed,
+        on_spacer_visible,
+        on_resize,
+    } = use_grid_windowing(window);
 
     let initialized = (pager.initialized)();
     let error = (pager.error)();
@@ -326,21 +379,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
 
     if !initialized {
         return rsx! {
-            div { class: "loading-state {grid_class}",
-                for _ in 0..8 {
-                    div { class: "skeleton-card",
-                        div { class: "skeleton", style: "height: 200px;" }
-                        div {
-                            class: "skeleton",
-                            style: "height: 24px; width: 40%; margin-top: 12px;",
-                        }
-                        div {
-                            class: "skeleton",
-                            style: "height: 18px; width: 80%; margin-top: 8px;",
-                        }
-                    }
-                }
-            }
+            MediaGridSkeleton {}
         };
     }
 
@@ -360,16 +399,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         };
     }
 
-    // the effect above fixes the stored state after a density change; until it runs, nothing
-    // is considered trimmed
-    let (start, spacer_px) = {
-        let w = window.read();
-        if w.compact == compact {
-            (w.start, w.spacer_px())
-        } else {
-            (0, 0.0)
-        }
-    };
+    let (start, spacer_px) = trimmed();
     let list = items.read();
     let start = start.min(list.len());
 
@@ -388,7 +418,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
             id: GRID_ID,
             class: grid_class,
             onresize: on_resize,
-            for search_resp in list.iter().skip(start) {
+            for search_resp in list[start..].iter() {
                 MediaCard {
                     key: "{search_resp.media_uuid}",
                     media_uuid: search_resp.media_uuid,

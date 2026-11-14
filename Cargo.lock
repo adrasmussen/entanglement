@@ -5285,6 +5285,7 @@ dependencies = [
  "dioxus",
  "dioxus-logger",
  "dioxus-router",
+ "futures-util",
  "getrandom 0.4.3",
  "gloo-console",
  "gloo-net 0.7.0",

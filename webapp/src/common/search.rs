@@ -61,6 +61,7 @@ pub async fn fetch_media_page(
     Ok(Page {
         items: resp.media,
         total: resp.total,
+        page_len: resp.page_len,
     })
 }
 
@@ -112,7 +113,7 @@ pub fn decide_reconcile(
 
 // fetch the current record of an item that was edited behind the grid's back and decide what
 // to do with it there.  a failed lookup (which is what a deleted media looks like) is left
-// to the caller, who falls back to refreshing the head of the grid
+// to the caller, who falls back to refreshing the grid
 pub async fn reconcile_media(
     scope: GridScope,
     search: &str,

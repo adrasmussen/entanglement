@@ -3,10 +3,11 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 use tracing::error;
 
+use crate::common::tags::{TAG_HELP, TAG_PLACEHOLDER, parse_tags};
 use crate::components::modal::{
     ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after,
 };
-use api::{FOLDING_SEPARATOR, full_link, media::*, unfold_set};
+use api::{full_link, media::*};
 
 #[derive(Clone, PartialEq, Props)]
 pub struct EnhancedMediaModalProps {
@@ -271,7 +272,7 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
             success_count.set(0);
             error_count.set(0);
 
-            let edit_tags = unfold_set(&edit_tags());
+            let edit_tags = parse_tags(&edit_tags());
 
             // Process each media item
             for media_uuid in media_uuids.clone() {
@@ -407,11 +408,12 @@ pub fn BulkEditTagsModal(props: BulkAddTagsModalProps) -> Element {
                             r#type: "text",
                             value: "{edit_tags()}",
                             oninput: move |evt| edit_tags.set(evt.value().clone()),
-                            placeholder: "tag 1|tag 2|...",
+                            placeholder: TAG_PLACEHOLDER,
+                            title: TAG_HELP,
                             style: "flex: 1;",
                         }
                     }
-                    div { class: "form-help", "Enter tags separated by {FOLDING_SEPARATOR}" }
+                    div { class: "form-help", "{TAG_HELP}" }
                 }
 
                 // Media count summary

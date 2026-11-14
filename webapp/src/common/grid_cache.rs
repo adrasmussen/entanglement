@@ -18,10 +18,9 @@ use api::{
     collection::{CollectionUuid, GetCollectionResp},
     library::{GetLibraryResp, LibraryUuid},
     media::MediaUuid,
-    search::PAGE_SIZE,
 };
 
-use crate::components::media_grid::GRID_DENSITY;
+use crate::{common::paging::Tail, components::media_grid::GRID_DENSITY};
 
 // how many grids are remembered; the least recently used entry is evicted first
 const MAX_ENTRIES: usize = 8;
@@ -50,6 +49,16 @@ impl WindowState {
             compact: layout.compact,
             viewport: layout.viewport,
             ..Default::default()
+        }
+    }
+
+    // everything mounted again in `layout`, for a grid that stays mounted.  its width is
+    // still what it was, and forgetting it would make the next resize look like the first
+    // one, which only records the width instead of starting over
+    pub fn reset(&self, layout: LayoutKey) -> Self {
+        Self {
+            grid_width: self.grid_width,
+            ..Self::fresh(layout)
         }
     }
 
@@ -85,6 +94,12 @@ impl WindowState {
     }
 }
 
+// start the windowing of a mounted grid over, in the current layout (see WindowState::reset)
+pub fn reset_window(mut window: Signal<WindowState>) {
+    let next = window.peek().reset(LayoutKey::current());
+    window.set(next);
+}
+
 // the layout facts that decide whether measured heights are still valid
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayoutKey {
@@ -106,19 +121,13 @@ impl LayoutKey {
     }
 }
 
-// how many cards one trim removes: whole rows, about a page worth, so that the cards that
-// remain keep their columns
-pub fn chunk_size(cols: usize) -> usize {
-    let cols = cols.max(1);
-    cols.max(PAGE_SIZE as usize / cols * cols)
-}
-
 #[derive(Clone)]
 pub struct CacheEntry {
-    // a Vec<T> for whatever T the grid pages (downcast on restore)
+    // a Vec<T> for whatever T the grid pages (downcast on restore), shared with the grid's
+    // items signal while it is mounted
     pub items: Rc<dyn Any>,
     pub total: Option<u64>,
-    pub exhausted: bool,
+    pub tail: Tail,
     // the EDIT_LOG sequence number this entry is up to date with
     pub edit_seq: u64,
     pub window: WindowState,
@@ -145,6 +154,10 @@ impl GridCache {
         if self.entries.len() > MAX_ENTRIES {
             self.entries.remove(0);
         }
+    }
+
+    pub fn remove(&mut self, key: CacheKey) {
+        self.entries.retain(|(k, _)| *k != key);
     }
 
     // only the windowing part changes; entries that do not exist yet are left alone
@@ -244,7 +257,7 @@ mod tests {
         CacheEntry {
             items: Rc::new(vec![tag]),
             total: Some(1),
-            exhausted: true,
+            tail: Tail::Ended,
             edit_seq: seq,
             window: WindowState::default(),
         }
@@ -280,6 +293,27 @@ mod tests {
         assert_eq!(cache.keys().len(), 2);
         assert_eq!(tag(&cache.get(("a", 1)).unwrap()), 3);
         assert_eq!(tag(&cache.get(("b", 1)).unwrap()), 2);
+    }
+
+    #[test]
+    fn remove_lets_go_of_the_shared_items() {
+        let mut cache = GridCache::default();
+        let mut items = Rc::new(vec![1u32, 2]);
+        cache.put(
+            ("a", 1),
+            CacheEntry {
+                items: items.clone(),
+                ..entry(0, 0)
+            },
+        );
+        cache.put(("a", 2), entry(2, 0));
+        assert_eq!(Rc::strong_count(&items), 2);
+
+        // what PagedState::edit_items relies on to change the list without copying it
+        cache.remove(("a", 1));
+        assert_eq!(Rc::strong_count(&items), 1);
+        Rc::get_mut(&mut items).unwrap().push(3);
+        assert_eq!(cache.keys(), vec![("a", 2)]);
     }
 
     #[test]
@@ -333,20 +367,6 @@ mod tests {
     }
 
     #[test]
-    fn chunk_is_whole_rows_near_a_page() {
-        assert_eq!(chunk_size(0), PAGE_SIZE as usize);
-        assert_eq!(chunk_size(1), PAGE_SIZE as usize);
-        assert_eq!(chunk_size(3), 60);
-        assert_eq!(chunk_size(7), 56);
-        assert_eq!(chunk_size(64), 64);
-        for cols in 1..100 {
-            let c = chunk_size(cols);
-            assert_eq!(c % cols, 0);
-            assert!(c >= cols);
-        }
-    }
-
-    #[test]
     fn window_trim_and_untrim_are_inverse() {
         let mut w = WindowState::default();
         w.trim(60, 1000.5);
@@ -359,6 +379,29 @@ mod tests {
         assert!(w.untrim());
         assert_eq!((w.start, w.spacer_px()), (0, 0.0));
         assert!(!w.untrim());
+    }
+
+    #[test]
+    fn window_reset_keeps_the_grid_width() {
+        let layout = LayoutKey {
+            compact: false,
+            viewport: 1200,
+        };
+        let mut w = WindowState::fresh(layout);
+        w.grid_width = 1100.0;
+        w.trim(60, 1000.0);
+
+        let compact = LayoutKey {
+            compact: true,
+            ..layout
+        };
+        let reset = w.reset(compact);
+        assert_eq!((reset.start, reset.spacer_px()), (0, 0.0));
+        assert!(reset.compact);
+        assert_eq!(reset.grid_width, 1100.0);
+
+        // only a new grid starts without a width
+        assert_eq!(WindowState::fresh(layout).grid_width, 0.0);
     }
 
     #[test]

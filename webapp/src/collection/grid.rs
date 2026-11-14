@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 
 use crate::{
@@ -12,7 +14,7 @@ use api::collection::CollectionUuid;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct CollectionGridProps {
-    collections: Signal<Vec<CollectionUuid>>,
+    collections: Signal<Rc<Vec<CollectionUuid>>>,
     pager: Pager,
 }
 
