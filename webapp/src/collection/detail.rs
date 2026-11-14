@@ -190,8 +190,9 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
     };
 
     rsx! {
+        // the ModalBox is in CollectionDetail, outside the error boundary; a second one here
+        // drew every modal twice
         div { class: "container with-sticky",
-            ModalBox { update_signal }
 
             div { class: "sticky-header",
                 div {

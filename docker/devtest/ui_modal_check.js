@@ -77,6 +77,7 @@ async function openCreate(page) {
     w: layout.close_w, h: layout.close_h, icon: layout.close_has_icon, label: layout.close_label, bg: layout.close_bg_transparent,
   }, { w: 36, h: 36, icon: true, label: 'Close', bg: true });
   check('textareas use the page font, not monospace', layout.textarea_monospace, false);
+  check('one click opens exactly one create modal', await page.$$eval('.modal-content', m => m.length), 1);
 
   await page.hover('.btn-close');
   await sleep(250);
@@ -113,6 +114,7 @@ async function openCreate(page) {
   await page.click('button:has-text("Edit")');
   await page.waitForSelector('.modal-content');
   await sleep(800);
+  check('one click opens exactly one edit modal', await page.$$eval('.modal-content', m => m.length), 1);
   const editInput = page.locator('.modal-body .form-group:has(label:has-text("Tags")) input');
   check('edit modal prefills tags comma-separated', await editInput.inputValue(), 'beach, dusk, family, joy, park, summer_trip');
   await editInput.fill('beach;sunset');
