@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 use tracing::error;
 
 use crate::common::search::literal_filter;
+use crate::common::tags::{TAG_HELP, TAG_PLACEHOLDER, format_tags, parse_tags};
 use crate::components::{
     modal::{
         MODAL_STACK, Modal, ModalInner, ModalSize, ProgressBar, close_modal, close_modal_after,
@@ -11,14 +12,12 @@ use crate::components::{
     search::CompactSearchBar,
 };
 use api::{
-    FOLDING_SEPARATOR, WebError,
+    WebError,
     auth::*,
     collection::*,
-    fold_set,
     media::MediaUuid,
     page::PageRequest,
     search::{SearchFilter, SearchOptions, SortMethod},
-    unfold_set,
 };
 
 #[derive(Clone, PartialEq, Props)]
@@ -86,7 +85,7 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
                 gid: collection_group(),
                 name: collection_name(),
                 note: collection_note(),
-                tags: unfold_set(&collection_tags()),
+                tags: parse_tags(&collection_tags()),
                 cover: None,
             },
         })
@@ -189,13 +188,15 @@ pub fn CreateCollectionModal(props: CreateCollectionModalProps) -> Element {
 
                 div { class: "form-group",
                     label { class: "form-label", "Tags (optional)" }
-                    textarea {
-                        class: "form-textarea",
-                        rows: 3,
+                    input {
+                        class: "form-input",
+                        r#type: "text",
                         value: "{collection_tags}",
                         oninput: move |evt| collection_tags.set(evt.value().clone()),
-                        placeholder: format!("Add tags for this collection, separated by {}", FOLDING_SEPARATOR),
+                        placeholder: TAG_PLACEHOLDER,
+                        title: TAG_HELP,
                     }
+                    div { class: "form-help", "{TAG_HELP}" }
                 }
             }
         }
@@ -360,9 +361,6 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
     let mut collection_note = use_signal(String::new);
     let mut collection_tags = use_signal(String::new);
 
-    // see similar logic in GalleryInner
-    let mut valid_tags = true;
-
     let mut name_error = use_signal(String::new);
 
     let handle_submit = move |_| async move {
@@ -389,11 +387,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
             update: CollectionUpdate {
                 name: Some(collection_name()),
                 note: Some(collection_note()),
-                tags: if valid_tags {
-                    Some(unfold_set(&collection_tags()))
-                } else {
-                    None
-                },
+                tags: Some(parse_tags(&collection_tags())),
             },
         })
         .await
@@ -416,12 +410,7 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
         if let Some(Ok(result)) = &*collection_future.read() {
             collection_name.set(result.collection.name.clone());
             collection_note.set(result.collection.note.clone());
-            collection_tags.set(
-                fold_set(result.collection.tags.clone()).unwrap_or_else(|_| {
-                    valid_tags = false;
-                    "invalid tags, contact admins".to_string()
-                }),
-            );
+            collection_tags.set(format_tags(&result.collection.tags));
         }
     });
 
@@ -472,13 +461,15 @@ pub fn EditCollectionModal(props: EditCollectionModalProps) -> Element {
                             }
                             div { class: "form-group",
                                 label { class: "form-label", "Tags (optional)" }
-                                textarea {
-                                    class: "form-textarea",
-                                    rows: 3,
+                                input {
+                                    class: "form-input",
+                                    r#type: "text",
                                     value: "{collection_tags}",
                                     oninput: move |evt| collection_tags.set(evt.value().clone()),
-                                    placeholder: format!("Add tags for this collection, separated by {}", FOLDING_SEPARATOR),
+                                    placeholder: TAG_PLACEHOLDER,
+                                    title: TAG_HELP,
                                 }
+                                div { class: "form-help", "{TAG_HELP}" }
                             }
                         }
                     }
