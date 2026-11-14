@@ -135,7 +135,7 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
     let mut to = use_signal(String::new);
     let mut error = use_signal(|| None::<String>);
 
-    let (Some(spec), Some(current_op)) = (field_spec::<C>(&field()), op()) else {
+    let (Some(spec), Some(current_op)) = (field_spec::<C>(field()), op()) else {
         return rsx! {};
     };
 
@@ -190,7 +190,7 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
                             "data-testid": "builder-op",
                             value: "{current_op:?}",
                             onchange: move |evt| {
-                                let chosen = field_spec::<C>(&field())
+                                let chosen = field_spec::<C>(field())
                                     .and_then(|f| {
                                         f.ops.iter().find(|o| format!("{o:?}") == evt.value()).copied()
                                     });

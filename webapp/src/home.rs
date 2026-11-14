@@ -75,12 +75,12 @@ pub fn ModernHome() -> Element {
                         }
                         div { class: "hero-actions",
                             Link {
-                                to: Route::GallerySearch {},
+                                to: Route::GallerySearch { q: String::new() },
                                 class: "btn btn-primary btn-lg",
                                 "Browse Gallery"
                             }
                             Link {
-                                to: Route::CollectionSearch {},
+                                to: Route::CollectionSearch { q: String::new() },
                                 class: "btn btn-secondary btn-lg",
                                 "View Collections"
                             }
@@ -103,7 +103,7 @@ pub fn ModernHome() -> Element {
                                 p { class: "stat-label", "Media Items" }
                             }
                             Link {
-                                to: Route::GallerySearch {},
+                                to: Route::GallerySearch { q: String::new() },
                                 class: "stat-action",
                                 "Browse All"
                             }
@@ -119,7 +119,7 @@ pub fn ModernHome() -> Element {
                                 p { class: "stat-label", "Collections" }
                             }
                             Link {
-                                to: Route::CollectionSearch {},
+                                to: Route::CollectionSearch { q: String::new() },
                                 class: "stat-action",
                                 "View All"
                             }
@@ -135,7 +135,7 @@ pub fn ModernHome() -> Element {
                                 p { class: "stat-label", "Libraries" }
                             }
                             Link {
-                                to: Route::LibrarySearch {},
+                                to: Route::LibrarySearch { q: String::new() },
                                 class: "stat-action",
                                 "Manage"
                             }
@@ -196,13 +196,13 @@ pub fn ModernHome() -> Element {
 
                     div { class: "actions-grid",
                         Link {
-                            to: Route::GallerySearch {},
+                            to: Route::GallerySearch { q: String::new() },
                             class: "quick-action-card",
                             div { class: "quick-action-icon browse-icon" }
                             span { "Browse Gallery" }
                         }
                         Link {
-                            to: Route::CollectionSearch {},
+                            to: Route::CollectionSearch { q: String::new() },
                             class: "quick-action-card",
                             div { class: "quick-action-icon collections-icon" }
                             span { "View Collections" }
@@ -216,7 +216,7 @@ pub fn ModernHome() -> Element {
                             span { "Create Collection" }
                         }
                         Link {
-                            to: Route::LibrarySearch {},
+                            to: Route::LibrarySearch { q: String::new() },
                             class: "quick-action-card",
                             div { class: "quick-action-icon libraries-icon" }
                             span { "Manage Libraries" }

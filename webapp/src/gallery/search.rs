@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     common::{
         paging::{CacheCfg, use_paged},
+        query_ui::q_param,
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
     },
     components::{
@@ -22,10 +25,14 @@ use api::{
 };
 
 #[component]
-pub fn GallerySearch() -> Element {
+pub fn GallerySearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let search = use_search_state(MEDIA_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::GallerySearch { q: q_param(&text) });
+    });
+    let search = use_search_state(MEDIA_SEARCH_KEY, &q, on_commit);
     let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);

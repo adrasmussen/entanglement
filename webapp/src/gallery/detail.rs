@@ -47,7 +47,7 @@ fn GalleryError(props: GalleryErrorProps) -> Element {
         div { class: "container error-state",
             h1 { "Error Loading Media" }
             p { "There was an error loading the media: {props.message}" }
-            Link { to: Route::GallerySearch {}, class: "btn btn-primary", "Return to Gallery" }
+            Link { to: Route::GallerySearch { q: String::new() }, class: "btn btn-primary", "Return to Gallery" }
         }
     }
 }

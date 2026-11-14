@@ -1,9 +1,12 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     collection::{COLLECTION_SEARCH_KEY, grid::CollectionGrid},
     common::{
         paging::{Page, use_paged},
+        query_ui::q_param,
         search::parse_query,
     },
     components::{
@@ -14,10 +17,14 @@ use crate::{
 use api::{collection::*, page::PageRequest};
 
 #[component]
-pub fn CollectionSearch() -> Element {
+pub fn CollectionSearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let search = use_search_state(COLLECTION_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::CollectionSearch { q: q_param(&text) });
+    });
+    let search = use_search_state(COLLECTION_SEARCH_KEY, &q, on_commit);
     let collection_search_signal = search.signal;
 
     let paged = use_paged(

@@ -8,6 +8,7 @@ use crate::{
     common::{
         grid_cache::{LIBRARY_META, LIBRARY_SHOW_HIDDEN},
         paging::{CacheCfg, use_paged},
+        query_ui::q_param,
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
     },
     components::{
@@ -30,6 +31,8 @@ use api::{
 pub struct LibraryDetailProps {
     // This is a String because we get it from the Router
     library_uuid: String,
+    // the escaped search text from ?q=, see q_param
+    q: String,
 }
 
 #[component]
@@ -48,7 +51,11 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                     }
                 }
             },
-            LibraryInner { update_signal, library_uuid: props.library_uuid }
+            LibraryInner {
+                update_signal,
+                library_uuid: props.library_uuid,
+                q: props.q,
+            }
         }
     }
 }
@@ -64,7 +71,7 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
         div { class: "container error-state",
             h1 { "Error Loading Library" }
             p { "There was an error loading the library: {props.message}" }
-            Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
+            Link { to: Route::LibrarySearch { q: String::new() }, class: "btn btn-primary", "Return to Libraries" }
         }
     }
 }
@@ -73,6 +80,7 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
 struct LibraryInnerProps {
     update_signal: Signal<()>,
     library_uuid: String,
+    q: String,
 }
 
 impl UuidSource for LibraryInnerProps {}
@@ -113,7 +121,14 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         let v = show_hidden();
         LIBRARY_SHOW_HIDDEN.write().insert(*library_uuid.peek(), v);
     });
-    let search = use_search_state(MEDIA_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::LibraryDetail {
+            library_uuid: library_uuid.peek().to_string(),
+            q: q_param(&text),
+        });
+    });
+    let search = use_search_state(MEDIA_SEARCH_KEY, &props.q, on_commit);
     let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);

@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
-    common::search::parse_query,
+    Route,
+    common::{query_ui::q_param, search::parse_query},
     components::{
         modal::ModalBox,
         query_bar::{QueryBar, use_search_state},
@@ -11,10 +13,14 @@ use crate::{
 use api::library::*;
 
 #[component]
-pub fn LibrarySearch() -> Element {
+pub fn LibrarySearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let search = use_search_state(LIBRARY_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::LibrarySearch { q: q_param(&text) });
+    });
+    let search = use_search_state(LIBRARY_SEARCH_KEY, &q, on_commit);
     let library_search_signal = search.signal;
 
     let library_future = use_resource(move || async move {

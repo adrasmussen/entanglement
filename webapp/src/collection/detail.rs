@@ -9,6 +9,7 @@ use crate::{
     common::{
         grid_cache::COLLECTION_META,
         paging::{CacheCfg, use_paged},
+        query_ui::q_param,
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
     },
     components::{
@@ -31,6 +32,8 @@ use api::{
 pub struct CollectionDetailProps {
     // This is a String because we get it from the Router
     collection_uuid: String,
+    // the escaped search text from ?q=, see q_param
+    q: String,
 }
 
 #[component]
@@ -49,7 +52,11 @@ pub fn CollectionDetail(props: CollectionDetailProps) -> Element {
                     }
                 }
             },
-            CollectionInner { update_signal, collection_uuid: props.collection_uuid }
+            CollectionInner {
+                update_signal,
+                collection_uuid: props.collection_uuid,
+                q: props.q,
+            }
         }
     }
 }
@@ -65,7 +72,7 @@ fn CollectionError(props: CollectionErrorProps) -> Element {
         div { class: "container error-state",
             h1 { "Error Loading Collection" }
             p { "There was an error loading the collection: {props.message}" }
-            Link { to: Route::CollectionSearch {}, class: "btn btn-primary", "Return to Collections" }
+            Link { to: Route::CollectionSearch { q: String::new() }, class: "btn btn-primary", "Return to Collections" }
         }
     }
 }
@@ -74,6 +81,7 @@ fn CollectionError(props: CollectionErrorProps) -> Element {
 struct CollectionInnerProps {
     update_signal: Signal<()>,
     collection_uuid: String,
+    q: String,
 }
 
 impl UuidSource for CollectionInnerProps {}
@@ -106,7 +114,14 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
         resp
     });
 
-    let search = use_search_state(MEDIA_SEARCH_KEY, "", use_callback(|_: String| {}));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::CollectionDetail {
+            collection_uuid: collection_uuid.peek().to_string(),
+            q: q_param(&text),
+        });
+    });
+    let search = use_search_state(MEDIA_SEARCH_KEY, &props.q, on_commit);
     let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);

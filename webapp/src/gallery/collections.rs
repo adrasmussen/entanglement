@@ -71,106 +71,107 @@ fn CollectionTableInner(props: CollectionTableInnerProps) -> Element {
     let collections = collections.clone();
 
     rsx! {
-        div {
-            class: "detail-section",
-            style: "background-color: var(--surface); padding: var(--space-4); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);",
-            div {
-                class: "section-header",
-                style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);",
-                h2 { "Collections" }
-                button {
-                    class: "btn btn-secondary",
-                    onclick: move |_| {
-                        MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToCollection(media_uuid)));
-                    },
-                    "Add to Collection"
-                }
-            }
+           div {
+               class: "detail-section",
+               style: "background-color: var(--surface); padding: var(--space-4); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);",
+               div {
+                   class: "section-header",
+                   style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);",
+                   h2 { "Collections" }
+                   button {
+                       class: "btn btn-secondary",
+                       onclick: move |_| {
+                           MODAL_STACK.with_mut(|v| v.push(Modal::AddMediaToCollection(media_uuid)));
+                       },
+                       "Add to Collection"
+                   }
+               }
 
-            match collections {
-                Some(collections) => {
-                    if collections.is_empty() {
-                        rsx! {
-                            div {
-                                class: "empty-state",
-                                style: "padding: var(--space-3); text-align: center; color: var(--text-tertiary);",
-                                "This media is not in any collections."
-                            }
-                        }
-                    } else {
-                        rsx! {
-                            div {
-                                class: "table-container",
-                                style: "max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
-                                table { style: "border-collapse: separate; border-spacing: 0;",
-                                    thead { style: "position: sticky; top: 0; z-index: 1; background-color: var(--primary);",
-                                        tr {
-                                            th { "Name" }
-                                            th { "Group" }
-                                            th { "Description" }
-                                            th { style: "width: 100px;", "Actions" }
-                                        }
-                                    }
-                                    tbody {
-                                        for (collection_id , collection) in collections.clone() {
-                                            tr {
-                                                td { style: "padding: var(--space-2) var(--space-3);",
-                                                    Link {
-                                                        to: Route::CollectionDetail {
-                                                            collection_uuid: collection_id.to_string(),
-                                                        },
-                                                        style: "font-weight: 500; color: var(--primary);",
-                                                        "{collection.name}"
-                                                    }
-                                                }
-                                                td { style: "padding: var(--space-2) var(--space-3);", "{collection.gid}" }
-                                                td {
-                                                    style: "max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: var(--space-2) var(--space-3);",
-                                                    title: "{collection.note}",
-                                                    if collection.note.is_empty() {
-                                                        "(No description)"
-                                                    } else {
-                                                        "{collection.note}"
-                                                    }
-                                                }
-                                                td { style: "text-align: right; padding: var(--space-2) var(--space-3);",
-                                                    button {
-                                                        class: "btn btn-sm btn-danger",
-                                                        onclick: move |_| {
-                                                            MODAL_STACK
-                                                                .with_mut(|v| {
-                                                                    v.push(Modal::RmMediaFromCollection(media_uuid, collection_id))
-                                                                });
-                                                        },
-                                                        "Remove"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            div { style: "text-align: right; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
-                                "Showing {collections.len()} collection"
-                                if collections.len() != 1 {
-                                    "s"
-                                } else {
-                                    ""
-                                }
-                            }
-                        }
-                    }
-                }
-                None => {
-                    rsx! {
-                        div { class: "loading-state",
-                            for _ in 0..3 {
-                                div { class: "skeleton", style: "height: 36px; margin-bottom: 8px;" }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+               match collections {
+                   Some(collections) => {
+                       if collections.is_empty() {
+                           rsx! {
+                               div {
+                                   class: "empty-state",
+                                   style: "padding: var(--space-3); text-align: center; color: var(--text-tertiary);",
+                                   "This media is not in any collections."
+                               }
+                           }
+                       } else {
+                           rsx! {
+                               div {
+                                   class: "table-container",
+                                   style: "max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
+                                   table { style: "border-collapse: separate; border-spacing: 0;",
+                                       thead { style: "position: sticky; top: 0; z-index: 1; background-color: var(--primary);",
+                                           tr {
+                                               th { "Name" }
+                                               th { "Group" }
+                                               th { "Description" }
+                                               th { style: "width: 100px;", "Actions" }
+                                           }
+                                       }
+                                       tbody {
+                                           for (collection_id , collection) in collections.clone() {
+                                               tr {
+                                                   td { style: "padding: var(--space-2) var(--space-3);",
+                                                       Link {
+                                                           to: Route::CollectionDetail {
+                                                               collection_uuid: collection_id.to_string(),
+    q: String::new(),
+                                                           },
+                                                           style: "font-weight: 500; color: var(--primary);",
+                                                           "{collection.name}"
+                                                       }
+                                                   }
+                                                   td { style: "padding: var(--space-2) var(--space-3);", "{collection.gid}" }
+                                                   td {
+                                                       style: "max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: var(--space-2) var(--space-3);",
+                                                       title: "{collection.note}",
+                                                       if collection.note.is_empty() {
+                                                           "(No description)"
+                                                       } else {
+                                                           "{collection.note}"
+                                                       }
+                                                   }
+                                                   td { style: "text-align: right; padding: var(--space-2) var(--space-3);",
+                                                       button {
+                                                           class: "btn btn-sm btn-danger",
+                                                           onclick: move |_| {
+                                                               MODAL_STACK
+                                                                   .with_mut(|v| {
+                                                                       v.push(Modal::RmMediaFromCollection(media_uuid, collection_id))
+                                                                   });
+                                                           },
+                                                           "Remove"
+                                                       }
+                                                   }
+                                               }
+                                           }
+                                       }
+                                   }
+                               }
+                               div { style: "text-align: right; margin-top: var(--space-2); font-size: 0.875rem; color: var(--text-tertiary);",
+                                   "Showing {collections.len()} collection"
+                                   if collections.len() != 1 {
+                                       "s"
+                                   } else {
+                                       ""
+                                   }
+                               }
+                           }
+                       }
+                   }
+                   None => {
+                       rsx! {
+                           div { class: "loading-state",
+                               for _ in 0..3 {
+                                   div { class: "skeleton", style: "height: 36px; margin-bottom: 8px;" }
+                               }
+                           }
+                       }
+                   }
+               }
+           }
+       }
 }
