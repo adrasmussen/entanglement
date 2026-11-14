@@ -11,7 +11,7 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
     page::{PageMeta, PageRequest},
-    search::SearchOptions,
+    search::{ListFilter, SearchOptions},
 };
 
 pub mod mariadb;
@@ -123,7 +123,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>>;
 
@@ -146,7 +146,7 @@ pub trait DbBackend: Send + Sync + 'static {
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<LibraryUuid>>;
 

@@ -30,6 +30,7 @@ pub fn CollectionSearch() -> Element {
             let filter = literal_filter(&search);
             let resp = search_collections(&SearchCollectionsReq {
                 filter,
+                query: None,
                 page: PageRequest {
                     limit: Some(limit),
                     offset,

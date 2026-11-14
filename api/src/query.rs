@@ -96,11 +96,21 @@ impl FieldSpec {
     }
 }
 
+// how a class matches plain words
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FreeText {
+    // against the backend's fulltext column(s), which the caller supplies
+    Fulltext,
+    // any word as a case-insensitive substring of this column of SearchClass::TABLE
+    Column(&'static str),
+}
+
 pub trait SearchClass {
     const KIND: SearchKind;
     const TABLE: &'static str;
     const FIELDS: &'static [FieldSpec];
     // what plain words match
+    const FREE_TEXT: FreeText;
     const FREE_TEXT_HELP: &'static str;
 }
 
@@ -170,6 +180,7 @@ impl SearchClass for Media {
             column: "media_type",
         },
     ];
+    const FREE_TEXT: FreeText = FreeText::Fulltext;
     const FREE_TEXT_HELP: &'static str =
         "Words are matched against the date, description and tags; any one word may match";
 }
@@ -209,8 +220,9 @@ impl SearchClass for Collection {
             column: "tags",
         },
     ];
+    const FREE_TEXT: FreeText = FreeText::Column("name");
     const FREE_TEXT_HELP: &'static str =
-        "Words are matched against the name, description and tags; any one word may match";
+        "Words are matched against the name; any one word may match";
 }
 
 impl SearchClass for Library {
@@ -226,7 +238,9 @@ impl SearchClass for Library {
         in_global: true,
         column: "path",
     }];
-    const FREE_TEXT_HELP: &'static str = "Words are matched against the library path";
+    const FREE_TEXT: FreeText = FreeText::Column("path");
+    const FREE_TEXT_HELP: &'static str =
+        "Words are matched against the library path; any one word may match";
 }
 
 // the structured query, as sent on the wire.  an empty query matches everything

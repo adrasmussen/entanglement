@@ -31,7 +31,7 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
     page::PageRequest,
-    search::{SearchOptions, escape_like},
+    search::{ListFilter, SearchOptions},
 };
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
@@ -842,7 +842,7 @@ impl DbBackend for PostgresBackend {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
@@ -855,15 +855,25 @@ impl DbBackend for PostgresBackend {
             FROM
                 collections
             WHERE
-                gid = ANY($1) AND name LIKE $2"#;
+                gid = ANY($1)"#;
 
         let gid = gid.into_iter().collect::<Vec<String>>();
-        let filter = format!("%{}%", escape_like(&filter));
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter
+            .validate::<Collection>()
+            .map_err(anyhow::Error::msg)?;
+
+        // every user value is a bound parameter ($2.. for the filter, then limit and offset)
+        let (filter_sql, filter_params) = filter.postgres_sql::<Collection>(2);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&gid];
+        params.extend(filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
+        let base = format!("{base}{filter_sql}");
         let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
 
         let total = if page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
-            let n: i64 = conn.query_one(&count, &[&gid, &filter]).await?.try_get(0)?;
+            let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
             Some(n as u64)
         } else {
             None
@@ -878,11 +888,15 @@ impl DbBackend for PostgresBackend {
         // and LIMIT NULL is no limit
         let limit = SearchPage::<CollectionUuid>::probe_limit(page.limit)
             .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
-        let statement = format!("{base} ORDER BY name, collection_uuid LIMIT $3 OFFSET $4");
+        let statement = format!(
+            "{base} ORDER BY name, collection_uuid LIMIT ${} OFFSET ${}",
+            params.len() + 1,
+            params.len() + 2
+        );
+        params.push(&limit);
+        params.push(&offset);
 
-        let collections = conn
-            .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
-            .await?;
+        let collections = conn.query_scalar(&statement, &params).await?;
 
         let page = SearchPage::from_probe(collections, total, page.limit);
 
@@ -1019,7 +1033,7 @@ impl DbBackend for PostgresBackend {
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching for libraries");
@@ -1032,15 +1046,23 @@ impl DbBackend for PostgresBackend {
             FROM
                 libraries
             WHERE
-                gid = ANY($1) AND path LIKE $2"#;
+                gid = ANY($1)"#;
 
         let gid = gid.into_iter().collect::<Vec<String>>();
-        let filter = format!("%{}%", escape_like(&filter));
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter.validate::<Library>().map_err(anyhow::Error::msg)?;
+
+        // every user value is a bound parameter ($2.. for the filter, then limit and offset)
+        let (filter_sql, filter_params) = filter.postgres_sql::<Library>(2);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&gid];
+        params.extend(filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
+        let base = format!("{base}{filter_sql}");
         let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
 
         let total = if page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
-            let n: i64 = conn.query_one(&count, &[&gid, &filter]).await?.try_get(0)?;
+            let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
             Some(n as u64)
         } else {
             None
@@ -1054,11 +1076,15 @@ impl DbBackend for PostgresBackend {
             .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
 
         // path is unique (so it has an index), and library_uuid keeps the order total
-        let statement = format!("{base} ORDER BY path, library_uuid LIMIT $3 OFFSET $4");
+        let statement = format!(
+            "{base} ORDER BY path, library_uuid LIMIT ${} OFFSET ${}",
+            params.len() + 1,
+            params.len() + 2
+        );
+        params.push(&limit);
+        params.push(&offset);
 
-        let libraries = conn
-            .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
-            .await?;
+        let libraries = conn.query_scalar(&statement, &params).await?;
 
         let page = SearchPage::from_probe(libraries, total, page.limit);
 

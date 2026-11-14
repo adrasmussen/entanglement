@@ -4,6 +4,7 @@ use crate::{
     http_endpoint,
     media::MediaUuid,
     page::{PageMeta, PageRequest, PagedResp},
+    query::SearchQuery,
     search::SearchOptions,
     uuid_newtype,
 };
@@ -57,6 +58,9 @@ http_endpoint!(SearchLibraries);
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchLibrariesReq {
     pub filter: String,
+    // when present it replaces `filter`, which is then ignored
+    #[serde(default)]
+    pub query: Option<SearchQuery>,
     #[serde(flatten)]
     pub page: PageRequest,
 }

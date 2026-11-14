@@ -335,6 +335,7 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
 
         search_collections(&SearchCollectionsReq {
             filter,
+            query: None,
             ..Default::default()
         })
         .await

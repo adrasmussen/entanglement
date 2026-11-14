@@ -593,6 +593,7 @@ pub fn AddMediaToCollectionModal(props: AddMediaToCollectionModalProps) -> Eleme
 
         search_collections(&SearchCollectionsReq {
             filter,
+            query: None,
             ..Default::default()
         })
         .await
@@ -787,6 +788,7 @@ pub fn BulkAddToCollectionModal(props: BulkAddToCollectionModalProps) -> Element
 
         search_collections(&SearchCollectionsReq {
             filter,
+            query: None,
             ..Default::default()
         })
         .await

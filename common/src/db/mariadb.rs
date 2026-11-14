@@ -28,7 +28,7 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
     page::PageRequest,
-    search::{SearchOptions, escape_like},
+    search::{ListFilter, SearchOptions},
     unfold_set,
 };
 
@@ -1078,12 +1078,19 @@ impl DbBackend for MariaDBBackend {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
         let _cr = self.locks.collection.read().await;
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter
+            .validate::<Collection>()
+            .map_err(anyhow::Error::msg)?;
+
+        let (filter_sql, filter_params) = filter.mariadb_sql::<Collection>();
 
         let gid_match = &*GID_MATCH;
         let base = format!(
@@ -1093,16 +1100,14 @@ impl DbBackend for MariaDBBackend {
             FROM
                 collections
             WHERE
-                {gid_match} AND name LIKE :filter"
+                {gid_match}{filter_sql}"
         );
 
-        let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
-            (b"gid".to_vec(), fold_set(gid)?.into()),
-            (
-                b"filter".to_vec(),
-                format!("%{}%", escape_like(&filter)).into(),
-            ),
-        ]);
+        let mut params: HashMap<Vec<u8>, Value> =
+            HashMap::from([(b"gid".to_vec(), fold_set(gid)?.into())]);
+        for (name, value) in &filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
 
         let total = if page.with_total {
             let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")
@@ -1328,12 +1333,17 @@ impl DbBackend for MariaDBBackend {
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching libraries");
 
         let _lr = self.locks.library.read().await;
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter.validate::<Library>().map_err(anyhow::Error::msg)?;
+
+        let (filter_sql, filter_params) = filter.mariadb_sql::<Library>();
 
         let gid_match = &*GID_MATCH;
         let base = format!(
@@ -1343,16 +1353,14 @@ impl DbBackend for MariaDBBackend {
             FROM
                 libraries
             WHERE
-                {gid_match} AND path LIKE :filter"
+                {gid_match}{filter_sql}"
         );
 
-        let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
-            (b"gid".to_vec(), fold_set(gid)?.into()),
-            (
-                b"filter".to_vec(),
-                format!("%{}%", escape_like(&filter)).into(),
-            ),
-        ]);
+        let mut params: HashMap<Vec<u8>, Value> =
+            HashMap::from([(b"gid".to_vec(), fold_set(gid)?.into())]);
+        for (name, value) in &filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
 
         let total = if page.with_total {
             let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")

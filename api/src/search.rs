@@ -15,7 +15,7 @@ use crate::{
     library::{LibraryUuid, SearchMediaInLibraryReq},
     media::{Media, MediaUuid, SearchMediaReq},
     page::{PageMeta, PageRequest, PagedResp},
-    query::{Clause, FieldSpec, FieldType, Op, SearchClass, SearchQuery, field_spec},
+    query::{Clause, FieldSpec, FieldType, FreeText, Op, SearchClass, SearchQuery, field_spec},
 };
 
 // paging limits
@@ -335,6 +335,62 @@ impl SearchFilter {
     }
 }
 
+// the filter of a collection or library list search: the older literal substring match on
+// the class's free-text column (what the pickers use), or a structured query
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ListFilter {
+    Literal(String),
+    Query(SearchQuery),
+}
+
+impl ListFilter {
+    // a request's `filter` text is only used when it has no structured query
+    pub fn from_req(filter: String, query: Option<SearchQuery>) -> Self {
+        match query {
+            Some(q) => Self::Query(q),
+            None => Self::Literal(filter),
+        }
+    }
+
+    pub fn validate<C: SearchClass>(&self) -> Result<(), String> {
+        match self {
+            Self::Query(q) => q.validate::<C>(),
+            Self::Literal(_) => Ok(()),
+        }
+    }
+
+    // postgres fragment (starting with " AND ") and parameters, first placeholder $first_param
+    pub fn postgres_sql<C: SearchClass>(&self, first_param: usize) -> (String, Vec<String>) {
+        match self {
+            Self::Query(q) => q.postgres_filter::<C>("", first_param),
+            Self::Literal(text) => (
+                format!(" AND {} LIKE ${first_param}", literal_column::<C>()),
+                vec![format!("%{}%", escape_like(text))],
+            ),
+        }
+    }
+
+    // mariadb fragment and named parameters (:f0, :f1, ...)
+    pub fn mariadb_sql<C: SearchClass>(&self) -> (String, Vec<(String, String)>) {
+        match self {
+            Self::Query(q) => q.mariadb_filter::<C>(""),
+            Self::Literal(text) => (
+                format!(" AND {} LIKE :f0", literal_column::<C>()),
+                vec![("f0".to_string(), format!("%{}%", escape_like(text)))],
+            ),
+        }
+    }
+}
+
+// the free-text column of a list class, qualified; only classes with a column have a literal
+// filter, and the others match nothing
+fn literal_column<C: SearchClass>() -> String {
+    match C::FREE_TEXT {
+        FreeText::Column(c) => format!("{}.{c}", C::TABLE),
+        FreeText::Fulltext => String::from("NULL"),
+    }
+}
+
 // the generic resolver: turns a SearchQuery into sql fragments by walking its clauses and
 // choosing a fixed template from each field's declared type and operator.  column names
 // come only from the class's static FIELDS table (and C::TABLE), operators and templates are
@@ -367,8 +423,9 @@ impl Resolver {
         }
     }
 
-    // the "a OR b OR c" free-text condition, matching the older SubstringAny filter
-    fn text_sql(&mut self, terms: &[String], cols: &str) -> Option<String> {
+    // the "a OR b OR c" free-text condition: for media the older SubstringAny match against
+    // the fulltext columns, for the list classes a LIKE per word against one column
+    fn text_sql<C: SearchClass>(&mut self, terms: &[String], cols: &str) -> Option<String> {
         let terms: Vec<&str> = terms
             .iter()
             .map(|t| t.trim())
@@ -379,6 +436,23 @@ impl Resolver {
 
         if terms.is_empty() {
             return None;
+        }
+
+        if let FreeText::Column(column) = C::FREE_TEXT {
+            let col = format!("{}.{column}", C::TABLE);
+            let like = if self.dialect == Dialect::Postgres {
+                "ILIKE"
+            } else {
+                "LIKE"
+            };
+            let any = terms
+                .iter()
+                .map(|t| {
+                    let p = self.bind(format!("%{}%", escape_like(t)));
+                    format!("{col} {like} {p}")
+                })
+                .join(" OR ");
+            return Some(format!("({any})"));
         }
 
         match self.dialect {
@@ -481,7 +555,7 @@ impl Resolver {
     fn resolve<C: SearchClass>(&mut self, query: &SearchQuery, free_text_cols: &str) -> String {
         let mut sql = String::new();
 
-        if let Some(t) = self.text_sql(&query.text, free_text_cols) {
+        if let Some(t) = self.text_sql::<C>(&query.text, free_text_cols) {
             sql.push_str(" AND ");
             sql.push_str(&t);
         }
@@ -1034,6 +1108,210 @@ mod tests {
         assert_eq!(m.filter_params, named(&[("filter", "(?i)a")]));
     }
 
+    fn list_pg<C: SearchClass>(text: &str) -> (String, Vec<String>) {
+        let parsed = SearchQuery::parse::<C>(text);
+        assert!(parsed.issues.is_empty(), "{text}: {:?}", parsed.issues);
+        ListFilter::Query(parsed.query).postgres_sql::<C>(2)
+    }
+
+    fn list_maria<C: SearchClass>(text: &str) -> (String, Vec<(String, String)>) {
+        let parsed = SearchQuery::parse::<C>(text);
+        assert!(parsed.issues.is_empty(), "{text}: {:?}", parsed.issues);
+        ListFilter::Query(parsed.query).mariadb_sql::<C>()
+    }
+
+    #[test]
+    fn collection_query_sql() {
+        use crate::collection::Collection;
+
+        // plain words are an OR of substring matches on the name
+        let (sql, params) = list_pg::<Collection>("holiday trip");
+        assert_eq!(
+            sql,
+            " AND (collections.name ILIKE $2 OR collections.name ILIKE $3)"
+        );
+        assert_eq!(params, ["%holiday%", "%trip%"]);
+        let (sql, params) = list_maria::<Collection>("holiday trip");
+        assert_eq!(
+            sql,
+            " AND (collections.name LIKE :f0 OR collections.name LIKE :f1)"
+        );
+        assert_eq!(params, named(&[("f0", "%holiday%"), ("f1", "%trip%")]));
+
+        // a phrase stays one term; clauses are ANDed after the words
+        let (sql, params) =
+            list_pg::<Collection>(r#"name:"bulk big" description:50%_off tag:family beach"#);
+        assert_eq!(
+            sql,
+            " AND (collections.name ILIKE $2) AND collections.name ILIKE $3 \
+             AND collections.note ILIKE $4 AND collections.tags ? $5"
+        );
+        assert_eq!(params, ["%beach%", "%bulk big%", "%50\\%\\_off%", "family"]);
+
+        let (sql, params) = list_maria::<Collection>("tag:family description:trip");
+        assert_eq!(
+            sql,
+            " AND LOCATE(CONCAT('|', :f0, '|'), CONCAT('|', collections.tags, '|')) > 0 \
+             AND collections.note LIKE :f1"
+        );
+        assert_eq!(params, named(&[("f0", "family"), ("f1", "%trip%")]));
+    }
+
+    #[test]
+    fn library_query_sql() {
+        use crate::library::Library;
+
+        let (sql, params) = list_pg::<Library>("photos raw path:a_b");
+        assert_eq!(
+            sql,
+            " AND (libraries.path ILIKE $2 OR libraries.path ILIKE $3) AND libraries.path ILIKE $4"
+        );
+        assert_eq!(params, ["%photos%", "%raw%", "%a\\_b%"]);
+
+        let (sql, params) = list_maria::<Library>("photos path:raw");
+        assert_eq!(
+            sql,
+            " AND (libraries.path LIKE :f0) AND libraries.path LIKE :f1"
+        );
+        assert_eq!(params, named(&[("f0", "%photos%"), ("f1", "%raw%")]));
+    }
+
+    #[test]
+    fn list_literal_filter_is_unchanged() {
+        use crate::{collection::Collection, library::Library};
+
+        let f = ListFilter::from_req("50%_off".into(), None);
+        let (sql, params) = f.postgres_sql::<Collection>(2);
+        assert_eq!(sql, " AND collections.name LIKE $2");
+        assert_eq!(params, ["%50\\%\\_off%"]);
+        let (sql, params) = f.mariadb_sql::<Library>();
+        assert_eq!(sql, " AND libraries.path LIKE :f0");
+        assert_eq!(params, named(&[("f0", "%50\\%\\_off%")]));
+        assert_eq!(f.validate::<Collection>(), Ok(()));
+
+        // a query, when present, replaces the filter text
+        let q = SearchQuery::parse::<Collection>("x").query;
+        assert_eq!(
+            ListFilter::from_req("ignored".into(), Some(q.clone())),
+            ListFilter::Query(q)
+        );
+    }
+
+    #[test]
+    fn list_query_validation_is_per_class() {
+        use crate::{collection::Collection, library::Library};
+
+        let path = SearchQuery::parse::<Library>("path:x").query;
+        let tag = SearchQuery::parse::<Collection>("tag:x").query;
+
+        assert_eq!(
+            ListFilter::Query(path.clone()).validate::<Library>(),
+            Ok(())
+        );
+        assert!(
+            ListFilter::Query(path.clone())
+                .validate::<Collection>()
+                .is_err()
+        );
+        assert_eq!(
+            ListFilter::Query(tag.clone()).validate::<Collection>(),
+            Ok(())
+        );
+        assert!(
+            ListFilter::Query(tag.clone())
+                .validate::<Library>()
+                .is_err()
+        );
+
+        // media-only fields on a collection, and bad operators
+        for (field, op) in [("date", Op::Eq), ("type", Op::Eq), ("tag", Op::Gt)] {
+            let q = SearchQuery {
+                text: vec![],
+                clauses: vec![Clause {
+                    field: field.into(),
+                    op,
+                    value: "x".into(),
+                }],
+            };
+            assert!(q.validate::<Collection>().is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn list_queries_keep_hostile_values_bound() {
+        use crate::{collection::Collection, library::Library};
+
+        let evils = [
+            "'; DROP TABLE collections; --",
+            "\") OR 1=1 --",
+            "100%_\\",
+            ":f0",
+            "$1",
+        ];
+        for evil in evils {
+            let query = SearchQuery {
+                text: vec![evil.to_string()],
+                clauses: [
+                    ("name", Op::Contains),
+                    ("description", Op::Contains),
+                    ("tag", Op::Has),
+                ]
+                .into_iter()
+                .map(|(f, op)| Clause {
+                    field: f.into(),
+                    op,
+                    value: evil.into(),
+                })
+                .collect(),
+            };
+            let f = ListFilter::Query(query);
+            let (sql, params) = f.postgres_sql::<Collection>(2);
+            let (msql, mparams) = f.mariadb_sql::<Collection>();
+            assert_eq!(params.len(), 4);
+            assert_eq!(mparams.len(), 4);
+            for fragment in ["DROP", "OR 1=1", "100%"] {
+                assert!(
+                    !sql.contains(fragment) && !msql.contains(fragment),
+                    "{fragment}"
+                );
+            }
+            assert_eq!(sql.matches('\'').count(), 0);
+
+            let query = SearchQuery {
+                text: vec![evil.to_string()],
+                clauses: vec![Clause {
+                    field: "path".into(),
+                    op: Op::Contains,
+                    value: evil.into(),
+                }],
+            };
+            let f = ListFilter::Query(query);
+            let (sql, params) = f.postgres_sql::<Library>(2);
+            assert_eq!(params.len(), 2);
+            assert!(!sql.contains("DROP") && !sql.contains("OR 1=1"));
+        }
+    }
+
+    #[test]
+    fn list_requests_take_an_optional_query() {
+        use crate::{collection::SearchCollectionsReq, library::SearchLibrariesReq};
+
+        // old request shapes still deserialize, with no query
+        let r: SearchCollectionsReq = serde_json::from_str(r#"{"filter":"a"}"#).unwrap();
+        assert_eq!(r.query, None);
+        let r: SearchLibrariesReq = serde_json::from_str(r#"{"filter":"a","limit":3}"#).unwrap();
+        assert_eq!(r.query, None);
+
+        let r: SearchCollectionsReq = serde_json::from_str(
+            r#"{"filter":"","query":{"text":["a"],"clauses":[{"field":"tag","op":"Has","value":"x"}]},"limit":5}"#,
+        )
+        .unwrap();
+        let q = r.query.unwrap();
+        assert_eq!(q.text, ["a"]);
+        assert_eq!(q.clauses.len(), 1);
+        assert_eq!(r.page.limit, Some(5));
+    }
+
     #[test]
     fn order_has_uuid_tiebreaker() {
         for order in [SortMethod::DateAsc, SortMethod::DateDesc, SortMethod::Path] {
@@ -1129,6 +1407,7 @@ mod tests {
 
         let v = serde_json::to_value(SearchLibrariesReq {
             filter: "x".into(),
+            query: None,
             page: PageRequest::first(3, true),
         })
         .unwrap();
