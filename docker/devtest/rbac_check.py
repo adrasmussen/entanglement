@@ -88,11 +88,11 @@ def grid(title, cases):
 
 
 # --- fixture lookups ------------------------------------------------------------------
-if psql("SELECT count(*) FROM libraries WHERE path = '/counttest-rbac'") != "1":
+if psql("SELECT count(*) FROM libraries WHERE path IN ('/counttest-rbac', '/counttest-rbac-dev')") != "2":
     sys.exit("seed missing: apply docker/devtest/seed_rbac.sql first")
 
 L_OTHER = psql("SELECT library_uuid FROM libraries WHERE path = '/counttest-rbac'")
-L_CT = psql("SELECT library_uuid FROM libraries WHERE path = '/counttest'")
+L_DEV = psql("SELECT library_uuid FROM libraries WHERE path = '/counttest-rbac-dev'")
 C_OTHER = psql("SELECT collection_uuid FROM collections WHERE name = 'counttest-rbac-other'")
 C_BRIDGE = psql("SELECT collection_uuid FROM collections WHERE name = 'counttest-rbac-bridge'")
 FOREIGN = set(rows(f"SELECT media_uuid FROM media WHERE library_uuid = '{L_OTHER}'"))
@@ -103,8 +103,8 @@ F_PLAIN = psql(f"SELECT media_uuid FROM media WHERE path = '/counttest-rbac/rbac
 F_HIDDEN = psql(f"SELECT media_uuid FROM media WHERE path = '/counttest-rbac/rbac_00010.jpg'")
 F_SIMILAR = psql(f"SELECT media_uuid FROM media WHERE path = '/counttest-rbac/rbac_00001.jpg'")
 F_BRIDGED = psql(f"SELECT media_uuid FROM media WHERE path = '/counttest-rbac/rbac_00201.jpg'")
-V_IN_OTHER = psql("SELECT media_uuid FROM media WHERE path = '/counttest/ct_00001.jpg'")
-V_TWIN = psql("SELECT media_uuid FROM media WHERE path = '/counttest/ct_00007.jpg'")
+V_IN_OTHER = psql("SELECT media_uuid FROM media WHERE path = '/counttest-rbac-dev/dev_00001.jpg'")  # also in the foreign collection
+V_TWIN = psql("SELECT media_uuid FROM media WHERE path = '/counttest-rbac-dev/dev_00007.jpg'")      # same phash as F_SIMILAR
 COMMENT = psql("SELECT comment_uuid FROM comments WHERE text LIKE '[counttest] rbac%'")
 
 VIS = f"""m.hidden = FALSE AND (
@@ -165,9 +165,9 @@ cases.append(["SearchMediaInCollection foreign collection", "0",
 code, d = call("SearchMediaInCollection", {"collection_uuid": C_BRIDGE, "opts": opts()})
 cases.append(["SearchMediaInCollection bridge (positive control)", len(BRIDGED), d["meta"]["total"],
               0 if set(d["media"]) == BRIDGED else 1])
-code, d = call("SearchMediaInLibrary", {"library_uuid": L_CT, "hidden": None,
+code, d = call("SearchMediaInLibrary", {"library_uuid": L_DEV, "hidden": None,
                                         "opts": opts(q(clauses=[("tag", "Has", "ct-rbac-secret")]))})
-cases.append(["SearchMediaInLibrary counttest tag:ct-rbac-secret", "0", d["meta"]["total"], leaked(d["media"])])
+cases.append(["SearchMediaInLibrary dev library tag:ct-rbac-secret", "0", d["meta"]["total"], leaked(d["media"])])
 grid("scoped searches", cases)
 
 # --- collections and libraries ---------------------------------------------------------
