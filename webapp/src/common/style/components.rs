@@ -997,6 +997,87 @@ body:has(.modal-overlay) {
 
 .filter-builder-error { margin-top: var(--space-2); color: var(--error); font-size: 0.875rem; }
 
+/* the ⌘K search palette (components/palette.rs): a panel near the top of the screen with
+   the box, a hint line and grouped results; the active row follows the arrow keys */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--space-4) var(--space-4);
+  z-index: 60;
+  animation: fade-in var(--transition-normal) var(--easing-standard);
+}
+.palette-panel {
+  width: 100%;
+  max-width: 640px;
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.palette-input {
+  font: inherit;
+  font-size: 1.125rem;
+  padding: var(--space-4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+}
+.palette-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+.palette-hint code { font-size: 0.8125rem; }
+.palette-keys { margin-left: auto; }
+.palette-list { max-height: 60vh; overflow-y: auto; padding: var(--space-1) 0; }
+.palette-heading {
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+.palette-row.active { background-color: var(--background); box-shadow: inset 3px 0 0 var(--primary); }
+.palette-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background-color: var(--background);
+}
+.palette-text { min-width: 0; }
+.palette-title, .palette-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-title { color: var(--text-primary); }
+.palette-subtitle { font-size: 0.8125rem; color: var(--text-tertiary); }
+.palette-see-all { font-size: 0.875rem; color: var(--primary); padding-left: calc(var(--space-4) + 40px + var(--space-3)); }
+.palette-note { padding: var(--space-2) var(--space-4); font-size: 0.875rem; color: var(--text-tertiary); }
+@media (max-width: 768px) {
+  .palette-overlay { padding-top: var(--space-4); }
+  .palette-keys { display: none; }
+}
+
 /* the values picker (GetSlugs): a filter box, the picked values as chips, and a scrolling
    list of the values in the user's data with how many records carry each */
 .slug-picker { display: flex; flex-direction: column; gap: var(--space-2); }

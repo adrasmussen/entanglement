@@ -1,4 +1,6 @@
 use dioxus::prelude::*;
+
+use crate::components::palette::SearchPalette;
 use dioxus_router::prelude::*;
 
 use crate::Route;
@@ -77,6 +79,8 @@ fn NavBarInner() -> Element {
 pub fn NavBar() -> Element {
     rsx! {
         NavBarInner {}
+        // the ⌘K search palette, on every page
+        SearchPalette {}
         Outlet::<Route> {}
     }
 }

@@ -2,6 +2,7 @@ pub mod colors;
 pub mod grid_cache;
 pub mod hooks;
 pub mod paging;
+pub mod palette;
 pub mod query_ui;
 pub mod search;
 pub mod slugs;
