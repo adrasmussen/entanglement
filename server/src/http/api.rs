@@ -1,4 +1,8 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow;
 use axum::{
@@ -7,7 +11,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures::future::BoxFuture;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use crate::{
     auth::{check::AuthCheck, msg::AuthMsg},
@@ -16,8 +20,18 @@ use crate::{
     task::msg::TaskMsg,
 };
 use api::{
-    auth::*, collection::*, comment::*, library::*, media::*, page::PageRequest,
-    query::SearchClass, search::*, slug::*, task::*,
+    auth::*,
+    collection::*,
+    comment::*,
+    library::*,
+    media::*,
+    omni::*,
+    page::PageMeta,
+    page::PageRequest,
+    query::{SearchClass, SearchKind, SearchQuery},
+    search::*,
+    slug::*,
+    task::*,
 };
 
 // http api endpoints
@@ -811,6 +825,174 @@ pub(super) async fn search_media_in_library(
         total: result.total,
     })
     .into_response())
+}
+
+// omnisearch: every class searched with the same text, each as its own concurrent query
+// with its own timeout (see api/src/omni.rs).  each runs the class's ordinary gid-filtered
+// search, the same statement as its local page, so the counts and hits here are exactly
+// what that page shows for the same ?q=, and nothing outside the user's groups can appear
+#[instrument(skip_all)]
+pub(super) async fn omni_search(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<OmniSearchReq>,
+) -> Result<Response, AppError> {
+    let plan = match message.plan() {
+        Ok(plan) => plan,
+        Err(err) => return Ok((StatusCode::BAD_REQUEST, err).into_response()),
+    };
+
+    // auth handled as part of the db searches
+    let gid = state.groups_for_user(&current_user.uid).await?;
+    let page = PageRequest::first(u64::from(plan.per_group), true);
+
+    let groups = futures::future::join_all(plan.groups.into_iter().map(|(spec, group_plan)| {
+        let state = state.clone();
+        let gid = gid.clone();
+        let page = page.clone();
+        async move {
+            let mut group = HitGroup {
+                kind: spec.kind,
+                label: spec.label.to_string(),
+                status: GroupStatus::Ok,
+                hits: Vec::new(),
+                meta: PageMeta::default(),
+            };
+
+            let query = match group_plan {
+                GroupPlan::NotApplicable { field } => {
+                    group.status = GroupStatus::NotApplicable { field };
+                    return group;
+                }
+                GroupPlan::Search(query) => query,
+            };
+
+            let run = omni_provider(&state, spec.kind, gid, query, page);
+            match tokio::time::timeout(Duration::from_millis(PROVIDER_TIMEOUT_MS), run).await {
+                Ok(Ok((hits, meta))) => {
+                    group.hits = hits;
+                    group.meta = meta;
+                }
+                Ok(Err(err)) => {
+                    // the detail stays in the log; the group just says it failed
+                    warn!({ kind = ?spec.kind, error = %err }, "omnisearch provider failed");
+                    group.status = GroupStatus::Error("search failed".to_string());
+                }
+                Err(_) => {
+                    warn!({ kind = ?spec.kind }, "omnisearch provider timed out");
+                    group.status = GroupStatus::TimedOut;
+                }
+            }
+
+            group
+        }
+    }))
+    .await;
+
+    Ok(Json(OmniSearchResp { groups }).into_response())
+}
+
+// one provider: its local search for the first page with the exact total, then the hits'
+// titles.  hydration only ever looks up the uuids the gid-filtered search returned
+async fn omni_provider(
+    state: &Arc<HttpEndpoint>,
+    kind: SearchKind,
+    gid: HashSet<String>,
+    query: SearchQuery,
+    page: PageRequest,
+) -> anyhow::Result<(Vec<SearchHit>, PageMeta)> {
+    macro_rules! ask {
+        ($msg:ident { $($field:ident : $val:expr),* $(,)? }) => {{
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            state
+                .db_svc_sender
+                .send(DbMsg::$msg { resp: tx, $($field: $val),* }.into())
+                .await?;
+            rx.await??
+        }};
+    }
+
+    match kind {
+        SearchKind::Media => {
+            let found = ask!(SearchMedia {
+                gid: gid,
+                opts: SearchOptions {
+                    filter: SearchFilter::Query(query),
+                    page: page.clone(),
+                    ..Default::default()
+                },
+            });
+            let meta = found.meta(&page);
+            if found.items.is_empty() {
+                return Ok((Vec::new(), meta));
+            }
+            let order: HashMap<MediaUuid, usize> = found
+                .items
+                .iter()
+                .enumerate()
+                .map(|(i, u)| (*u, i))
+                .collect();
+            let mut details = ask!(GetMediaBatch {
+                media_uuids: found.items.clone(),
+            });
+            // keep the search's order; media deleted in between is skipped
+            details.sort_by_key(|d| order.get(&d.media_uuid).copied().unwrap_or(usize::MAX));
+            let hits = details
+                .into_iter()
+                .map(|d| SearchHit {
+                    id: HitId::Media(d.media_uuid),
+                    title: file_name(&d.media.path).to_string(),
+                    subtitle: media_subtitle(&d.media.date, &d.media.note),
+                    thumbnail: Some(d.media_uuid),
+                })
+                .collect();
+            Ok((hits, meta))
+        }
+        SearchKind::Collection => {
+            let found = ask!(SearchCollections {
+                gid: gid,
+                filter: ListFilter::Query(query),
+                page: page.clone(),
+            });
+            let meta = found.meta(&page);
+            let mut hits = Vec::with_capacity(found.items.len());
+            for collection_uuid in found.items {
+                if let Some(c) = ask!(GetCollection {
+                    collection_uuid: collection_uuid
+                }) {
+                    hits.push(SearchHit {
+                        id: HitId::Collection(collection_uuid),
+                        title: c.name,
+                        subtitle: c.note,
+                        thumbnail: c.cover,
+                    });
+                }
+            }
+            Ok((hits, meta))
+        }
+        SearchKind::Library => {
+            let found = ask!(SearchLibraries {
+                gid: gid,
+                filter: ListFilter::Query(query),
+                page: page.clone(),
+            });
+            let meta = found.meta(&page);
+            let mut hits = Vec::with_capacity(found.items.len());
+            for library_uuid in found.items {
+                if let Some(l) = ask!(GetLibrary {
+                    library_uuid: library_uuid
+                }) {
+                    hits.push(SearchHit {
+                        id: HitId::Library(library_uuid),
+                        title: l.path,
+                        subtitle: String::new(),
+                        thumbnail: None,
+                    });
+                }
+            }
+            Ok((hits, meta))
+        }
+    }
 }
 
 // the values a field's select offers.  static values come straight from the field metadata;

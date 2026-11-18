@@ -260,6 +260,7 @@ impl HttpEndpoint {
             .route("/ShowTasks", post(show_tasks))
             .route("/GetCounts", post(get_counts))
             .route("/GetSlugs", post(get_slugs))
+            .route("/OmniSearch", post(omni_search))
             .route("/BatchSearchAndSort", post(batch_search_and_sort))
             .with_state(state.clone());
 
