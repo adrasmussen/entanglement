@@ -12,6 +12,7 @@ pub mod media;
 pub mod page;
 pub mod query;
 pub mod search;
+pub mod slug;
 pub mod task;
 
 // entanglment api

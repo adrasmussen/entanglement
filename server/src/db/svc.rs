@@ -265,6 +265,16 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(resp, self.backend.search_collections(gid, filter, page))
                         .await
                 }
+                DbMsg::TagSlugs {
+                    resp,
+                    gid,
+                    kind,
+                    prefix,
+                    limit,
+                } => {
+                    self.respond(resp, self.backend.tag_slugs(gid, kind, prefix, limit))
+                        .await
+                }
                 DbMsg::SearchMediaInCollection {
                     resp,
                     gid,

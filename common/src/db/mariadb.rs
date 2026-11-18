@@ -28,7 +28,9 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
     page::PageRequest,
-    search::{ListFilter, SearchOptions},
+    query::SearchKind,
+    search::{ListFilter, SearchOptions, escape_like},
+    slug::Slug,
     unfold_set,
 };
 
@@ -563,7 +565,7 @@ impl DbBackend for MariaDBBackend {
         // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
         //  * is in a collection owned by a group containing the uid
-        let gid_match = &*GID_MATCH;
+        let visible = &*MARIA_VISIBLE_MEDIA;
         let base = format!(
             r"
             SELECT
@@ -571,19 +573,7 @@ impl DbBackend for MariaDBBackend {
             FROM
                 media
             WHERE
-                media.hidden = FALSE
-                AND (
-                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {gid_match})
-                    OR EXISTS (
-                        SELECT 1
-                        FROM
-                            collection_contents
-                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
-                        WHERE
-                            collection_contents.media_uuid = media.media_uuid
-                            AND {gid_match}
-                    )
-                )"
+                {visible}"
         );
 
         let page = self
@@ -1156,6 +1146,53 @@ impl DbBackend for MariaDBBackend {
         Ok(page)
     }
 
+    #[instrument(skip(self))]
+    async fn tag_slugs(
+        &self,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
+    ) -> Result<Vec<Slug>> {
+        debug!("listing tag slugs");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
+
+        let statement = maria_tag_slugs_sql(kind)?;
+
+        let params: HashMap<Vec<u8>, Value> = HashMap::from([
+            (b"gid".to_vec(), fold_set(gid)?.into()),
+            (
+                b"prefix".to_vec(),
+                format!("{}%", escape_like(&prefix.to_lowercase())).into(),
+            ),
+            (b"limit".to_vec(), u64::from(limit).into()),
+        ]);
+
+        let slugs = statement
+            .with(Params::Named(params))
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?
+            .into_iter()
+            .map(|row| {
+                let (value, count) = from_row_opt::<(String, u64)>(row)?;
+                Ok(Slug {
+                    value,
+                    count: Some(count),
+                })
+            })
+            .collect::<Result<Vec<Slug>, FromRowError>>()?;
+
+        debug!({ count = slugs.len() }, "found tag slugs");
+
+        Ok(slugs)
+    }
+
     #[instrument(skip(self, opts))]
     async fn search_media_in_collection(
         &self,
@@ -1474,6 +1511,66 @@ static GID_MATCH: LazyLock<String> = LazyLock::new(|| {
     format!("LOCATE(CONCAT('{sep}', gid, '{sep}'), CONCAT('{sep}', :gid, '{sep}')) > 0")
 });
 
+// the media visibility rule as one predicate on `media`, with the user's groups bound as
+// :gid; search_media and the tag slugs share it
+static MARIA_VISIBLE_MEDIA: LazyLock<String> = LazyLock::new(|| {
+    let gid_match = &*GID_MATCH;
+    format!(
+        r"media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {gid_match})
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND {gid_match}
+                    )
+                )"
+    )
+});
+
+// the tag slugs statement: the folded tags of the visible records are split into one row
+// per tag by a recursive CTE (mariadb has no hstore), then grouped like the postgres version.
+// :gid the groups, :prefix the LIKE pattern, :limit the limit; ties sort by byte order
+pub(crate) fn maria_tag_slugs_sql(kind: SearchKind) -> Result<String> {
+    let source = match kind {
+        SearchKind::Media => format!(
+            "SELECT media.tags AS tags FROM media WHERE {} AND media.tags <> ''",
+            &*MARIA_VISIBLE_MEDIA
+        ),
+        SearchKind::Collection => format!(
+            "SELECT collections.tags AS tags FROM collections WHERE {} AND collections.tags <> ''",
+            &*GID_MATCH
+        ),
+        SearchKind::Library => return Err(anyhow::Error::msg("libraries have no tags")),
+    };
+    let sep = FOLDING_SEPARATOR;
+    Ok(format!(
+        r"
+            WITH RECURSIVE split (tag, rest) AS (
+                SELECT
+                    SUBSTRING_INDEX(t.tags, '{sep}', 1),
+                    IF(LOCATE('{sep}', t.tags) > 0, SUBSTRING(t.tags, LOCATE('{sep}', t.tags) + 1), NULL)
+                FROM ({source}) AS t
+                UNION ALL
+                SELECT
+                    SUBSTRING_INDEX(rest, '{sep}', 1),
+                    IF(LOCATE('{sep}', rest) > 0, SUBSTRING(rest, LOCATE('{sep}', rest) + 1), NULL)
+                FROM split
+                WHERE rest IS NOT NULL
+            )
+            SELECT tag, COUNT(*)
+            FROM split
+            WHERE tag <> '' AND LOWER(tag) LIKE :prefix
+            GROUP BY tag
+            ORDER BY COUNT(*) DESC, BINARY tag
+            LIMIT :limit"
+    ))
+}
+
 const MEDIA_COLS: &str = "media.path, media.date, media.note, media.tags";
 
 // the columns of a media record, in the order media_from_row expects them
@@ -1627,5 +1724,23 @@ impl MariaDBBackend {
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
         Ok(SearchPage::from_probe(items, total, opts.page.limit))
+    }
+}
+
+#[cfg(test)]
+mod slug_tests {
+    use super::*;
+
+    #[test]
+    fn tag_slugs_sql_is_static_and_applies_visibility() {
+        let media = maria_tag_slugs_sql(SearchKind::Media).unwrap();
+        assert!(media.contains("WITH RECURSIVE split (tag, rest)"));
+        assert!(media.contains(&*MARIA_VISIBLE_MEDIA));
+        assert!(media.contains("LOWER(tag) LIKE :prefix") && media.contains("LIMIT :limit"));
+
+        let coll = maria_tag_slugs_sql(SearchKind::Collection).unwrap();
+        assert!(coll.contains("FROM collections WHERE") && coll.contains(&*GID_MATCH));
+
+        assert!(maria_tag_slugs_sql(SearchKind::Library).is_err());
     }
 }

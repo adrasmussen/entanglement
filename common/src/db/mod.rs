@@ -11,7 +11,9 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
     page::{PageMeta, PageRequest},
+    query::SearchKind,
     search::{ListFilter, SearchOptions},
+    slug::Slug,
 };
 
 pub mod mariadb;
@@ -126,6 +128,17 @@ pub trait DbBackend: Send + Sync + 'static {
         filter: ListFilter,
         page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>>;
+
+    // the distinct tags of the records of `kind` visible to gid, with how many visible records
+    // carry each, most used first; only tags starting with the (lowercase) prefix, at most
+    // limit of them.  libraries have no tags
+    async fn tag_slugs(
+        &self,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
+    ) -> Result<Vec<Slug>>;
 
     async fn search_media_in_collection(
         &self,

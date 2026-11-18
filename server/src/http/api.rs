@@ -17,7 +17,7 @@ use crate::{
 };
 use api::{
     auth::*, collection::*, comment::*, library::*, media::*, page::PageRequest,
-    query::SearchClass, search::*, task::*,
+    query::SearchClass, search::*, slug::*, task::*,
 };
 
 // http api endpoints
@@ -811,6 +811,51 @@ pub(super) async fn search_media_in_library(
         total: result.total,
     })
     .into_response())
+}
+
+// the values a field's select offers.  static values come straight from the field metadata;
+// tags are the distinct tags of the records the user can see, counted over those records
+// only, so nothing about hidden or other groups' records leaks through the filter options
+#[instrument(skip_all)]
+pub(super) async fn get_slugs(
+    State(state): State<Arc<HttpEndpoint>>,
+    Extension(current_user): Extension<CurrentUser>,
+    Json(message): Json<GetSlugsReq>,
+) -> Result<Response, AppError> {
+    let source = match message.source() {
+        Ok(source) => source,
+        Err(err) => return Ok((StatusCode::BAD_REQUEST, err).into_response()),
+    };
+
+    let slugs = match source {
+        SlugSource::Static(slugs) => slugs,
+        SlugSource::Tags {
+            kind,
+            prefix,
+            limit,
+        } => {
+            // auth handled as part of the db query
+            let gid = state.groups_for_user(&current_user.uid).await?;
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            state
+                .db_svc_sender
+                .send(
+                    DbMsg::TagSlugs {
+                        resp: tx,
+                        gid,
+                        kind,
+                        prefix,
+                        limit,
+                    }
+                    .into(),
+                )
+                .await?;
+            rx.await??
+        }
+    };
+
+    Ok(Json(GetSlugsResp { slugs }).into_response())
 }
 
 // counts are the totals of the ordinary searches with an empty filter and a count-only

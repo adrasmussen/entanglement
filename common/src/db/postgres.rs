@@ -31,8 +31,53 @@ use api::{
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
     page::PageRequest,
-    search::{ListFilter, SearchOptions},
+    query::SearchKind,
+    search::{ListFilter, SearchOptions, escape_like},
+    slug::Slug,
 };
+
+// the media visibility rule as one predicate on `media`, with the user's groups bound as $1:
+// not hidden, and in a library or a collection owned by one of the groups.  it drives from
+// the media table (rather than a UNION of the two access paths) so that the planner can walk
+// idx_media_visible_date and stop at a LIMIT.  search_media and the tag slugs share it, so
+// what a list shows and what its filters offer can't drift apart
+pub(crate) const PG_VISIBLE_MEDIA: &str = r#"media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND collections.gid = ANY($1)
+                    )
+                )"#;
+
+// the tag slugs statement: $1 the groups, $2 the LIKE pattern, $3 the limit.  ties sort by
+// byte order (COLLATE "C") so the result doesn't depend on the database locale
+pub(crate) fn pg_tag_slugs_sql(kind: SearchKind) -> Result<String> {
+    let (from, visible) = match kind {
+        SearchKind::Media => ("media, skeys(media.tags) AS k", PG_VISIBLE_MEDIA),
+        SearchKind::Collection => (
+            "collections, skeys(collections.tags) AS k",
+            "collections.gid = ANY($1)",
+        ),
+        SearchKind::Library => return Err(anyhow::Error::msg("libraries have no tags")),
+    };
+    Ok(format!(
+        r#"-- tag_slugs
+            SELECT k, COUNT(*)
+            FROM {from}
+            WHERE
+                {visible}
+                AND lower(k) LIKE $2
+            GROUP BY k
+            ORDER BY COUNT(*) DESC, k COLLATE "C"
+            LIMIT $3"#
+    ))
+}
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
     set.into_iter().map(|s| (s, None)).collect()
@@ -458,29 +503,19 @@ impl DbBackend for PostgresBackend {
         //
         // this drives from the media table (rather than a UNION of the two access paths)
         // so that the planner can walk idx_media_visible_date and stop at the LIMIT
-        let base = r#"-- search_media
+        let base = format!(
+            r#"-- search_media
             SELECT
                 media.media_uuid
             FROM
                 media
             WHERE
-                media.hidden = FALSE
-                AND (
-                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
-                    OR EXISTS (
-                        SELECT 1
-                        FROM
-                            collection_contents
-                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
-                        WHERE
-                            collection_contents.media_uuid = media.media_uuid
-                            AND collections.gid = ANY($1)
-                    )
-                )"#;
+                {PG_VISIBLE_MEDIA}"#
+        );
 
         let gid = gid.into_iter().collect::<Vec<String>>();
 
-        let page = paged_search(&conn, base, &[&gid], &opts).await?;
+        let page = paged_search(&conn, &base, &[&gid], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media");
 
@@ -905,6 +940,40 @@ impl DbBackend for PostgresBackend {
         Ok(page)
     }
 
+    #[instrument(skip(self))]
+    async fn tag_slugs(
+        &self,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
+    ) -> Result<Vec<Slug>> {
+        debug!("listing tag slugs");
+
+        let statement = pg_tag_slugs_sql(kind)?;
+        let conn = self.pool.get().await?;
+
+        let gid = gid.into_iter().collect::<Vec<String>>();
+        let pattern = format!("{}%", escape_like(&prefix.to_lowercase()));
+        let limit = i64::from(limit);
+
+        let rows = conn.query(&statement, &[&gid, &pattern, &limit]).await?;
+
+        let slugs = rows
+            .iter()
+            .map(|row| {
+                Ok(Slug {
+                    value: row.try_get(0)?,
+                    count: Some(u64::try_from(row.try_get::<_, i64>(1)?)?),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        debug!({ count = slugs.len() }, "found tag slugs");
+
+        Ok(slugs)
+    }
+
     #[instrument(skip(self, opts))]
     async fn search_media_in_collection(
         &self,
@@ -1175,4 +1244,24 @@ async fn paged_search(
     let rows = conn.query_scalar(&statement, &params).await?;
 
     Ok(SearchPage::from_probe(rows, total, opts.page.limit))
+}
+
+#[cfg(test)]
+mod slug_tests {
+    use super::*;
+
+    #[test]
+    fn tag_slugs_sql_is_static_and_applies_visibility() {
+        let media = pg_tag_slugs_sql(SearchKind::Media).unwrap();
+        assert!(media.contains("FROM media, skeys(media.tags) AS k"));
+        // the very predicate search_media uses
+        assert!(media.contains(PG_VISIBLE_MEDIA));
+        assert!(media.contains("lower(k) LIKE $2") && media.contains("LIMIT $3"));
+
+        let coll = pg_tag_slugs_sql(SearchKind::Collection).unwrap();
+        assert!(coll.contains("FROM collections, skeys(collections.tags) AS k"));
+        assert!(coll.contains("collections.gid = ANY($1)"));
+
+        assert!(pg_tag_slugs_sql(SearchKind::Library).is_err());
+    }
 }

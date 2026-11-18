@@ -6,7 +6,9 @@ use api::{
     library::*,
     media::*,
     page::PageRequest,
+    query::SearchKind,
     search::{ListFilter, SearchOptions},
+    slug::Slug,
 };
 use common::db::{MediaByCHash, MediaByPath, MediaDetails, SearchPage};
 
@@ -122,6 +124,13 @@ pub enum DbMsg {
         gid: HashSet<String>,
         filter: ListFilter,
         page: PageRequest,
+    },
+    TagSlugs {
+        resp: EsmResp<Vec<Slug>>,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
     },
     SearchMediaInCollection {
         resp: EsmResp<SearchPage<MediaUuid>>,
