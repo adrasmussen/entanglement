@@ -871,9 +871,14 @@ body:has(.modal-overlay) {
   display: none;
 }
 
+/* the result count gives way to the title once the big header is gone */
+.sticky-header.compact .search-status {
+  display: none;
+}
+
 .sticky-header.compact .search-title {
   display: block;
-  flex: 0 1 22ch;
+  flex: 0 1 18ch;
   min-width: 0;
   font-weight: 600;
   white-space: nowrap;
@@ -889,6 +894,20 @@ body:has(.modal-overlay) {
   z-index: 5;
   background-color: var(--background);
   padding-top: var(--space-2);
+}
+
+/* nothing in the pinned row may wrap, or showing the compact title would make it taller */
+.sticky-header .search-actions {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sticky-header .search-actions label {
+  white-space: nowrap;
+}
+
+.sticky-header .search-bar form {
+  min-width: 0;
 }
 
 .sticky-header .search-bar {
