@@ -8,9 +8,11 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
+    Route,
     common::{
         colors::CollectionColor,
         grid_cache::{LayoutKey, WindowState, reset_window},
+        grid_nav::set_grid_nav,
         paging::Pager,
         storage::{set_local_storage, try_local_storage},
     },
@@ -356,6 +358,9 @@ pub struct MediaGridProps {
     collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
     #[props(default)]
     collection_uuid: Option<CollectionUuid>,
+    // the page this grid is on, and its name, for the detail page's arrows (see grid_nav)
+    source: Route,
+    source_label: String,
     // page-specific empty state
     empty: Element,
 }
@@ -371,6 +376,15 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
         on_spacer_visible,
         on_resize,
     } = use_grid_windowing(window);
+
+    // snapshot every loaded id (not just the mounted cards), in card order, for the arrows
+    // on the detail page
+    let source = props.source.clone();
+    let source_label = props.source_label.clone();
+    let on_open = use_callback(move |clicked: MediaUuid| {
+        let ids = items.peek().iter().map(|r| r.media_uuid).collect();
+        set_grid_nav(source.clone(), source_label.clone(), ids, clicked);
+    });
 
     let initialized = (pager.initialized)();
     let error = (pager.error)();
@@ -427,6 +441,7 @@ pub fn MediaGrid(props: MediaGridProps) -> Element {
                     collection_uuid: props.collection_uuid,
                     bulk_edit_signal: props.bulk_edit_signal,
                     collection_color_signal: props.collection_color_signal,
+                    on_open,
                 }
             }
         }

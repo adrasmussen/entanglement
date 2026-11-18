@@ -25,6 +25,7 @@ docker exec -i entanglement-postgres-1 psql -U entanglement -d entanglement -v O
 | `rbac_check.py` | `python3 -I docker/devtest/rbac_check.py` | Out-of-group records never surface anywhere |
 | `ui_check.js` | `PW_MODULE=… node docker/devtest/ui_check.js` | Search bar, chips, hints, `?q=` URLs, back-navigation |
 | `ui_modal_check.js` | `PW_MODULE=… node docker/devtest/ui_modal_check.js` | Collection modal layout and tag entry |
+| `ui_nav_check.js` | `PW_MODULE=… node docker/devtest/ui_nav_check.js` | Pinned search row on the gallery, collections list, collection and library pages (desktop and phone); detail-page arrow keys and buttons vs raw SQL order, edges, typing/modifier/modal guards, Back |
 
 The Playwright scripts need `playwright` installed: `npm i playwright && npx playwright install chromium` in any folder, then point `PW_MODULE` at its `node_modules`. Some scripts arrive with later branches of the search/paging stack.
 

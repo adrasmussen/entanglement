@@ -33,7 +33,7 @@ fn main() {
 // this enables menus to say "came from this collection -- remove?" and
 // possibly other things
 
-#[derive(Clone, PartialEq, Routable)]
+#[derive(Clone, Debug, PartialEq, Routable)]
 #[rustfmt::skip]
 enum Route {
     #[layout(NavBar)]

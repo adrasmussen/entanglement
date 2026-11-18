@@ -954,11 +954,34 @@ impl Pager {
             None => format!("Showing {loaded} {noun}"),
         }
     }
+
+    // the short "loaded/total" count for the pinned row once the page header has scrolled
+    // away; empty while loading or on error
+    pub fn count(&self, loaded: usize) -> String {
+        if !(self.initialized)() || ((self.error)().is_some() && loaded == 0) {
+            return String::new();
+        }
+        short_count(loaded, (self.total)())
+    }
+}
+
+pub fn short_count(loaded: usize, total: Option<u64>) -> String {
+    match total {
+        Some(total) => format!("{loaded}/{total}"),
+        None => format!("{loaded}"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn short_count_is_loaded_over_total() {
+        assert_eq!(short_count(60, Some(19733)), "60/19733");
+        assert_eq!(short_count(0, Some(0)), "0/0");
+        assert_eq!(short_count(60, None), "60");
+    }
 
     #[test]
     fn recounts_on_the_first_page_and_once_past_the_count() {

@@ -11,6 +11,42 @@ pub struct SearchBarProps {
     status: String,
     #[props(default)]
     action_button: Option<Element>,
+    // compact page title, shown in the row only while the page's big header is scrolled
+    // away (CSS: .sticky-header.compact .search-title); the row's height never changes
+    #[props(default)]
+    title: Option<String>,
+    // short "loaded/total" count shown beside the compact title (see Pager::count)
+    #[props(default)]
+    count: String,
+}
+
+// the big header block of a page, in normal flow so it scrolls away.  reports whether any of
+// it is still in view, which the page turns into the `compact` class of its .sticky-header
+// (only the content of that row changes, never its height, so nothing shifts)
+#[component]
+pub fn PageHero(hero_visible: Signal<bool>, children: Element) -> Element {
+    let mut hero_visible = hero_visible;
+    rsx! {
+        div {
+            class: "page-hero",
+            onvisible: move |evt: VisibleEvent| {
+                let visible = evt.data().is_intersecting().unwrap_or(true);
+                if *hero_visible.peek() != visible {
+                    hero_visible.set(visible);
+                }
+            },
+            {children}
+        }
+    }
+}
+
+// class of the sticky row for the hero's visibility
+pub fn sticky_class(hero_visible: bool) -> &'static str {
+    if hero_visible {
+        "sticky-header"
+    } else {
+        "sticky-header compact"
+    }
 }
 
 #[component]
@@ -22,6 +58,12 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
 
     rsx! {
         div { class: "search-bar",
+            if let Some(title) = props.title {
+                span { class: "search-title", title: "{title}", "{title}" }
+            }
+            if !props.count.is_empty() {
+                span { class: "search-count", title: "{status}", "{props.count}" }
+            }
             form {
                 style: "flex: 1; display: flex; align-items: center; gap: var(--space-2);",
                 onsubmit: move |event| async move {

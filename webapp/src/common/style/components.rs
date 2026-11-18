@@ -189,6 +189,36 @@ pub const BASE_COMPONENTS: &str = r#"
   scrollbar-width: none;
 }
 
+/* previous/next over the grid the user came from */
+.grid-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.grid-nav-back {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid-nav-steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.grid-nav-pos {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  min-width: 5ch;
+  text-align: center;
+}
+
 .media-detail-view {
   position: relative;
   display: flex;
@@ -829,6 +859,43 @@ body:has(.modal-overlay) {
   margin-right: var(--space-2);
 }
 
+/* the big header block of a page: normal flow, so it simply scrolls away.  only
+   the search row below stays pinned */
+.page-hero {
+  padding-top: var(--space-4);
+}
+
+/* the compact title lives inside the pinned row but is out of the layout until
+   the hero has scrolled away, so the row is the same height either way */
+.search-title,
+.search-count {
+  display: none;
+}
+
+/* "loaded/total" beside the compact title, replacing the long result count */
+.sticky-header.compact .search-count {
+  display: block;
+  flex: none;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the result count gives way to the title once the big header is gone */
+.sticky-header.compact .search-status {
+  display: none;
+}
+
+.sticky-header.compact .search-title {
+  display: block;
+  flex: 0 1 18ch;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sticky-header {
   position: sticky;
   /* sticks just below the app header once the page (not an inner box)
@@ -836,8 +903,43 @@ body:has(.modal-overlay) {
   top: var(--header-height);
   z-index: 5;
   background-color: var(--background);
-  padding-top: var(--space-4);
-  padding-bottom: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+/* nothing in the pinned row may wrap, or showing the compact title would make it taller */
+.sticky-header .search-actions {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sticky-header .search-actions label {
+  white-space: nowrap;
+}
+
+.sticky-header .search-bar form {
+  min-width: 0;
+}
+
+.sticky-header .search-bar {
+  margin-bottom: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 100%;
+  }
+
+  /* keep the pinned row one line tall: no title, no result count */
+  .sticky-header .search-title,
+  .sticky-header .search-status {
+    display: none !important;
+  }
+
+  .sticky-header .search-input {
+    min-width: 0;
+    margin-right: 0;
+  }
 }
 
 /* Sidebar Styles */

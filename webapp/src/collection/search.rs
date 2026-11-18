@@ -8,7 +8,7 @@ use crate::{
     },
     components::{
         modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
+        search::{PageHero, SearchBar, sticky_class},
     },
 };
 use api::collection::*;
@@ -16,6 +16,7 @@ use api::collection::*;
 #[component]
 pub fn CollectionSearch() -> Element {
     let update_signal = use_signal(|| ());
+    let hero_visible = use_signal(|| true);
 
     let collection_search_signal =
         use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
@@ -63,18 +64,22 @@ pub fn CollectionSearch() -> Element {
         div { class: "container with-sticky",
             ModalBox { update_signal }
 
-            div { class: "sticky-header",
+            PageHero { hero_visible,
                 div {
                     class: "page-header",
                     style: "margin-bottom: var(--space-4);",
                     p { "Organize and browse your media collections" }
                 }
+            }
 
+            div { class: sticky_class(hero_visible()),
                 SearchBar {
+                    title: "Collections".to_owned(),
                     search_signal: collection_search_signal,
                     storage_key: COLLECTION_SEARCH_KEY,
                     placeholder: "Search by collection name...",
                     status,
+                    count: pager.count(paged.items.read().len()),
                     action_button,
                 }
             }

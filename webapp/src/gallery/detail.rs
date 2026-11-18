@@ -4,7 +4,11 @@ use dioxus_router::prelude::*;
 use crate::common::tags::{TAG_HELP, TAG_PLACEHOLDER, format_tags, parse_tags};
 use crate::{
     Route,
-    common::{grid_cache::mark_media_edited, hooks::use_on_write},
+    common::{
+        grid_cache::mark_media_edited,
+        grid_nav::{GRID_NAV, NavView, advance_cursor, view_for},
+        hooks::use_on_write,
+    },
     components::modal::{MODAL_STACK, Modal, ModalBox},
     gallery::{collections::CollectionTable, comments::CommentList, similar::SimilarMedia},
 };
@@ -97,6 +101,29 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
     // goes back to it (see GRID_CACHE)
     use_on_write(update_signal, move || mark_media_edited(*media_uuid.peek()));
 
+    // previous/next over the grid the user came from, see grid_nav
+    let nav_view = use_memo(move || view_for(&GRID_NAV(), &media_uuid()));
+    let go_to = use_callback(move |to: MediaUuid| {
+        advance_cursor(to);
+        // replace, not push: Back then returns to the grid in one step
+        navigator().replace(Route::GalleryDetail {
+            media_uuid: to.to_string(),
+        });
+    });
+    use_arrow_keys(media_uuid, go_to);
+
+    // a snapshot made for another media (we got here some other way) is dropped
+    use_effect(move || {
+        let current = media_uuid();
+        if GRID_NAV
+            .peek()
+            .as_ref()
+            .is_some_and(|n| n.cursor != current)
+        {
+            *GRID_NAV.write() = None;
+        }
+    });
+
     // this subscribes the whole component to the use_resource() reactive variable
     let media_data = &*media_future.read();
 
@@ -145,6 +172,10 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
 
                 // left column -- Media display (fixed position)
                 div { class: "media-detail-main",
+
+                    if let Some(view) = nav_view() {
+                        GridNavBar { view, go_to }
+                    }
 
                     // main media display
                     div { class: "media-detail-view",
@@ -367,6 +398,109 @@ fn GalleryInner(props: GalleryInnerProps) -> Element {
             }
         }
     }
+}
+
+// "back to <grid>" with previous/next buttons; the ends are disabled
+#[component]
+fn GridNavBar(view: NavView, go_to: Callback<MediaUuid>) -> Element {
+    let NavView {
+        source,
+        label,
+        prev,
+        next,
+        position,
+        total,
+    } = view;
+
+    rsx! {
+        div { class: "grid-nav",
+            Link { to: source, class: "grid-nav-back", title: "Back to {label}",
+                "← {label}"
+            }
+            div { class: "grid-nav-steps",
+                button {
+                    class: "btn btn-secondary",
+                    r#type: "button",
+                    aria_label: "Previous photo",
+                    title: "Previous (left arrow)",
+                    disabled: prev.is_none(),
+                    onclick: move |_| {
+                        if let Some(prev) = prev {
+                            go_to.call(prev);
+                        }
+                    },
+                    "‹"
+                }
+                span { class: "grid-nav-pos", "{position} / {total}" }
+                button {
+                    class: "btn btn-secondary",
+                    r#type: "button",
+                    aria_label: "Next photo",
+                    title: "Next (right arrow)",
+                    disabled: next.is_none(),
+                    onclick: move |_| {
+                        if let Some(next) = next {
+                            go_to.call(next);
+                        }
+                    },
+                    "›"
+                }
+            }
+        }
+    }
+}
+
+// ArrowLeft / ArrowRight step through the grid snapshot.  the listener filters out typing
+// (inputs, textareas, selects, contenteditable), media controls and modified keys; a modal
+// being open is checked here, since the modal stack lives in Rust
+const ARROW_KEYS_JS: &str = r#"
+    const h = (e) => {
+        if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const t = e.target;
+        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|VIDEO|AUDIO)$/.test(t.tagName))) return;
+        dioxus.send(e.key);
+    };
+    window.addEventListener("keydown", h);
+    window.__arrowKeys = window.__arrowKeys || {};
+    window.__arrowKeys["KEY_ID"] = () => {
+        window.removeEventListener("keydown", h);
+        delete window.__arrowKeys["KEY_ID"];
+    };
+"#;
+
+fn use_arrow_keys(media_uuid: Memo<MediaUuid>, go_to: Callback<MediaUuid>) {
+    // unique per mount, so that one page's drop can't remove the next page's listener
+    let key_id = use_hook(|| {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    });
+    use_hook(move || {
+        let mut listener = document::eval(&ARROW_KEYS_JS.replace("KEY_ID", &key_id.to_string()));
+        spawn(async move {
+            while let Ok(key) = listener.recv::<String>().await {
+                if !MODAL_STACK.peek().is_empty() {
+                    continue;
+                }
+                let Some(view) = view_for(&GRID_NAV.peek(), &media_uuid.peek()) else {
+                    continue;
+                };
+                let to = if key == "ArrowLeft" {
+                    view.prev
+                } else {
+                    view.next
+                };
+                if let Some(to) = to {
+                    go_to.call(to);
+                }
+            }
+        });
+    });
+    use_drop(move || {
+        let _ = document::eval(&format!(
+            "const s = window.__arrowKeys && window.__arrowKeys[\"{key_id}\"]; if (s) s();"
+        ));
+    });
 }
 
 #[component]
