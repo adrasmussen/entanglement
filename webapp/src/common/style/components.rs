@@ -999,7 +999,9 @@ body:has(.modal-overlay) {
 
 /* the values picker (GetSlugs): a filter box, the picked values as chips, and a scrolling
    list of the values in the user's data with how many records carry each */
-.slug-picker { display: flex; flex-direction: column; gap: var(--space-2); min-width: 220px; }
+.slug-picker { display: flex; flex-direction: column; gap: var(--space-2); }
+/* the picker takes the builder row's full width, so "Add filter" wraps below it */
+.filter-builder-row .form-group:has(.slug-picker) { flex-basis: 100%; }
 .slug-picked { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .slug-options {
   max-height: 220px;
