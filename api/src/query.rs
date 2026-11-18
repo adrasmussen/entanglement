@@ -119,6 +119,18 @@ pub struct FieldSpec {
     pub in_global: bool,
     // the logical column on SearchClass::TABLE; the startup schema check verifies it
     pub column: &'static str,
+    // what of the column is matched
+    pub expr: ColumnExpr,
+}
+
+// what a field matches of its column
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnExpr {
+    // the column as it is
+    Plain,
+    // the last path segment (the file name, not its folders); postgres has a trigram index on
+    // exactly this expression, so the resolver must spell it the same way
+    Basename,
 }
 
 impl FieldSpec {
@@ -135,11 +147,21 @@ impl FieldSpec {
 // how a class matches plain words
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FreeText {
-    // against the backend's fulltext column(s), which the caller supplies
-    Fulltext,
+    // these columns of SearchClass::TABLE.  a word matches as a whole word or prefix through
+    // the backend's fulltext column (the caller supplies it on postgres), and a word of
+    // MIN_INFIX_CHARS or more also anywhere inside a word: on postgres through pg_infix, an
+    // IMMUTABLE function of exactly these columns (in this order) that lowercases their text
+    // and carries a trigram index; on mariadb as a regex over the columns joined
+    Fulltext {
+        columns: &'static [&'static str],
+        pg_infix: &'static str,
+    },
     // any word as a case-insensitive substring of this column of SearchClass::TABLE
     Column(&'static str),
 }
+
+// shorter words can't use a trigram index, so they match as whole words or prefixes only
+pub const MIN_INFIX_CHARS: usize = 3;
 
 pub trait SearchClass {
     const KIND: SearchKind;
@@ -157,6 +179,11 @@ pub fn field_spec<C: SearchClass>(name: &str) -> Option<&'static FieldSpec> {
 // every (table, column) the class's fields refer to, for the startup schema check
 pub fn declared_columns<C: SearchClass>() -> Vec<(&'static str, &'static str)> {
     let mut cols: Vec<_> = C::FIELDS.iter().map(|f| (C::TABLE, f.column)).collect();
+    match C::FREE_TEXT {
+        FreeText::Fulltext { columns, .. } => cols.extend(columns.iter().map(|c| (C::TABLE, *c))),
+        FreeText::Column(c) => cols.push((C::TABLE, c)),
+    }
+    cols.sort();
     cols.dedup();
     cols
 }
@@ -185,6 +212,7 @@ impl SearchClass for Media {
             example: "tag:holiday",
             in_global: true,
             column: "tags",
+            expr: ColumnExpr::Plain,
         },
         FieldSpec {
             name: "description",
@@ -196,6 +224,7 @@ impl SearchClass for Media {
             example: "description:sunset",
             in_global: true,
             column: "note",
+            expr: ColumnExpr::Plain,
         },
         FieldSpec {
             name: "date",
@@ -207,6 +236,7 @@ impl SearchClass for Media {
             example: "date:2020-06..2020-08",
             in_global: false,
             column: "date",
+            expr: ColumnExpr::Plain,
         },
         FieldSpec {
             name: "type",
@@ -218,11 +248,26 @@ impl SearchClass for Media {
             example: "type:Image",
             in_global: false,
             column: "media_type",
+            expr: ColumnExpr::Plain,
+        },
+        FieldSpec {
+            name: "name",
+            label: "File name",
+            data_type: DataType::Text,
+            filter_type: FilterType::Text,
+            ops: &[Op::Contains],
+            help: "Media whose file name (not its folder) contains this text",
+            example: "name:IMG_20",
+            in_global: true,
+            column: "path",
+            expr: ColumnExpr::Basename,
         },
     ];
-    const FREE_TEXT: FreeText = FreeText::Fulltext;
-    const FREE_TEXT_HELP: &'static str =
-        "Words are matched against the date, description and tags; any one word may match";
+    const FREE_TEXT: FreeText = FreeText::Fulltext {
+        columns: &["date", "note", "tags"],
+        pg_infix: "media_search_text",
+    };
+    const FREE_TEXT_HELP: &'static str = "Words match the date, description and tags, also inside a word from 3 letters; any one word may match";
 }
 
 impl SearchClass for Collection {
@@ -239,6 +284,7 @@ impl SearchClass for Collection {
             example: "name:holiday",
             in_global: true,
             column: "name",
+            expr: ColumnExpr::Plain,
         },
         FieldSpec {
             name: "description",
@@ -250,6 +296,7 @@ impl SearchClass for Collection {
             example: "description:trip",
             in_global: true,
             column: "note",
+            expr: ColumnExpr::Plain,
         },
         FieldSpec {
             name: "tag",
@@ -261,6 +308,7 @@ impl SearchClass for Collection {
             example: "tag:family",
             in_global: true,
             column: "tags",
+            expr: ColumnExpr::Plain,
         },
     ];
     const FREE_TEXT: FreeText = FreeText::Column("name");
@@ -281,6 +329,7 @@ impl SearchClass for Library {
         example: "path:photos",
         in_global: true,
         column: "path",
+        expr: ColumnExpr::Plain,
     }];
     const FREE_TEXT: FreeText = FreeText::Column("path");
     const FREE_TEXT_HELP: &'static str =
@@ -1114,6 +1163,17 @@ mod tests {
         assert!(cols.contains(&("collections", "note")));
         assert!(cols.contains(&("libraries", "path")));
         // collections and libraries are covered by the startup check from phase 3
-        assert_eq!(declared_columns::<Media>().len(), 4);
+        // media: the field columns (tags, note, date, media_type, path for name:) and the
+        // free-text columns, without repeats
+        assert_eq!(
+            declared_columns::<Media>(),
+            [
+                ("media", "date"),
+                ("media", "media_type"),
+                ("media", "note"),
+                ("media", "path"),
+                ("media", "tags")
+            ]
+        );
     }
 }

@@ -55,6 +55,14 @@ pub(crate) const PG_VISIBLE_MEDIA: &str = r#"media.hidden = FALSE
                     )
                 )"#;
 
+// the postgres function plain media words match inside words through (FreeText::pg_infix)
+fn media_infix_function() -> &'static str {
+    match <Media as api::query::SearchClass>::FREE_TEXT {
+        api::query::FreeText::Fulltext { pg_infix, .. } => pg_infix,
+        api::query::FreeText::Column(_) => "",
+    }
+}
+
 // the tag slugs statement: $1 the groups, $2 the LIKE pattern, $3 the limit.  ties sort by
 // byte order (COLLATE "C") so the result doesn't depend on the database locale
 pub(crate) fn pg_tag_slugs_sql(kind: SearchKind) -> Result<String> {
@@ -166,7 +174,23 @@ impl DbBackend for PostgresBackend {
             .map(|r| Ok((r.try_get(0)?, r.try_get(1)?)))
             .collect::<Result<HashSet<(String, String)>>>()?;
 
-        column_check_result(missing_columns(columns, &found))
+        column_check_result(missing_columns(columns, &found))?;
+
+        // plain media words also match inside words through this function (and its
+        // trigram index), which a migration adds; without it every such search would fail
+        let infix = media_infix_function();
+        let exists: bool = conn
+            .query_one("SELECT to_regproc($1) IS NOT NULL", &[&infix])
+            .await?
+            .try_get(0)?;
+        if !exists {
+            return Err(anyhow::Error::msg(format!(
+                "database is missing the search function {infix}(); apply \
+                 db/migrations/2026-11-18_trigram_search.sql"
+            )));
+        }
+
+        Ok(())
     }
 
     #[instrument(skip(self))]

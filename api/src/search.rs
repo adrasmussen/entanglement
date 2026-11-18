@@ -16,7 +16,8 @@ use crate::{
     media::{Media, MediaUuid, SearchMediaReq},
     page::{PageMeta, PageRequest, PagedResp},
     query::{
-        Clause, DataType, FieldSpec, FreeText, Op, SearchClass, SearchQuery, any_values, field_spec,
+        Clause, ColumnExpr, DataType, FieldSpec, FreeText, MIN_INFIX_CHARS, Op, SearchClass,
+        SearchQuery, any_values, field_spec,
     },
 };
 
@@ -389,7 +390,7 @@ impl ListFilter {
 fn literal_column<C: SearchClass>() -> String {
     match C::FREE_TEXT {
         FreeText::Column(c) => format!("{}.{c}", C::TABLE),
-        FreeText::Fulltext => String::from("NULL"),
+        FreeText::Fulltext { .. } => String::from("NULL"),
     }
 }
 
@@ -457,6 +458,14 @@ impl Resolver {
             return Some(format!("({any})"));
         }
 
+        let FreeText::Fulltext { columns, pg_infix } = C::FREE_TEXT else {
+            unreachable!("the column case returned above");
+        };
+        let qualified: Vec<String> = columns
+            .iter()
+            .map(|c| format!("{}.{c}", C::TABLE))
+            .collect();
+
         match self.dialect {
             Dialect::Postgres => {
                 // each word is a prefix (`'check':*` matches checkpoint, checko, checkpt), so
@@ -468,12 +477,34 @@ impl Resolver {
                     .map(|t| format!("{}:*", quote_tsquery_lexeme(t)))
                     .join(" | ");
                 let p = self.bind(q);
-                Some(format!("{cols} @@ to_tsquery('english', {p})"))
+                let mut any = vec![format!("{cols} @@ to_tsquery('english', {p})")];
+
+                // and anywhere inside a word, through the trigram index on pg_infix(columns),
+                // which lowercases: so the pattern is lowercased too and LIKE suffices
+                let infix = format!("{pg_infix}({})", qualified.join(", "));
+                for t in terms
+                    .iter()
+                    .filter(|t| t.chars().count() >= MIN_INFIX_CHARS)
+                {
+                    let p = self.bind(format!("%{}%", escape_like(&t.to_lowercase())));
+                    any.push(format!("{infix} LIKE {p}"));
+                }
+
+                Some(if any.len() == 1 {
+                    any.remove(0)
+                } else {
+                    format!("({})", any.join(" OR "))
+                })
             }
             Dialect::MariaDb => {
+                // a case-insensitive substring of the declared columns joined, so whole
+                // words, prefixes and the inside of words all match, like postgres
                 let regex = format!("(?i){}", terms.iter().map(|t| escape(t)).join("|"));
                 let p = self.bind(regex);
-                Some(format!("CONCAT_WS(\"|\", {cols}) RLIKE {p}"))
+                Some(format!(
+                    "CONCAT_WS(\"|\", {}) RLIKE {p}",
+                    qualified.join(", ")
+                ))
             }
         }
     }
@@ -486,9 +517,15 @@ impl Resolver {
             return None;
         }
 
-        let col = format!("{}.{}", C::TABLE, spec.column);
-        let v = clause.value.clone();
         let pg = self.dialect == Dialect::Postgres;
+        let plain = format!("{}.{}", C::TABLE, spec.column);
+        // spelled exactly as the expression index on it (idx_media_name_trgm)
+        let col = match spec.expr {
+            ColumnExpr::Plain => plain,
+            ColumnExpr::Basename if pg => format!("substring({plain} from '[^/]*$')"),
+            ColumnExpr::Basename => format!("SUBSTRING_INDEX({plain}, '/', -1)"),
+        };
+        let v = clause.value.clone();
 
         let sql = match (spec.data_type, clause.op) {
             (DataType::Text, Op::Contains) => {
@@ -917,14 +954,16 @@ mod tests {
         let (sql, params) = pg("beach tag:holiday", 2);
         assert_eq!(
             sql,
-            " AND media.ts_vec @@ to_tsquery('english', $2) AND media.tags ? $3"
+            " AND (media.ts_vec @@ to_tsquery('english', $2) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $3) \
+             AND media.tags ? $4"
         );
-        assert_eq!(params, ["'beach':*", "holiday"]);
+        assert_eq!(params, ["'beach':*", "%beach%", "holiday"]);
 
         let (sql, params) = maria("beach tag:holiday");
         assert_eq!(
             sql,
-            " AND CONCAT_WS(\"|\", media.path, media.note) RLIKE :f0 \
+            " AND CONCAT_WS(\"|\", media.date, media.note, media.tags) RLIKE :f0 \
              AND LOCATE(CONCAT('|', :f1, '|'), CONCAT('|', media.tags, '|')) > 0"
         );
         assert_eq!(params, named(&[("f0", "(?i)beach"), ("f1", "holiday")]));
@@ -1008,10 +1047,62 @@ mod tests {
     }
 
     #[test]
-    fn query_text_terms_are_or_and_deduped() {
-        let (sql, params) = pg("b a b \"c d\"", 1);
+    fn words_match_inside_words_from_three_characters() {
+        // two-character words are whole words or prefixes only: no trigram index serves them
+        let (sql, params) = pg("ch", 1);
         assert_eq!(sql, " AND media.ts_vec @@ to_tsquery('english', $1)");
-        assert_eq!(params, ["'a':* | 'b':* | 'c d':*"]);
+        assert_eq!(params, ["'ch':*"]);
+
+        // longer ones also match anywhere inside a word, lowercased (media_search_text
+        // lowercases) with LIKE wildcards escaped, each in its own parameter
+        let (sql, params) = pg("EcK%P a_bc", 1);
+        assert_eq!(
+            sql,
+            " AND (media.ts_vec @@ to_tsquery('english', $1) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $2 \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $3)"
+        );
+        // (terms are sorted by bytes first, so the uppercase one leads)
+        assert_eq!(params[1..], ["%eck\\%p%", "%a\\_bc%"]);
+
+        // characters count, not bytes
+        let (_, params) = pg("éé", 1);
+        assert_eq!(params.len(), 1);
+
+        // mariadb matches substrings of the same declared columns, never the path
+        let (sql, _) = maria("eckp");
+        assert_eq!(
+            sql,
+            " AND CONCAT_WS(\"|\", media.date, media.note, media.tags) RLIKE :f0"
+        );
+        assert!(!sql.contains("path"));
+    }
+
+    #[test]
+    fn name_matches_the_file_name_only() {
+        let (sql, params) = pg("name:IMG_20", 1);
+        assert_eq!(sql, " AND substring(media.path from '[^/]*$') ILIKE $1");
+        assert_eq!(params, ["%IMG\\_20%"]);
+
+        let (sql, params) = maria("name:IMG_20");
+        assert_eq!(sql, " AND SUBSTRING_INDEX(media.path, '/', -1) LIKE :f0");
+        assert_eq!(params, named(&[("f0", "%IMG\\_20%")]));
+
+        // a quoted value with a slash is still just text inside the file name
+        let (_, params) = pg(r#"name:"a/b""#, 1);
+        assert_eq!(params, ["%a/b%"]);
+    }
+
+    #[test]
+    fn query_text_terms_are_or_and_deduped() {
+        // only "c d" is long enough to match inside words
+        let (sql, params) = pg("b a b \"c d\"", 1);
+        assert_eq!(
+            sql,
+            " AND (media.ts_vec @@ to_tsquery('english', $1) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $2)"
+        );
+        assert_eq!(params, ["'a':* | 'b':* | 'c d':*", "%c d%"]);
 
         let (_, params) = maria("b a b \"c d\" x.y");
         assert_eq!(params, named(&[("f0", "(?i)a|b|c d|x\\.y")]));
@@ -1086,7 +1177,7 @@ mod tests {
             let (sql, params) = query.postgres_filter::<Media>("media.ts_vec", 1);
             let (msql, mparams) = query.mariadb_filter::<Media>("cols");
 
-            assert!(params.len() >= 10 && mparams.len() == params.len());
+            assert!(params.len() >= 10 && mparams.len() >= 10);
             for fragment in ["DROP", "OR 1=1", "100%", "\\"] {
                 assert!(!sql.contains(fragment), "{fragment}: {sql}");
                 assert!(!msql.contains(fragment), "{fragment}: {msql}");
