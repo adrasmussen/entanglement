@@ -11,10 +11,8 @@
 # automatically by `docker compose up` when it nears expiry.
 #
 # idempotent per-artifact: re-running `docker compose up` won't regenerate
-# something that already exists in the bind-mounted /certs dir, except that
-#   - a CA from before the name constraints is retired: everything is moved to
-#     /certs/legacy-<timestamp>/ and regenerated (re-import client.p12 afterwards)
-#   - a server cert within 30 days of expiry is reissued from the same CA
+# something that already exists in the bind-mounted /certs dir, except that a
+# server cert within 30 days of expiry is reissued from the same CA
 set -eu
 
 CERT_DIR=/certs
@@ -26,16 +24,6 @@ SERVER_SAN='DNS:server,DNS:postgres,DNS:localhost,IP:127.0.0.1,IP:::1'
 NAME_CONSTRAINTS='critical,permitted;DNS:server,permitted;DNS:postgres,permitted;DNS:localhost,permitted;IP:127.0.0.1/255.255.255.255,permitted;IP:::1/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'
 SERVER_DAYS=397
 RENEW_SECONDS=$((30 * 24 * 3600))
-
-if [ -f ca.crt ] && ! openssl x509 -in ca.crt -noout -ext nameConstraints 2>/dev/null | grep -q Permitted; then
-    legacy="legacy-$(date -u +%Y%m%d%H%M%S)"
-    mkdir "$legacy"
-    for f in ca.crt ca.key ca.srl server.crt server.key client.crt client.key client.p12 client-modern.p12; do
-        if [ -f "$f" ]; then mv "$f" "$legacy/"; fi
-    done
-    chmod 700 "$legacy"
-    echo "retired the unconstrained dev CA and its certs to $CERT_DIR/$legacy; regenerating all of them"
-fi
 
 if [ ! -f ca.crt ] || [ ! -f ca.key ]; then
     openssl req -quiet -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
@@ -98,49 +86,32 @@ EOF
         -out client.crt -days 3650 -sha256 \
         -extfile client.ext
 
-    rm -f client.csr client.ext client.p12 client-modern.p12
+    rm -f client.csr client.ext client.p12
     echo "generated dev client cert (CN=dev)"
 fi
 
-# convenience bundle for importing into a browser/OS keychain. the export password
-# comes from ENTG_CLIENT_P12_PASSWORD in the gitignored ./.env and is passed to
-# openssl via the environment (not argv). this is regenerated whenever client.p12
-# is missing, so to change the password: update .env, delete client.p12, and run
-# `docker compose up certgen` -- the client key/cert themselves are unchanged.
+# the client identity as one file for importing into a browser or keychain. the
+# export password comes from ENTG_CLIENT_P12_PASSWORD in the gitignored ./.env and
+# is passed to openssl via the environment (not argv). the ciphers are spelled out
+# (AES-256, PBKDF2, a SHA-256 MAC) rather than left to openssl's defaults: the old
+# RC2-40 "legacy" encoding is rejected by current Firefox, which reports it as a
+# wrong password. regenerated whenever client.p12 is missing, so to change the
+# password: update .env, delete client.p12, and run `docker compose up certgen` --
+# the client key/cert themselves are unchanged.
 if [ ! -f client.p12 ]; then
     : "${ENTG_CLIENT_P12_PASSWORD:?ENTG_CLIENT_P12_PASSWORD must be set (see .env.example)}"
     export ENTG_CLIENT_P12_PASSWORD
 
-    openssl pkcs12 -export -legacy \
-        -inkey client.key -in client.crt \
-        -certfile ca.crt \
-        -out client.p12 -passout env:ENTG_CLIENT_P12_PASSWORD \
-        2>/dev/null || \
     openssl pkcs12 -export \
+        -keypbe AES-256-CBC -certpbe AES-256-CBC -macalg sha256 \
         -inkey client.key -in client.crt \
-        -certfile ca.crt \
+        -certfile ca.crt -name "entanglement dev (CN=dev)" \
         -out client.p12 -passout env:ENTG_CLIENT_P12_PASSWORD
 
     echo "generated client.p12 (password: ENTG_CLIENT_P12_PASSWORD in .env)"
 fi
 
-# the same identity with modern encryption (AES-256, PBKDF2, a SHA-256 MAC).  client.p12 above
-# uses the legacy RC2-40 cipher, which older macOS keychains need but current Firefox rejects
-# (it reports a wrong password), so Firefox imports this one instead.  same password
-if [ ! -f client-modern.p12 ]; then
-    : "${ENTG_CLIENT_P12_PASSWORD:?ENTG_CLIENT_P12_PASSWORD must be set (see .env.example)}"
-    export ENTG_CLIENT_P12_PASSWORD
-
-    openssl pkcs12 -export \
-        -inkey client.key -in client.crt \
-        -certfile ca.crt -name "entanglement dev (CN=dev)" \
-        -out client-modern.p12 -passout env:ENTG_CLIENT_P12_PASSWORD
-
-    echo "generated client-modern.p12 for Firefox (same password)"
-fi
-
 chmod 644 ca.crt server.crt client.crt client.p12 2>/dev/null || true
-chmod 600 client-modern.p12 2>/dev/null || true
 chmod 600 server.key ca.key client.key 2>/dev/null || true
 # the official postgres image runs as uid/gid 999; it refuses to start if its
 # key file is owned by someone else with looser permissions than 0600.

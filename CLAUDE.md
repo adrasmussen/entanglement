@@ -35,7 +35,7 @@ Setup for humans is in `docker/QUICKSTART.md`. For testing help (what to run, wr
   C=(--cacert docker/dev-certs/ca.crt --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key); curl -s "${C[@]}" ...
   ```
 
-- **Dev certs** come from `docker/certgen/generate.sh` (design: `docker/NOTES.md` "Dev certificates"; files: README table). The CA is name-constrained to `localhost`, `127.0.0.1`, `::1`, `server` and `postgres`, so users trust it once and browsers stop warning. `client.p12` (legacy cipher) is for the macOS keychain and `client-modern.p12` (AES-256) for Firefox, which rejects the legacy one as a "wrong password". Never touch the user's keychain or Firefox profile: give them commands, with absolute paths or a `cd` to the repo root. `docker/devtest/cert_check.sh` verifies the certs.
+- **Dev certs** come from `docker/certgen/generate.sh` (design: `docker/NOTES.md` "Dev certificates"; files: README table). The CA is name-constrained to `localhost`, `127.0.0.1`, `::1`, `server` and `postgres`, so users trust it once and browsers stop warning. `client.p12` is AES-256 encrypted, because current Firefox rejects the old RC2-40 encoding as a "wrong password". Never touch the user's keychain or Firefox profile: give them commands, with absolute paths or a `cd` to the repo root. `docker/devtest/cert_check.sh` verifies the certs.
 
 - **The server speaks HTTP/2 only.** Python `urllib` fails against it; use curl or Playwright (`clientCertificates`). A fresh connection occasionally drops a stream (curl exit 16), so scripts retry.
 - **Secrets:** they live in the gitignored `.env`. Never print, copy or commit `.env` values or dev passwords.

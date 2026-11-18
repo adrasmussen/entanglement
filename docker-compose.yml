@@ -11,7 +11,7 @@ services:
   # and server) and a client cert (CN=dev, for mTLS -- see docker/NOTES.md for
   # why). the CA is name-constrained to localhost/127.0.0.1/::1/server/postgres, so it
   # is safe to trust in a browser. bind-mounted (not a named volume) so client.p12
-  # (macOS keychain) and client-modern.p12 (Firefox) are easy to grab off
+  # is easy to grab off
   # the host filesystem for importing into a browser.
   certgen:
     image: alpine:3.20

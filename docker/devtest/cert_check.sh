@@ -37,7 +37,7 @@ row "server: SAN has 127.0.0.1 and localhost" yes "$( [ "$(has "$srv" 'IP Addres
 row "server: chains to the CA (openssl verify)" OK "$(openssl verify -CAfile $D/ca.crt $D/server.crt 2>&1 | awk '{print $NF}')"
 row "server: not expiring within 30 days" yes "$(openssl x509 -in $D/server.crt -noout -checkend 2592000 >/dev/null && echo yes || echo no)"
 row "client: chains to the CA for client auth" OK "$(openssl verify -CAfile $D/ca.crt -purpose sslclient $D/client.crt 2>&1 | awk '{print $NF}')"
-row "bundles: client.p12 (keychain) and client-modern.p12 (Firefox) exist" yes "$([ -s $D/client.p12 ] && [ -s $D/client-modern.p12 ] && echo yes || echo no)"
+row "bundle: client.p12 exists" yes "$([ -s $D/client.p12 ] && echo yes || echo no)"
 
 # a cert for a real site signed by the dev CA must be rejected
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT

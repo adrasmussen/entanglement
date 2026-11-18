@@ -61,8 +61,7 @@ docker compose up -d server
 ```
 
 `certgen` generates a throwaway, name-constrained dev CA, a server cert and a
-client cert (CN=`dev`) with two import bundles (`client.p12` for the macOS
-keychain, `client-modern.p12` for Firefox) into `docker/dev-certs/` (gitignored,
+client cert (CN=`dev`) with its import bundle `client.p12` into `docker/dev-certs/` (gitignored,
 per-machine). The README table and `docker/NOTES.md` "Dev certificates" explain
 each file. `postgres`
 applies `db/schema.sql` on first boot. Check `docker compose logs server` for
@@ -170,13 +169,10 @@ inside the container yet — go back to the restart step. Check
 
 The app uses mutual TLS: identity comes from a client certificate, not a
 password (see `docker/NOTES.md`). Your browser needs the client certificate
-imported before `https://127.0.0.1:8444` will work. There are two bundles of the
-same certificate, both with the password `ENTG_CLIENT_P12_PASSWORD` from `.env`:
-
-| bundle | for | why |
-|---|---|---|
-| `docker/dev-certs/client.p12` | the macOS keychain (Safari, Chrome) | legacy RC2-40 encryption, which older macOS needs |
-| `docker/dev-certs/client-modern.p12` | Firefox | AES-256; current Firefox rejects the legacy one as a "wrong password" |
+imported before `https://127.0.0.1:8444` will work: `docker/dev-certs/client.p12`,
+with the password `ENTG_CLIENT_P12_PASSWORD` from `.env`. It is encrypted with
+AES-256 (`certgen` spells the ciphers out: current Firefox rejects the older
+RC2-40 encoding and reports it as a wrong password).
 
 Run the commands below **from the repo root**: their paths (`docker/dev-certs/…`,
 `.env`) are relative, and elsewhere they fail quietly (an empty password, or
@@ -200,18 +196,17 @@ security import docker/dev-certs/client.p12 \
 - If you get "SecKeychainItemImport: The specified data is either damaged or
   wasn't in the correct format", the password was wrong or empty: check you are
   in the repo root (so `.env` is found) and that it matches
-  `ENTG_CLIENT_P12_PASSWORD`. If you changed that value after the bundles were
-  generated, delete `docker/dev-certs/client.p12` and `client-modern.p12` and
-  run `docker compose up certgen` to re-export them with the new password.
+  `ENTG_CLIENT_P12_PASSWORD`. If you changed that value after `client.p12` was
+  generated, delete `docker/dev-certs/client.p12` and run
+  `docker compose up certgen` to re-export it with the new password.
 - Check the import with `security find-identity | grep '"dev"'`: there should
   be exactly one, issued by `entanglement-dev-ca (localhost only)`.
 
 **Firefox** doesn't use the macOS keychain — import manually instead:
 Settings → Privacy & Security → Certificates → View Certificates →
-"Your Certificates" tab → Import → select `docker/dev-certs/client-modern.p12`,
-password: the `ENTG_CLIENT_P12_PASSWORD` value in `.env`. (`client.p12` uses a
-legacy cipher that current Firefox rejects as a wrong password; the modern file
-holds the same certificate.) To copy the password without printing it:
+"Your Certificates" tab → Import → select `docker/dev-certs/client.p12`,
+password: the `ENTG_CLIENT_P12_PASSWORD` value in `.env`. To copy the password
+without printing it:
 `sed -n 's/^ENTG_CLIENT_P12_PASSWORD=//p' .env | tr -d '\n' | pbcopy`.
 
 Importing the client certificate also adds the dev CA to Firefox's
@@ -257,25 +252,18 @@ trust the CA once.
 Then visit `https://127.0.0.1:8444/entanglement/app` (or `https://localhost:8444/...`).
 When the browser asks for a client certificate, pick the one with CN `dev`.
 
-**Upgrading from the old dev certs:** checkouts from before the constrained CA
-had an unconstrained CA that browsers rejected even when trusted. The next
-`docker compose up` retires those certs into `docker/dev-certs/legacy-<timestamp>/`
-and generates new ones. Then remove the old keychain items, re-import the new
-`client.p12` (step 6), trust the new CA (above), and restart the browser.
-In Firefox, delete the old `dev` certificate, the old `entanglement-dev-ca`
-authority and any Servers exception, then import `client-modern.p12`.
-
-Run these from the repo root (the paths are relative); each removes the old
-item by its exact fingerprint, so the new certificates are untouched:
+**Replacing certificates you imported before** (after regenerating, see the
+README): remove the old ones first, or the browser keeps offering them and the
+server refuses them. In Firefox, delete the old `dev` certificate, the old
+`entanglement-dev-ca` authority and any Servers exception for `127.0.0.1:8444`,
+then restart it. In the keychain, remove items by their exact fingerprint, run
+from the repo root *before* regenerating (or on copies of the old `client.crt`
+and `ca.crt`):
 
 ```sh
-cd /path/to/entanglement
-L=$(ls -d docker/dev-certs/legacy-* | tail -1)
-security delete-identity -Z "$(openssl x509 -in $L/client.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
-security delete-certificate -Z "$(openssl x509 -in $L/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+security delete-identity -Z "$(openssl x509 -in docker/dev-certs/client.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+security delete-certificate -Z "$(openssl x509 -in docker/dev-certs/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
 ```
-
-Once the new certs work, you can delete the `legacy-*` folder.
 
 ## Inspecting the database
 

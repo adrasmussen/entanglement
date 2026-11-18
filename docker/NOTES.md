@@ -45,7 +45,7 @@ itself) vs. things that are just properties of the **local tooling** we built.
 `docker/certgen/generate.sh` runs as the one-shot `certgen` service before
 postgres and the server, and writes everything into the gitignored
 `docker/dev-certs/`. It is idempotent: each file is generated only when missing,
-with two exceptions (below). Setup for humans is QUICKSTART steps 6–7;
+except the server cert near expiry (below). Setup for humans is QUICKSTART steps 6–7;
 `docker/devtest/cert_check.sh` verifies all of this.
 
 - **The CA is name-constrained** (a critical `nameConstraints` extension) to
@@ -60,20 +60,12 @@ with two exceptions (below). Setup for humans is QUICKSTART steps 6–7;
   the `serverAuth` extended key usage ("not standards compliant"), however the
   CA is trusted. The server cert is valid for 397 days, has `serverAuth`,
   `CA:FALSE` and SANs for every name above. `certgen` reissues it from the same
-  CA when it is within 30 days of expiry (exception 1); restart postgres and the
+  CA when it is within 30 days of expiry; restart postgres and the
   server to serve it. The CA itself lasts 10 years, so it is trusted once.
-- **Old certificates are retired automatically** (exception 2). Checkouts from
-  before the constrained CA had an unconstrained one with a 10-year server cert,
-  which browsers rejected even when trusted. If `ca.crt` has no name
-  constraints, `certgen` moves every cert, key and bundle into
-  `docker/dev-certs/legacy-<timestamp>/` and generates a fresh set, so the old
-  keychain items can still be found by fingerprint to delete them.
-- **Two client bundles, one identity.** `client.p12` is exported with the
-  legacy RC2-40 cipher for the macOS keychain (older macOS can't import modern
-  PKCS#12). **Current Firefox rejects that cipher and reports it as a wrong
-  password**, so `client-modern.p12` holds the same certificate and key with
-  AES-256 / PBKDF2 / a SHA-256 MAC for Firefox. Both use
-  `ENTG_CLIENT_P12_PASSWORD`. Both also carry `ca.crt`, so importing one into
+- **One client bundle, modern encryption.** `client.p12` is exported with the
+  ciphers spelled out (AES-256 / PBKDF2 / a SHA-256 MAC) instead of openssl's
+  old RC2-40 "legacy" encoding: **current Firefox rejects RC2-40 and reports it
+  as a wrong password.** The bundle also carries `ca.crt`, so importing it into
   Firefox adds the CA under Authorities *untrusted for websites*; importing
   `ca.crt` afterwards says "already installed", and the fix is **Edit Trust…**
   on the existing entry.
@@ -81,7 +73,7 @@ with two exceptions (below). Setup for humans is QUICKSTART steps 6–7;
   the server container's OS trust store, because the server's Postgres TLS
   connection verifies against that store (see below). `postgres` is within the
   name constraints, so that keeps working.
-- **Things that bit us during the upgrade** (2026-11-18): keychain commands with
+- **Things that bit us setting this up** (2026-11-18): keychain commands with
   relative paths (`docker/dev-certs/...`, `.env`) silently find nothing outside
   the repo root, so `security delete-*` reports no match and `security import`
   fails on an empty password; and Firefox keeps a per-site "accept the risk"
