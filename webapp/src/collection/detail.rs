@@ -248,6 +248,7 @@ fn CollectionInner(props: CollectionInnerProps) -> Element {
                     placeholder: "Search media in this collection...",
                     title: collection.name.clone(),
                     status: paged.pager.status(paged.items.read().len(), "results"),
+                    count: paged.pager.count(paged.items.read().len()),
                     action_button,
                 }
 

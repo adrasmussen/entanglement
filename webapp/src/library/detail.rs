@@ -260,6 +260,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
                     status: paged.pager.status(paged.items.read().len(), if show_hidden() { "hidden results" } else { "results" }),
+                    count: paged.pager.count(paged.items.read().len()),
                     action_button,
                 }
 

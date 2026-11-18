@@ -79,6 +79,7 @@ pub fn CollectionSearch() -> Element {
                     storage_key: COLLECTION_SEARCH_KEY,
                     placeholder: "Search by collection name...",
                     status,
+                    count: pager.count(paged.items.read().len()),
                     action_button,
                 }
             }

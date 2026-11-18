@@ -867,8 +867,18 @@ body:has(.modal-overlay) {
 
 /* the compact title lives inside the pinned row but is out of the layout until
    the hero has scrolled away, so the row is the same height either way */
-.search-title {
+.search-title,
+.search-count {
   display: none;
+}
+
+/* "loaded/total" beside the compact title, replacing the long result count */
+.sticky-header.compact .search-count {
+  display: block;
+  flex: none;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* the result count gives way to the title once the big header is gone */

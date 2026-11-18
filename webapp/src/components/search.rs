@@ -15,6 +15,9 @@ pub struct SearchBarProps {
     // away (CSS: .sticky-header.compact .search-title); the row's height never changes
     #[props(default)]
     title: Option<String>,
+    // short "loaded/total" count shown beside the compact title (see Pager::count)
+    #[props(default)]
+    count: String,
 }
 
 // the big header block of a page, in normal flow so it scrolls away.  reports whether any of
@@ -57,6 +60,9 @@ pub fn SearchBar(props: SearchBarProps) -> Element {
         div { class: "search-bar",
             if let Some(title) = props.title {
                 span { class: "search-title", title: "{title}", "{title}" }
+            }
+            if !props.count.is_empty() {
+                span { class: "search-count", title: "{status}", "{props.count}" }
             }
             form {
                 style: "flex: 1; display: flex; align-items: center; gap: var(--space-2);",

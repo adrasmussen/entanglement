@@ -102,6 +102,7 @@ pub fn GallerySearch() -> Element {
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search by date, description or tags...",
                     status: paged.pager.status(paged.items.read().len(), "results"),
+                    count: paged.pager.count(paged.items.read().len()),
                     action_button,
                 }
 
