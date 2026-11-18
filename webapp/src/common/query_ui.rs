@@ -1,6 +1,12 @@
-use api::query::{
-    Clause, FieldType, Op, ParseIssue, SearchClass, SearchQuery, field_spec, tokenize,
+use api::{
+    query::{
+        Clause, FilterType, IssueKind, Op, ParseIssue, SearchClass, SearchQuery, Values,
+        any_values, field_spec, tokenize,
+    },
+    slug::Slug,
 };
+
+use crate::common::slugs::pickable;
 
 // the pure half of the search bar: chips, completions, the filter builder and the ?q= URL
 // parameter.  everything here works from the class's FIELDS metadata and the api parser, so
@@ -35,6 +41,7 @@ pub fn op_label(op: Op) -> &'static str {
         Op::Lt => "before (<)",
         Op::Le => "up to (<=)",
         Op::Range => "between (a..b)",
+        Op::HasAny => "any of (a,b)",
     }
 }
 
@@ -48,6 +55,7 @@ fn clause_value_label(clause: &Clause) -> String {
         Op::Ge => format!(">= {}", clause.value),
         Op::Lt => format!("< {}", clause.value),
         Op::Le => format!("<= {}", clause.value),
+        Op::HasAny => any_values(&clause.value).join(" or "),
         _ => clause.value.clone(),
     }
 }
@@ -135,12 +143,10 @@ pub fn add_clause<C: SearchClass>(
 // one line for a parse issue, naming what the search did with the token
 pub fn issue_line(input: &str, issue: &ParseIssue) -> String {
     let token = input.get(issue.span.clone()).unwrap_or("");
-    if issue.message.starts_with("unknown field") {
-        format!("{}; searched as text", issue.message)
-    } else if issue.message == "unterminated quote" {
-        format!("{token}: {}", issue.message)
-    } else {
-        format!("{token}: {}; ignored", issue.message)
+    match issue.kind {
+        IssueKind::UnknownField => format!("{}; searched as text", issue.message),
+        IssueKind::Syntax => format!("{token}: {}", issue.message),
+        IssueKind::BadOp | IssueKind::BadValue => format!("{token}: {}; ignored", issue.message),
     }
 }
 
@@ -153,6 +159,9 @@ pub fn placeholder<C: SearchClass>() -> String {
 }
 
 // completions
+
+// value completions shown at once
+pub const MAX_SLUG_SUGGESTIONS: usize = 12;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Suggestion {
@@ -173,7 +182,22 @@ fn last_token(draft: &str) -> Option<(usize, String)> {
     Some((span.start, raw))
 }
 
-pub fn suggest<C: SearchClass>(draft: &str) -> Vec<Suggestion> {
+// the field and typed prefix whose values (GetSlugs) the completions need: the last token
+// is `field:` or `field:a,b,pre` on a field whose values come from the data.  None otherwise
+pub fn slug_query<C: SearchClass>(draft: &str) -> Option<(&'static str, String)> {
+    let (_, token) = last_token(draft)?;
+    let (head, rest) = token.split_once(':')?;
+    let spec = field_spec::<C>(&head.to_ascii_lowercase())?;
+    if spec.filter_type.values() != Some(Values::Distinct) || rest.starts_with('"') {
+        return None;
+    }
+    let typed = rest.rsplit(',').next().unwrap_or("");
+    Some((spec.name, typed.to_lowercase()))
+}
+
+// completions for the token being typed.  `slugs` are the values GetSlugs returned for
+// slug_query(draft); they may lag behind the typing, so they are filtered again here
+pub fn suggest<C: SearchClass>(draft: &str, slugs: &[Slug]) -> Vec<Suggestion> {
     let Some((_, token)) = last_token(draft) else {
         return Vec::new();
     };
@@ -197,8 +221,9 @@ pub fn suggest<C: SearchClass>(draft: &str) -> Vec<Suggestion> {
         return Vec::new();
     };
 
-    match spec.ty {
-        FieldType::Enum(allowed) => {
+    match spec.filter_type {
+        FilterType::Select(Values::Static(allowed))
+        | FilterType::MultiSelect(Values::Static(allowed)) => {
             let typed = rest.to_ascii_lowercase();
             allowed
                 .iter()
@@ -212,7 +237,42 @@ pub fn suggest<C: SearchClass>(draft: &str) -> Vec<Suggestion> {
                 .collect()
         }
 
-        FieldType::Date => {
+        // values from the data: complete the last item of `tag:a,b,pre`, leaving out what is
+        // already listed; a multiselect field takes the rest as any-of
+        FilterType::Select(Values::Distinct) | FilterType::MultiSelect(Values::Distinct) => {
+            if rest.starts_with('"') {
+                return Vec::new();
+            }
+            let (listed, typed) = match rest.rsplit_once(',') {
+                Some((listed, typed)) => (any_values(listed), typed),
+                None => (Vec::new(), rest),
+            };
+            let typed = typed.to_lowercase();
+            let multi = matches!(spec.filter_type, FilterType::MultiSelect(_));
+            slugs
+                .iter()
+                .filter(|s| s.value.to_lowercase().starts_with(&typed))
+                .filter(|s| !listed.contains(&s.value.as_str()))
+                .filter(|s| pickable(&s.value))
+                .take(MAX_SLUG_SUGGESTIONS)
+                .map(|s| {
+                    let mut values: Vec<&str> = if multi { listed.clone() } else { Vec::new() };
+                    values.push(&s.value);
+                    Suggestion {
+                        title: s.value.clone(),
+                        help: match s.count {
+                            Some(1) => "1 match".to_string(),
+                            Some(n) => format!("{n} matches"),
+                            None => spec.help.to_string(),
+                        },
+                        example: String::new(),
+                        insert: format!("{}:{}", spec.name, values.join(",")),
+                    }
+                })
+                .collect()
+        }
+
+        FilterType::Date => {
             let mut out = Vec::new();
 
             if rest.is_empty() {
@@ -255,7 +315,7 @@ pub fn suggest<C: SearchClass>(draft: &str) -> Vec<Suggestion> {
         }
 
         // free-form values have nothing to complete
-        FieldType::Text | FieldType::Tag => Vec::new(),
+        FilterType::Text => Vec::new(),
     }
 }
 
@@ -350,7 +410,7 @@ mod tests {
     }
 
     use super::*;
-    use api::{collection::Collection, library::Library, media::Media};
+    use api::{collection::Collection, library::Library, media::Media, query::DataType};
 
     fn q(text: &str) -> SearchQuery {
         SearchQuery::parse::<Media>(text).query
@@ -380,7 +440,7 @@ mod tests {
 
         // the tooltip is the field's help
         let c = chips::<Media>(&q("tag:x"));
-        assert_eq!(c[0].help, "Media that has exactly this tag");
+        assert_eq!(c[0].help, field_spec::<Media>("tag").unwrap().help);
         let c = chips::<Collection>(&SearchQuery::parse::<Collection>("name:x trip").query);
         assert_eq!(c[0].help, Collection::FREE_TEXT_HELP);
         assert_eq!(c[1].label, "Name: x");
@@ -437,9 +497,10 @@ mod tests {
         // every clause the builder makes parses back to itself
         for f in Media::FIELDS {
             for op in f.ops {
-                let value = match f.ty {
-                    FieldType::Enum(a) => a[0],
-                    FieldType::Date => "2020-06",
+                let value = match (f.data_type, op) {
+                    (DataType::Enum(a), _) => a[0],
+                    (DataType::Date, _) => "2020-06",
+                    (_, Op::HasAny) => "x,y",
                     _ => "x y",
                 };
                 let t = add_clause::<Media>("", f.name, *op, value, "2021").unwrap();
@@ -482,7 +543,7 @@ mod tests {
     }
 
     fn inserts(draft: &str) -> Vec<String> {
-        suggest::<Media>(draft)
+        suggest::<Media>(draft, &[])
             .into_iter()
             .map(|s| s.insert)
             .collect()
@@ -496,7 +557,7 @@ mod tests {
         assert_eq!(inserts("d"), ["description:", "date:"]);
 
         // the metadata comes along for the tooltip
-        let s = &suggest::<Media>("ta")[0];
+        let s = &suggest::<Media>("ta", &[])[0];
         assert_eq!(s.title, "Tag");
         assert_eq!(s.example, "tag:holiday");
         assert!(!s.help.is_empty());
@@ -506,8 +567,8 @@ mod tests {
         assert!(inserts("beach ").is_empty());
         assert!(inserts(r#"description:"ta"#).is_empty());
         assert!(inserts("zzz").is_empty());
-        assert_eq!(suggest::<Collection>("na")[0].insert, "name:");
-        assert_eq!(suggest::<Library>("p")[0].insert, "path:");
+        assert_eq!(suggest::<Collection>("na", &[])[0].insert, "name:");
+        assert_eq!(suggest::<Library>("p", &[])[0].insert, "path:");
     }
 
     #[test]
@@ -534,15 +595,92 @@ mod tests {
         assert!(inserts("date:2020..").is_empty());
         assert!(inserts("date:>2020").is_empty());
 
-        // free-form values have nothing to complete
+        // free-form values have nothing to complete, and tags have nothing until the
+        // values arrive
         assert!(inserts("tag:").is_empty());
         assert!(inserts("description:su").is_empty());
         assert!(inserts("nope:").is_empty());
     }
 
+    fn slugs(v: &[(&str, u64)]) -> Vec<Slug> {
+        v.iter()
+            .map(|(value, n)| Slug {
+                value: value.to_string(),
+                count: Some(*n),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn tag_values_come_from_the_slugs() {
+        let have = slugs(&[("beach", 120), ("bees", 1), ("sunset", 7), ("a b", 3)]);
+        let ins = |draft: &str| -> Vec<String> {
+            suggest::<Media>(draft, &have)
+                .into_iter()
+                .map(|s| s.insert)
+                .collect()
+        };
+
+        // which values to fetch for the token being typed
+        assert_eq!(slug_query::<Media>("tag:"), Some(("tag", String::new())));
+        assert_eq!(slug_query::<Media>("x TAG:Be"), Some(("tag", "be".into())));
+        assert_eq!(
+            slug_query::<Media>("tag:beach,Su"),
+            Some(("tag", "su".into()))
+        );
+        assert_eq!(
+            slug_query::<Collection>("tag:"),
+            Some(("tag", String::new()))
+        );
+        assert_eq!(slug_query::<Media>("type:"), None);
+        assert_eq!(slug_query::<Media>("description:"), None);
+        assert_eq!(slug_query::<Media>(r#"tag:"be"#), None);
+        assert_eq!(slug_query::<Library>("path:"), None);
+
+        // values that can't travel unquoted in a list are left out
+        assert_eq!(ins("tag:"), ["tag:beach", "tag:bees", "tag:sunset"]);
+        assert_eq!(ins("tag:BE"), ["tag:beach", "tag:bees"]);
+        // the last item of a list is completed, keeping the rest, never repeating one
+        assert_eq!(
+            ins("tag:sunset,be"),
+            ["tag:sunset,beach", "tag:sunset,bees"]
+        );
+        assert_eq!(ins("tag:beach,"), ["tag:beach,bees", "tag:beach,sunset"]);
+
+        let s = &suggest::<Media>("tag:be", &have)[0];
+        assert_eq!(
+            (s.title.as_str(), s.help.as_str()),
+            ("beach", "120 matches")
+        );
+        assert_eq!(suggest::<Media>("tag:bees", &have)[0].help, "1 match");
+
+        // an accepted list parses to one any-of clause
+        let t = accept(
+            "tag:sunset,be",
+            &suggest::<Media>("tag:sunset,be", &have)[0],
+        );
+        assert_eq!(t, "tag:sunset,beach ");
+        let q = SearchQuery::parse::<Media>(&t);
+        assert!(q.issues.is_empty());
+        assert_eq!(q.query.clauses[0].op, Op::HasAny);
+    }
+
+    #[test]
+    fn any_of_chips_read_as_alternatives() {
+        let q = SearchQuery::parse::<Media>("tag:beach,sunset").query;
+        assert_eq!(chips::<Media>(&q)[0].label, "Tag: beach or sunset");
+        assert_eq!(op_label(Op::HasAny), "any of (a,b)");
+        // the builder writes the same clause a multiselect produces
+        assert_eq!(
+            add_clause::<Media>("x", "tag", Op::HasAny, "beach,sunset", "").unwrap(),
+            "x tag:beach,sunset"
+        );
+        assert!(add_clause::<Media>("", "tag", Op::HasAny, "beach,beach", "").is_err());
+    }
+
     #[test]
     fn accepting_replaces_only_the_last_token() {
-        let pick = |draft: &str, i: usize| accept(draft, &suggest::<Media>(draft)[i]);
+        let pick = |draft: &str, i: usize| accept(draft, &suggest::<Media>(draft, &[])[i]);
 
         assert_eq!(pick("beach ta", 0), "beach tag:");
         assert_eq!(pick("type:", 1), "type:Video ");

@@ -5,8 +5,9 @@ use dioxus::prelude::*;
 use crate::common::{
     query_ui::{
         Suggestion, accept, all_fields, append, chips, issue_line, op_label, placeholder,
-        q_from_param, suggest, text_without_chip,
+        q_from_param, slug_query, suggest, text_without_chip,
     },
+    slugs::fetch_slugs,
     storage::{set_local_storage, try_local_storage},
 };
 use api::query::{SearchClass, SearchQuery};
@@ -174,12 +175,23 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
         draft.set(committed);
     });
 
+    // the values of the field being typed (`tag:be`), fetched as the typing settles: a new
+    // key restarts the resource, which drops the pending fetch, so the delay debounces it
+    let slug_key = use_memo(move || slug_query::<C>(&draft()));
+    let slugs = use_resource(move || async move {
+        match slug_key() {
+            Some((field, prefix)) => fetch_slugs(C::KIND, field, prefix, true).await,
+            None => Vec::new(),
+        }
+    });
+    let current_slugs = move || slugs.peek().clone().unwrap_or_default();
+
     // the open list: every field after a double-click, otherwise completions for the typing
     let current_list = move |text: &str| -> Vec<Suggestion> {
         if *field_hints.peek() {
             all_fields::<C>()
         } else {
-            suggest::<C>(text)
+            suggest::<C>(text, &current_slugs())
         }
     };
 
@@ -210,7 +222,7 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
         if field_hints() {
             all_fields::<C>()
         } else {
-            suggest::<C>(&draft())
+            suggest::<C>(&draft(), &slugs.read().clone().unwrap_or_default())
         }
     } else {
         Vec::new()

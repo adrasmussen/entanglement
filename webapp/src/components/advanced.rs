@@ -11,18 +11,20 @@ use crate::{
         colors::CollectionColor,
         query_ui::{add_clause, op_label},
         search::{fetch_all_uuids, literal_filter},
+        slugs::op_for,
     },
     components::{
         modal::{MODAL_STACK, Modal},
         query_bar::{QueryChips, SearchState},
         search::CompactSearchBar,
+        slug_picker::SlugPicker,
     },
 };
 use api::{
     WebError,
     collection::*,
     media::MediaUuid,
-    query::{FieldSpec, FieldType, Op, SearchClass, SearchQuery, field_spec},
+    query::{FieldSpec, FilterType, Op, SearchClass, SearchQuery, Values, field_spec},
     search::SearchRequest,
 };
 
@@ -140,6 +142,8 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
     };
 
     let has_filters = !SearchQuery::parse::<C>(&(search.signal)()).query.is_empty();
+    // a multiselect picks its own operator: one value is a plain match, more are any-of
+    let multi = matches!(spec.filter_type, FilterType::MultiSelect(_));
 
     rsx! {
         div { class: "text-search-options",
@@ -148,7 +152,8 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
                 onsubmit: move |_| {
                     // no prevent_default: in dioxus-web 0.6 forms never submit natively,
                     // and calling it on a submit event re-enables the native submission
-                    match add_clause::<C>(&search.text(), spec.name, current_op, &value(), &to()) {
+                    let chosen_op = if multi { op_for(&value()) } else { current_op };
+                    match add_clause::<C>(&search.text(), spec.name, chosen_op, &value(), &to()) {
                         Ok(text) => {
                             search.commit(text);
                             value.set(String::new());
@@ -184,7 +189,9 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
                             }
                         }
                     }
-                    div { class: "form-group",
+                    div {
+                        class: "form-group",
+                        display: if multi { "none" },
                         label { class: "form-label", "Matches" }
                         select {
                             class: "form-select",
@@ -217,12 +224,12 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
                                 "Value"
                             }
                         }
-                        {builder_input(spec, value, "builder-value")}
+                        {builder_input(C::KIND, spec, value, "builder-value")}
                     }
                     if current_op == Op::Range {
                         div { class: "form-group",
                             label { class: "form-label", "To" }
-                            {builder_input(spec, to, "builder-value-to")}
+                            {builder_input(C::KIND, spec, to, "builder-value-to")}
                         }
                     }
                     button {
@@ -261,14 +268,16 @@ pub fn AdvancedSearchTab<C: SearchClass + 'static>(props: AdvancedSearchTabProps
     }
 }
 
-// the value input for a field: a select for an enum, a text input otherwise
+// the value input for a field, as its metadata declares it: a select of declared values, a
+// picker of the values in the user's data, or a text input
 fn builder_input(
+    kind: api::query::SearchKind,
     spec: &'static FieldSpec,
     mut value: Signal<String>,
     testid: &'static str,
 ) -> Element {
-    match spec.ty {
-        FieldType::Enum(allowed) => rsx! {
+    match spec.filter_type {
+        FilterType::Select(Values::Static(allowed)) => rsx! {
             select {
                 class: "form-select",
                 "data-testid": testid,
@@ -285,11 +294,21 @@ fn builder_input(
                 }
             }
         },
-        _ => rsx! {
+        FilterType::MultiSelect(_) | FilterType::Select(Values::Distinct) => rsx! {
+            SlugPicker {
+                key: "{spec.name}",
+                kind,
+                field: spec.name,
+                multi: matches!(spec.filter_type, FilterType::MultiSelect(_)),
+                value,
+                testid,
+            }
+        },
+        FilterType::Date | FilterType::Text => rsx! {
             input {
                 class: "form-input",
                 "data-testid": testid,
-                placeholder: if spec.ty == FieldType::Date { "2020-06" } else { "text" },
+                placeholder: if spec.filter_type == FilterType::Date { "2020-06" } else { "text" },
                 value: "{value}",
                 oninput: move |evt| value.set(evt.value()),
             }

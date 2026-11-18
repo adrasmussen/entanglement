@@ -997,6 +997,31 @@ body:has(.modal-overlay) {
 
 .filter-builder-error { margin-top: var(--space-2); color: var(--error); font-size: 0.875rem; }
 
+/* the values picker (GetSlugs): a filter box, the picked values as chips, and a scrolling
+   list of the values in the user's data with how many records carry each */
+.slug-picker { display: flex; flex-direction: column; gap: var(--space-2); min-width: 220px; }
+.slug-picked { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.slug-options {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  padding: var(--space-1) 0;
+}
+.slug-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.slug-option:hover { background-color: var(--background); }
+.slug-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slug-count { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.slug-empty { display: block; padding: var(--space-2) var(--space-3); color: var(--text-tertiary); font-size: 0.875rem; }
+
 .sticky-header {
   position: sticky;
   /* sticks just below the app header once the page (not an inner box)

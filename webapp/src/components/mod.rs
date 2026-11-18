@@ -7,3 +7,4 @@ pub mod navigation;
 pub mod query_bar;
 pub mod search;
 pub mod sidebar;
+pub mod slug_picker;

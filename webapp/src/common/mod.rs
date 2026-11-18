@@ -4,6 +4,7 @@ pub mod hooks;
 pub mod paging;
 pub mod query_ui;
 pub mod search;
+pub mod slugs;
 pub mod storage;
 pub mod style;
 pub mod tags;
