@@ -1,5 +1,6 @@
 pub mod colors;
 pub mod grid_cache;
+pub mod grid_nav;
 pub mod hooks;
 pub mod paging;
 pub mod search;

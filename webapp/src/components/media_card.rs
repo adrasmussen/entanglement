@@ -23,6 +23,10 @@ pub struct MediaCardProps {
     // signals used by various other components
     bulk_edit_signal: Signal<Option<HashSet<MediaUuid>>>,
     collection_color_signal: Signal<HashMap<CollectionUuid, CollectionColor>>,
+    // called with this card's media when it is opened from the grid (not when it is
+    // toggled in bulk edit); the grid uses it to remember what the user was looking at
+    #[props(default)]
+    on_open: Option<Callback<MediaUuid>>,
 }
 
 #[component]
@@ -30,6 +34,7 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
     let media_uuid = props.media_uuid;
     let media = props.media;
     let collections = props.collections;
+    let on_open = props.on_open;
 
     let mut bulk_edit_signal = props.bulk_edit_signal;
     let collection_color_signal = props.collection_color_signal;
@@ -121,8 +126,13 @@ pub fn MediaCard(props: MediaCardProps) -> Element {
                         evt.prevent_default();
                         evt.stop_propagation();
                         toggle_selection(evt);
-                    } else if let Some(collection_id) = &collection_context {
-                        set_local_storage(GALLERY_COLLECTION_KEY, collection_id.clone());
+                    } else {
+                        if let Some(collection_id) = &collection_context {
+                            set_local_storage(GALLERY_COLLECTION_KEY, collection_id.clone());
+                        }
+                        if let Some(on_open) = on_open {
+                            on_open.call(media_uuid);
+                        }
                     }
                 },
                 div { class: "media-card-image",

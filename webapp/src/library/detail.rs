@@ -15,7 +15,7 @@ use crate::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
+        search::{PageHero, SearchBar, sticky_class},
         sidebar::AdvancedSidebar,
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
@@ -115,6 +115,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     });
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let mut advanced_expanded = use_signal(|| false);
+    let hero_visible = use_signal(|| true);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
@@ -177,6 +178,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
     // search bar action button
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; gap: var(--space-2); margin-left: auto;",
+            GridDensityMenu {}
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -212,7 +214,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         // drew every modal twice
         div { class: "container with-sticky",
 
-            div { class: "sticky-header",
+            PageHero { hero_visible,
                 // library detail view header
                 div {
                     class: "library-detail-header",
@@ -231,7 +233,6 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                         }
                         // Action buttons
                         div { style: "display: flex; gap: var(--space-2); align-items: center;",
-                            GridDensityMenu {}
                             button {
                                 class: "btn btn-secondary",
                                 onclick: move |_| {
@@ -250,7 +251,11 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     }
                 }
 
+            }
+
+            div { class: sticky_class(hero_visible()),
                 SearchBar {
+                    title: library.path.clone(),
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search media in this library...",
@@ -285,6 +290,10 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     pager: paged.pager,
                     bulk_edit_signal,
                     collection_color_signal,
+                    source: Route::LibraryDetail {
+                        library_uuid: library_uuid().to_string(),
+                    },
+                    source_label: library.path.clone(),
                     empty: rsx! {
                         div {
                             class: "empty-state",

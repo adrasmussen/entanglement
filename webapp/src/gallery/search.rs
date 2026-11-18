@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use dioxus::prelude::*;
 
 use crate::{
+    Route,
     common::{
         paging::{CacheCfg, use_paged},
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
@@ -12,7 +13,7 @@ use crate::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::ModalBox,
-        search::SearchBar,
+        search::{PageHero, SearchBar, sticky_class},
         sidebar::AdvancedSidebar,
     },
     gallery::MEDIA_SEARCH_KEY,
@@ -28,6 +29,7 @@ pub fn GallerySearch() -> Element {
 
     let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
     let mut advanced_expanded = use_signal(|| false);
+    let hero_visible = use_signal(|| true);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
 
@@ -61,6 +63,7 @@ pub fn GallerySearch() -> Element {
 
     let action_button = rsx! {
         div { style: "display: flex; align-items: center; gap: var(--space-2);",
+            GridDensityMenu {}
             button {
                 class: "btn btn-secondary",
                 onclick: move |_| {
@@ -84,15 +87,17 @@ pub fn GallerySearch() -> Element {
         div { class: "container with-sticky",
             ModalBox { update_signal }
 
-            div { class: "sticky-header",
+            PageHero { hero_visible,
                 div {
                     class: "page-header",
-                    style: "margin-bottom: var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4);",
+                    style: "margin-bottom: var(--space-4);",
                     p { "Browse and search all accessible media" }
-                    GridDensityMenu {}
                 }
+            }
 
+            div { class: sticky_class(hero_visible()),
                 SearchBar {
+                    title: "Gallery".to_owned(),
                     search_signal: media_search_signal,
                     storage_key: MEDIA_SEARCH_KEY,
                     placeholder: "Search by date, description or tags...",
@@ -127,6 +132,8 @@ pub fn GallerySearch() -> Element {
                     pager: paged.pager,
                     bulk_edit_signal,
                     collection_color_signal,
+                    source: Route::GallerySearch {},
+                    source_label: "Gallery".to_owned(),
                     empty: rsx! {
                         div { class: "empty-state",
                             p { "No media found matching your search criteria." }
