@@ -1,4 +1,4 @@
-// Browser checks for grid navigation: the pinned search row (gallery, collection and library
+// Browser checks for grid navigation: the pinned search row (gallery, collections list, collection and library
 // pages) and the previous/next arrows on the media detail page.  Prints grids with a computed
 // match column; exits non-zero on any mismatch.
 //
@@ -67,12 +67,12 @@ const cardOrder = page => page.$$eval('#media-grid .media-card a[href]', as =>
   as.map(a => (a.getAttribute('href').match(/gallery\/([0-9a-f-]{36})/) || [])[1]));
 
 // ---- the pinned row
-async function measure(page) {
-  return page.evaluate(() => {
+async function measure(page, cardSel = '#media-grid .media-card') {
+  return page.evaluate(cardSel => {
     const r = s => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
     const sticky = r('.sticky-header'), hero = r('.page-hero'), input = r('.sticky-header input[name="search_filter"]');
     const app = r('.app-header');
-    const cards = [...document.querySelectorAll('#media-grid .media-card')];
+    const cards = [...document.querySelectorAll(cardSel)];
     const first = cards.find(c => c.getBoundingClientRect().bottom > sticky.bottom);
     const t = document.querySelector('.sticky-header .search-title');
     return {
@@ -92,22 +92,22 @@ async function measure(page) {
         return next ? next.getBoundingClientRect().top - t0 : 0;
       })() : 0,
     };
-  });
+  }, cardSel);
 }
 
-async function layoutCase(ctx, grid, vp, url, expectTitle, shotName) {
+async function layoutCase(ctx, grid, vp, url, expectTitle, shotName, cardSel = '#media-grid .media-card') {
   const page = await ctx.newPage();
   await page.setViewportSize(vp);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  await open(page, url, '#media-grid .media-card');
-  const before = await measure(page);
+  await open(page, url, cardSel);
+  const before = await measure(page, cardSel);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${shotName}_top_${vp.width}.png` });
   await page.evaluate(y => window.scrollTo(0, y), Math.round(before.rowPx * 3));
   await sleep(900);
-  const after = await measure(page);
+  const after = await measure(page, cardSel);
   await sleep(700);
-  const later = await measure(page);
+  const later = await measure(page, cardSel);
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${shotName}_scrolled_${vp.width}.png` });
 
   const g = `${grid} @ ${vp.width}x${vp.height}`;
@@ -149,6 +149,8 @@ async function layoutCase(ctx, grid, vp, url, expectTitle, shotName) {
     await layoutCase(ctx, 'gallery', vp, BASE + '/gallery', vp === phone ? null : 'Gallery', 'gallery');
     await layoutCase(ctx, 'collection', vp, BASE + '/collections/' + CU, vp === phone ? null : CNAME, 'collection');
     await layoutCase(ctx, 'library', vp, BASE + '/library/' + LU, vp === phone ? null : LPATH, 'library');
+    await layoutCase(ctx, 'collections list', vp, BASE + '/collections', vp === phone ? null : 'Collections', 'collections',
+      '.collections-grid .collection-card:not(.loading)');
   }
 
   // ---- arrows, from the collection
