@@ -192,8 +192,15 @@ security import docker/dev-certs/client.p12 \
 
 **Firefox** doesn't use the macOS keychain — import manually instead:
 Settings → Privacy & Security → Certificates → View Certificates →
-"Your Certificates" tab → Import → select `docker/dev-certs/client.p12`,
-password: the `ENTG_CLIENT_P12_PASSWORD` value in `.env`.
+"Your Certificates" tab → Import → select `docker/dev-certs/client-modern.p12`,
+password: the `ENTG_CLIENT_P12_PASSWORD` value in `.env`. (`client.p12` uses a
+legacy cipher that current Firefox rejects as a wrong password; the modern file
+holds the same certificate.) To copy the password without printing it:
+`sed -n 's/^ENTG_CLIENT_P12_PASSWORD=//p' .env | tr -d '\n' | pbcopy`.
+
+Importing the client certificate also adds the dev CA to Firefox's
+"Authorities" tab, untrusted for websites, so importing `ca.crt` there (step 7)
+reports it as already installed: select it and use **Edit Trust…** instead.
 
 **Skip the browser entirely** and just hit the API with curl:
 
@@ -216,7 +223,11 @@ security add-trusted-cert -r trustRoot -p ssl \
 
 **Firefox** keeps its own store: Settings → Privacy & Security → Certificates →
 View Certificates → "Authorities" → Import → `docker/dev-certs/ca.crt` → tick
-"Trust this CA to identify websites".
+"Trust this CA to identify websites". If it says the CA is already installed (the
+client certificate import brings it along), select **entanglement-dev-ca
+(localhost only)** and use **Edit Trust…** to tick the same box. Also delete any
+old "Servers" exception for `127.0.0.1:8444` from clicking through the warning
+before, and restart Firefox.
 
 This is safe to trust because the CA is **name-constrained**: it can only vouch
 for `localhost`, `127.0.0.1`, `::1` and the compose service names (`server`,
@@ -235,7 +246,10 @@ had an unconstrained CA that browsers rejected even when trusted. The next
 and generates new ones. Then remove the old keychain items, re-import the new
 `client.p12` (step 6), trust the new CA (above), and restart the browser:
 
+Run these from the repo root (the paths are relative):
+
 ```sh
+cd /path/to/entanglement
 L=$(ls -d docker/dev-certs/legacy-* | tail -1)
 security delete-identity -Z "$(openssl x509 -in $L/client.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
 security delete-certificate -Z "$(openssl x509 -in $L/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
