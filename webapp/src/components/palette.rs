@@ -238,16 +238,7 @@ fn PalettePanel() -> Element {
                                             "data-href": "{row.route().map(|r| r.to_string()).unwrap_or_default()}",
                                             onmouseenter: move |_| active.set(Some(i)),
                                             onclick: move |_| open_row(&row),
-                                            if let Some(t) = hit.thumbnail {
-                                                img {
-                                                    class: "palette-thumb",
-                                                    src: "{thumbnail_link(t)}",
-                                                    alt: "",
-                                                    loading: "lazy",
-                                                }
-                                            } else {
-                                                div { class: "palette-thumb palette-thumb-empty" }
-                                            }
+                                            PaletteThumb { key: "{hit.title}-{i}", media: hit.thumbnail }
                                             div { class: "palette-text",
                                                 div { class: "palette-title", "data-testid": "palette-title", "{hit.title}" }
                                                 if !hit.subtitle.is_empty() {
@@ -281,5 +272,26 @@ fn PalettePanel() -> Element {
                 }
             }
         }
+    }
+}
+
+// a hit's thumbnail; an empty tile when there is none or it fails to load (records without
+// a file, as the grid's "No preview" tiles do), so the rows never show a broken image
+#[component]
+fn PaletteThumb(media: Option<api::media::MediaUuid>) -> Element {
+    let mut failed = use_signal(|| false);
+    match media {
+        Some(m) if !failed() => rsx! {
+            img {
+                class: "palette-thumb",
+                src: "{thumbnail_link(m)}",
+                alt: "",
+                loading: "lazy",
+                onerror: move |_| failed.set(true),
+            }
+        },
+        _ => rsx! {
+            div { class: "palette-thumb palette-thumb-empty" }
+        },
     }
 }
