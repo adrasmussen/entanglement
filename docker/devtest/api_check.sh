@@ -1049,7 +1049,9 @@ OMNI = [
     ("tag:ct-mod7 sunset (libraries n/a)", "tag:ct-mod7 sunset", [raw_tag("v0"), raw_text("w0")],
      [c_tag("v0"), c_text("w0")], None, {"v0": "ct-mod7", "w0": "sunset"}),
     ("path:counttest (media, collections n/a)", "path:counttest", None, None, [l_path("v0")], {"v0": "counttest"}),
-    ("name:ct_0001 (media only)", "name:ct_0001", [raw_name("v0")], None, None, {"v0": "ct_0001"}),
+    # collections declare name: too (the collection name), libraries don't
+    ("name:ct_0001 (libraries n/a)", "name:ct_0001", [raw_name("v0")], [c_text("v0")], None, {"v0": "ct_0001"}),
+    ("name:c00 (collection names)", "name:c00", [raw_name("v0")], [c_text("v0")], None, {"v0": "c00"}),
     ("hostile: '; DROP TABLE media; --", "'; DROP TABLE media; --",
      [raw_text("w0", "w1", "w2", "w3", "w4")], [c_text("w0", "w1", "w2", "w3", "w4")], [l_text("w0", "w1", "w2", "w3", "w4")],
      {"w0": "';", "w1": "DROP", "w2": "TABLE", "w3": "media;", "w4": "--"}),
@@ -1089,8 +1091,10 @@ rows.append(("media hits = first 5 of SearchMedia (DateDesc)", "-", str(hit_ids(
 titles_ok = all(h["title"] == sql(f"SELECT regexp_replace(path, '^.*/', '') FROM media WHERE media_uuid = '{list(h['id'].values())[0]}'")
                 for h in mg["hits"])
 rows.append(("media hit titles are the file names", "SELECT regexp_replace(path, ...)", str(titles_ok), "True", "OK" if titles_ok else "FAIL"))
-lc_, cd = post("SearchCollections", {"filter": "", "query": list_query(["sunset"], ("tag", "Has", "ct-mod7")), "limit": 5})
-cg = groups["Collection"]
+# collections: a query with collection matches (no collection is both ct-mod7 and named sunset)
+sc, cgroups = omni("tag:ct-mod7", per_group=5)
+lc_, cd = post("SearchCollections", {"filter": "", "query": list_query([], ("tag", "Has", "ct-mod7")), "limit": 5})
+cg = cgroups["Collection"]
 rows.append(("collection hits = first 5 of SearchCollections", "-", str(hit_ids(cg) == cd["collections"]), "True",
              "OK" if hit_ids(cg) == cd["collections"] else "FAIL"))
 nonvac = mg["meta"]["total"] > 0 and cg["meta"]["total"] > 0

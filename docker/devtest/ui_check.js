@@ -305,7 +305,7 @@ async function submit(page, text) {
     inserts: hints, row_has_title_and_help: !!(hintRow && hintRow.title && hintRow.help),
     input_after_pick: afterPick, open_after_esc: (await suggestions(page)).length > 0,
   }, {
-    inserts: ['tag:', 'description:', 'date:', 'type:'], row_has_title_and_help: true,
+    inserts: ['tag:', 'description:', 'date:', 'type:', 'name:'], row_has_title_and_help: true,
     input_after_pick: 'beach tag:', open_after_esc: false,
   });
 
@@ -345,7 +345,7 @@ async function submit(page, text) {
     fields,
     search_mode: removed.includes('Search Mode'),
     case_sensitive: removed.includes('Case Sensitive'),
-  }, { fields: ['tag', 'description', 'date', 'type'], search_mode: false, case_sensitive: false });
+  }, { fields: ['tag', 'description', 'date', 'type', 'name'], search_mode: false, case_sensitive: false });
 
   await page.selectOption('[data-testid=builder-field]', 'type');
   await page.selectOption('[data-testid=builder-value]', 'Image');

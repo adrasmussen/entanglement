@@ -21,7 +21,7 @@ docker exec -i entanglement-postgres-1 psql -U entanglement -d entanglement -v O
 ## Checks
 | Script | Run with | Checks |
 |---|---|---|
-| `api_check.sh` | `zsh docker/devtest/api_check.sh` | Paging, counts, search fields, prefixes, rejections, hostile input, paging integrity |
+| `api_check.sh` | `zsh docker/devtest/api_check.sh` | Paging, counts, search fields, prefixes and inside-word matching, `GetSlugs`, `OmniSearch`, rejections, hostile input, paging integrity |
 | `rbac_check.py` | `python3 -I docker/devtest/rbac_check.py` | Out-of-group records never surface anywhere, including the tag values `GetSlugs` offers |
 | `ui_check.js` | `PW_MODULE=… node docker/devtest/ui_check.js` | Search bar, chips, hints, `?q=` URLs, back-navigation |
 | `ui_modal_check.js` | `PW_MODULE=… node docker/devtest/ui_modal_check.js` | Collection modal layout and tag entry |

@@ -74,6 +74,10 @@ docker compose exec -T postgres psql -U entanglement -d entanglement \
   -v ON_ERROR_STOP=1 < db/migrations/2026-11-12_paging_indexes.sql
 ```
 
+Apply them in date order. `2026-11-18_trigram_search.sql` is required, not just
+faster: it adds the `media_search_text()` function that word searches call, and
+the server refuses to start without it (the error names the file).
+
 ## 4. Register a library
 
 ```sh
