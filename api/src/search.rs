@@ -15,7 +15,9 @@ use crate::{
     library::{LibraryUuid, SearchMediaInLibraryReq},
     media::{Media, MediaUuid, SearchMediaReq},
     page::{PageMeta, PageRequest, PagedResp},
-    query::{Clause, FieldSpec, FieldType, FreeText, Op, SearchClass, SearchQuery, field_spec},
+    query::{
+        Clause, DataType, FieldSpec, FreeText, Op, SearchClass, SearchQuery, any_values, field_spec,
+    },
 };
 
 // paging limits
@@ -488,8 +490,8 @@ impl Resolver {
         let v = clause.value.clone();
         let pg = self.dialect == Dialect::Postgres;
 
-        let sql = match (spec.ty, clause.op) {
-            (FieldType::Text, Op::Contains) => {
+        let sql = match (spec.data_type, clause.op) {
+            (DataType::Text, Op::Contains) => {
                 let p = self.bind(format!("%{}%", escape_like(&v)));
                 let like = if pg { "ILIKE" } else { "LIKE" };
                 format!("{col} {like} {p}")
@@ -498,7 +500,7 @@ impl Resolver {
             // tags are an hstore on postgres and a folded string on mariadb; as with
             // GID_MATCH, delimiting both sides with the separator (which no tag contains)
             // makes the match exact
-            (FieldType::Tag, Op::Has) => {
+            (DataType::Tag, Op::Has) => {
                 let p = self.bind(v);
                 if pg {
                     format!("{col} ? {p}")
@@ -510,9 +512,36 @@ impl Resolver {
                 }
             }
 
+            // any of several tags.  on postgres the list travels as one parameter joined with
+            // the folding separator, which no tag can contain (fold_set rejects it on both
+            // backends); mariadb ORs the exact-match template, one bound value each
+            (DataType::Tag, Op::HasAny) => {
+                let items = any_values(&v);
+                if items.is_empty() {
+                    return None;
+                }
+                if pg {
+                    let sep = FOLDING_SEPARATOR;
+                    let p = self.bind(items.join(sep));
+                    format!("{col} ?| string_to_array({p}, '{sep}')")
+                } else {
+                    let sep = FOLDING_SEPARATOR;
+                    let any = items
+                        .iter()
+                        .map(|t| {
+                            let p = self.bind(t.to_string());
+                            format!(
+                                "LOCATE(CONCAT('{sep}', {p}, '{sep}'), CONCAT('{sep}', {col}, '{sep}')) > 0"
+                            )
+                        })
+                        .join(" OR ");
+                    format!("({any})")
+                }
+            }
+
             // the postgres enum has no text comparison, hence the cast; the only enum
             // field is media.media_type
-            (FieldType::Enum(_), Op::Eq) => {
+            (DataType::Enum(_), Op::Eq) => {
                 let p = self.bind(v);
                 if pg {
                     format!("{col} = {p}::text::media_type")
@@ -523,29 +552,29 @@ impl Resolver {
 
             // dates are strings, and a partial date is a prefix: date:2020-06 is all of
             // June, so > and <= treat the value as a prefix rather than comparing past it
-            (FieldType::Date, Op::Eq) => {
+            (DataType::Date, Op::Eq) => {
                 let p = self.bind(format!("{}%", escape_like(&v)));
                 format!("{col} LIKE {p}")
             }
-            (FieldType::Date, Op::Ge) => {
+            (DataType::Date, Op::Ge) => {
                 let p = self.bind(v);
                 format!("{col} >= {p}")
             }
-            (FieldType::Date, Op::Lt) => {
+            (DataType::Date, Op::Lt) => {
                 let p = self.bind(v);
                 format!("{col} < {p}")
             }
-            (FieldType::Date, Op::Gt) => {
+            (DataType::Date, Op::Gt) => {
                 let p = self.bind(v.clone());
                 let q = self.bind(format!("{}%", escape_like(&v)));
                 format!("({col} > {p} AND {col} NOT LIKE {q})")
             }
-            (FieldType::Date, Op::Le) => {
+            (DataType::Date, Op::Le) => {
                 let p = self.bind(v.clone());
                 let q = self.bind(format!("{}%", escape_like(&v)));
                 format!("({col} <= {p} OR {col} LIKE {q})")
             }
-            (FieldType::Date, Op::Range) => {
+            (DataType::Date, Op::Range) => {
                 let (a, b) = v.split_once("..")?;
                 let pa = self.bind(a.to_string());
                 let pb = self.bind(b.to_string());
@@ -928,6 +957,26 @@ mod tests {
                 ("f3", "2020-06%")
             ])
         );
+    }
+
+    #[test]
+    fn any_of_tags_sql() {
+        let (sql, params) = pg("tag:beach,sunset", 2);
+        assert_eq!(sql, " AND media.tags ?| string_to_array($2, '|')");
+        assert_eq!(params, ["beach|sunset"]);
+
+        let (sql, params) = maria("tag:beach,sunset");
+        assert_eq!(
+            sql,
+            " AND (LOCATE(CONCAT('|', :f0, '|'), CONCAT('|', media.tags, '|')) > 0 \
+             OR LOCATE(CONCAT('|', :f1, '|'), CONCAT('|', media.tags, '|')) > 0)"
+        );
+        assert_eq!(params, named(&[("f0", "beach"), ("f1", "sunset")]));
+
+        // collections take it too, with the values only ever in parameters
+        let (sql, params) = list_pg::<crate::collection::Collection>("tag:'x',%y");
+        assert_eq!(sql, " AND collections.tags ?| string_to_array($2, '|')");
+        assert_eq!(params, ["'x'|%y"]);
     }
 
     #[test]

@@ -23,7 +23,7 @@ use crate::{FOLDING_SEPARATOR, collection::Collection, library::Library, media::
 // problems in typed text are data (ParseIssue, for tooltips), never errors: an unknown field
 // keeps the token as free text, and a bad operator or value drops the clause
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SearchKind {
     Media,
     Collection,
@@ -31,7 +31,7 @@ pub enum SearchKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FieldType {
+pub enum DataType {
     // free-form text, matched as a case-insensitive substring
     Text,
     // a member of a set of tags
@@ -40,6 +40,39 @@ pub enum FieldType {
     Date,
     // one of a fixed list of values
     Enum(&'static [&'static str]),
+}
+
+// where the choices of a select come from
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Values {
+    // declared here, e.g. the media types
+    Static(&'static [&'static str]),
+    // the distinct values in the user's own visible data, from the GetSlugs endpoint
+    Distinct,
+}
+
+// the input the UI renders for a field.  it is declared per field rather than inferred from
+// the data type, so the webapp just renders what the metadata says
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilterType {
+    // free text
+    Text,
+    // a date, with the comparison and range forms its ops allow
+    Date,
+    // pick one value
+    Select(Values),
+    // pick any number of values; they combine as any-of (Op::HasAny)
+    MultiSelect(Values),
+}
+
+impl FilterType {
+    // where this filter's choices come from, if it has choices
+    pub fn values(&self) -> Option<Values> {
+        match self {
+            FilterType::Select(v) | FilterType::MultiSelect(v) => Some(*v),
+            FilterType::Text | FilterType::Date => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -52,6 +85,8 @@ pub enum Op {
     Lt,
     Le,
     Range,
+    // any of several values, written `field:a,b`; the wire value is the comma-joined list
+    HasAny,
 }
 
 impl Op {
@@ -73,7 +108,8 @@ pub struct FieldSpec {
     // what the user types: "tag", "date", ...
     pub name: &'static str,
     pub label: &'static str,
-    pub ty: FieldType,
+    pub data_type: DataType,
+    pub filter_type: FilterType,
     pub ops: &'static [Op],
     // tooltip text
     pub help: &'static str,
@@ -88,10 +124,10 @@ pub struct FieldSpec {
 impl FieldSpec {
     // the operator a bare `field:value` means
     pub fn default_op(&self) -> Op {
-        match self.ty {
-            FieldType::Text => Op::Contains,
-            FieldType::Tag => Op::Has,
-            FieldType::Date | FieldType::Enum(_) => Op::Eq,
+        match self.data_type {
+            DataType::Text => Op::Contains,
+            DataType::Tag => Op::Has,
+            DataType::Date | DataType::Enum(_) => Op::Eq,
         }
     }
 }
@@ -142,9 +178,10 @@ impl SearchClass for Media {
         FieldSpec {
             name: "tag",
             label: "Tag",
-            ty: FieldType::Tag,
-            ops: &[Op::Has],
-            help: "Media that has exactly this tag",
+            data_type: DataType::Tag,
+            filter_type: FilterType::MultiSelect(Values::Distinct),
+            ops: &[Op::Has, Op::HasAny],
+            help: "Media that has exactly this tag; tag:a,b matches any of them",
             example: "tag:holiday",
             in_global: true,
             column: "tags",
@@ -152,7 +189,8 @@ impl SearchClass for Media {
         FieldSpec {
             name: "description",
             label: "Description",
-            ty: FieldType::Text,
+            data_type: DataType::Text,
+            filter_type: FilterType::Text,
             ops: &[Op::Contains],
             help: "Media whose description contains this text (any case)",
             example: "description:sunset",
@@ -162,7 +200,8 @@ impl SearchClass for Media {
         FieldSpec {
             name: "date",
             label: "Date",
-            ty: FieldType::Date,
+            data_type: DataType::Date,
+            filter_type: FilterType::Date,
             ops: &[Op::Eq, Op::Gt, Op::Ge, Op::Lt, Op::Le, Op::Range],
             help: "Media from a date or date prefix; use > >= < <= or a..b for an inclusive range",
             example: "date:2020-06..2020-08",
@@ -172,7 +211,8 @@ impl SearchClass for Media {
         FieldSpec {
             name: "type",
             label: "Type",
-            ty: FieldType::Enum(MEDIA_TYPES),
+            data_type: DataType::Enum(MEDIA_TYPES),
+            filter_type: FilterType::Select(Values::Static(MEDIA_TYPES)),
             ops: &[Op::Eq],
             help: "Media of one type: Image, Video, VideoSlice or Audio",
             example: "type:Image",
@@ -192,7 +232,8 @@ impl SearchClass for Collection {
         FieldSpec {
             name: "name",
             label: "Name",
-            ty: FieldType::Text,
+            data_type: DataType::Text,
+            filter_type: FilterType::Text,
             ops: &[Op::Contains],
             help: "Collections whose name contains this text",
             example: "name:holiday",
@@ -202,7 +243,8 @@ impl SearchClass for Collection {
         FieldSpec {
             name: "description",
             label: "Description",
-            ty: FieldType::Text,
+            data_type: DataType::Text,
+            filter_type: FilterType::Text,
             ops: &[Op::Contains],
             help: "Collections whose description contains this text",
             example: "description:trip",
@@ -212,9 +254,10 @@ impl SearchClass for Collection {
         FieldSpec {
             name: "tag",
             label: "Tag",
-            ty: FieldType::Tag,
-            ops: &[Op::Has],
-            help: "Collections that have exactly this tag",
+            data_type: DataType::Tag,
+            filter_type: FilterType::MultiSelect(Values::Distinct),
+            ops: &[Op::Has, Op::HasAny],
+            help: "Collections that have exactly this tag; tag:a,b matches any of them",
             example: "tag:family",
             in_global: true,
             column: "tags",
@@ -231,7 +274,8 @@ impl SearchClass for Library {
     const FIELDS: &'static [FieldSpec] = &[FieldSpec {
         name: "path",
         label: "Path",
-        ty: FieldType::Text,
+        data_type: DataType::Text,
+        filter_type: FilterType::Text,
         ops: &[Op::Contains],
         help: "Libraries whose path contains this text",
         example: "path:photos",
@@ -262,10 +306,23 @@ pub struct Clause {
     pub value: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IssueKind {
+    // a quote left open
+    Syntax,
+    // `field:` names no declared field; the token is kept as free text
+    UnknownField,
+    // the field doesn't take that operator; the clause is dropped
+    BadOp,
+    // the value can never match (empty, malformed, not an allowed value); the clause is dropped
+    BadValue,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseIssue {
     // byte range of the offending token in the input
     pub span: Range<usize>,
+    pub kind: IssueKind,
     pub message: String,
 }
 
@@ -279,6 +336,8 @@ pub struct Parsed {
 pub const MAX_TEXT_TERMS: usize = 32;
 pub const MAX_CLAUSES: usize = 32;
 pub const MAX_VALUE_LEN: usize = 256;
+// values in one any-of clause (tag:a,b,...)
+pub const MAX_ANY_VALUES: usize = 16;
 
 impl SearchQuery {
     pub fn is_empty(&self) -> bool {
@@ -290,15 +349,16 @@ impl SearchQuery {
         let mut parsed = Parsed::default();
 
         for (span, raw) in tokenize(input) {
-            let mut issue = |message: String| {
+            let mut issue = |kind: IssueKind, message: String| {
                 parsed.issues.push(ParseIssue {
                     span: span.clone(),
+                    kind,
                     message,
                 });
             };
 
             if raw.matches('"').count() % 2 == 1 {
-                issue("unterminated quote".into());
+                issue(IssueKind::Syntax, "unterminated quote".into());
             }
 
             let Some((head, rest)) = split_field(&raw) else {
@@ -307,7 +367,7 @@ impl SearchQuery {
             };
 
             let Some(spec) = field_spec::<C>(&head.to_ascii_lowercase()) else {
-                issue(format!("unknown field '{head}'"));
+                issue(IssueKind::UnknownField, format!("unknown field '{head}'"));
                 push_text(&mut parsed.query, unquote(&raw));
                 continue;
             };
@@ -317,12 +377,22 @@ impl SearchQuery {
             let mut value = unquote(rest);
 
             if value.is_empty() {
-                issue(format!("{} needs a value", spec.name));
+                issue(IssueKind::BadValue, format!("{} needs a value", spec.name));
                 continue;
+            }
+
+            // an unquoted comma lists alternatives: tag:a,b is any of a and b
+            let any_of = prefix_op.is_none()
+                && spec.ops.contains(&Op::HasAny)
+                && !rest.starts_with('"')
+                && value.contains(',');
+            if any_of {
+                value = normalize_any(&value);
             }
 
             let op = match prefix_op {
                 Some(op) => op,
+                None if any_of && value.contains(',') => Op::HasAny,
                 None if spec.ops.contains(&Op::Range) && value.contains("..") => Op::Range,
                 None => spec.default_op(),
             };
@@ -332,27 +402,29 @@ impl SearchQuery {
                     "" => "that kind of match".to_string(),
                     p => format!("'{p}'"),
                 };
-                issue(format!("{} does not support {how}", spec.name));
+                issue(
+                    IssueKind::BadOp,
+                    format!("{} does not support {how}", spec.name),
+                );
                 continue;
             }
 
-            if let FieldType::Enum(allowed) = spec.ty {
+            if let DataType::Enum(allowed) = spec.data_type {
                 // accept any case, store the declared spelling
                 match allowed.iter().find(|a| a.eq_ignore_ascii_case(&value)) {
                     Some(a) => value = a.to_string(),
                     None => {
-                        issue(format!(
-                            "{} must be one of {}",
-                            spec.name,
-                            allowed.join(", ")
-                        ));
+                        issue(
+                            IssueKind::BadValue,
+                            format!("{} must be one of {}", spec.name, allowed.join(", ")),
+                        );
                         continue;
                     }
                 }
             }
 
             if let Err(message) = check_value(spec, op, &value) {
-                issue(message);
+                issue(IssueKind::BadValue, message);
                 continue;
             }
 
@@ -380,8 +452,11 @@ impl SearchQuery {
             let v = &c.value;
             let (prefix, quoted) = match c.op {
                 Op::Gt | Op::Ge | Op::Lt | Op::Le => (c.op.prefix(), false),
-                // a leading operator character would read as an operator
-                _ => ("", v.starts_with(['>', '<'])),
+                // the list is written as is; check_value keeps its items plain words
+                Op::HasAny => ("", false),
+                // a leading operator character would read as an operator, and an unquoted
+                // comma as an any-of list
+                _ => ("", v.starts_with(['>', '<']) || v.contains(',')),
             };
             parts.push(format!("{}:{}{}", c.field, prefix, quote_if(v, quoted)));
         }
@@ -413,7 +488,7 @@ impl SearchQuery {
                 ));
             }
 
-            if let FieldType::Enum(allowed) = spec.ty
+            if let DataType::Enum(allowed) = spec.data_type
                 && !allowed.contains(&c.value.as_str())
             {
                 return Err(format!(
@@ -428,6 +503,21 @@ impl SearchQuery {
 
         Ok(())
     }
+}
+
+// the items of an any-of value, trimmed, without empties or repeats, in typed order
+pub fn any_values(value: &str) -> Vec<&str> {
+    let mut out: Vec<&str> = Vec::new();
+    for v in value.split(',').map(str::trim).filter(|v| !v.is_empty()) {
+        if !out.contains(&v) {
+            out.push(v);
+        }
+    }
+    out
+}
+
+fn normalize_any(value: &str) -> String {
+    any_values(value).join(",")
 }
 
 fn push_text(query: &mut SearchQuery, term: String) {
@@ -446,19 +536,46 @@ fn check_value(spec: &FieldSpec, op: Op, value: &str) -> Result<(), String> {
     }
 
     let single = |v: &str| -> Result<(), String> {
-        match spec.ty {
+        match spec.data_type {
             // a tag containing the separator could match across the folded tags column
-            FieldType::Tag if v.contains(FOLDING_SEPARATOR) => Err(format!(
+            DataType::Tag if v.contains(FOLDING_SEPARATOR) => Err(format!(
                 "{} cannot contain '{FOLDING_SEPARATOR}'",
                 spec.name
             )),
-            FieldType::Date if !v.chars().all(|c| c.is_ascii_digit() || c == '-') => Err(format!(
+            DataType::Date if !v.chars().all(|c| c.is_ascii_digit() || c == '-') => Err(format!(
                 "{} must look like 2020, 2020-06 or 2020-06-15",
                 spec.name
             )),
             _ => Ok(()),
         }
     };
+
+    if op == Op::HasAny {
+        let items = any_values(value);
+        if items.len() < 2 || items.join(",") != value {
+            return Err(format!(
+                "{} lists look like a,b with no empty items or repeats",
+                spec.name
+            ));
+        }
+        if items.len() > MAX_ANY_VALUES {
+            return Err(format!(
+                "{} takes at most {MAX_ANY_VALUES} values at once",
+                spec.name
+            ));
+        }
+        // the list is written unquoted, so its items must stay plain words
+        if let Some(bad) = items
+            .iter()
+            .find(|v| v.contains(|c: char| c.is_whitespace() || c == '"' || c == '\\'))
+        {
+            return Err(format!(
+                "{} list items can't contain spaces or quotes ('{bad}')",
+                spec.name
+            ));
+        }
+        return items.into_iter().try_for_each(single);
+    }
 
     if op == Op::Range {
         let (a, b) = value
@@ -871,6 +988,111 @@ mod tests {
         check::<Media>();
         check::<Collection>();
         check::<Library>();
+    }
+
+    #[test]
+    fn filter_types_are_declared_to_fit_the_data() {
+        fn check<C: SearchClass>() {
+            for f in C::FIELDS {
+                match (f.data_type, f.filter_type) {
+                    (DataType::Text, FilterType::Text)
+                    | (DataType::Date, FilterType::Date)
+                    | (DataType::Tag, FilterType::MultiSelect(Values::Distinct)) => {}
+                    // a static select offers exactly the enum's values
+                    (DataType::Enum(a), FilterType::Select(Values::Static(b))) => assert_eq!(a, b),
+                    other => panic!("{}: {other:?}", f.name),
+                }
+                // a multiselect writes any-of clauses, so the field must take them
+                if let FilterType::MultiSelect(_) = f.filter_type {
+                    assert!(f.ops.contains(&Op::HasAny), "{}", f.name);
+                }
+            }
+        }
+        check::<Media>();
+        check::<Collection>();
+        check::<Library>();
+    }
+
+    #[test]
+    fn any_of_tags_parse_to_one_clause() {
+        assert_eq!(
+            p("tag:beach,sunset").query.clauses,
+            [clause("tag", Op::HasAny, "beach,sunset")]
+        );
+        // spaces, empty items and repeats are tidied away
+        assert_eq!(
+            p("tag:beach,,sunset,beach,").query.clauses,
+            [clause("tag", Op::HasAny, "beach,sunset")]
+        );
+        // one item left is a plain Has
+        assert_eq!(
+            p("tag:beach,").query.clauses,
+            [clause("tag", Op::Has, "beach")]
+        );
+        // a quoted comma is part of one tag
+        assert_eq!(
+            p(r#"tag:"a,b""#).query.clauses,
+            [clause("tag", Op::Has, "a,b")]
+        );
+        // fields without any-of keep the comma in the value
+        assert_eq!(
+            p("description:a,b").query.clauses,
+            [clause("description", Op::Contains, "a,b")]
+        );
+        // a separate tag clause still ANDs
+        assert_eq!(
+            p("tag:a,b tag:c").query.clauses,
+            [
+                clause("tag", Op::HasAny, "a,b"),
+                clause("tag", Op::Has, "c")
+            ]
+        );
+    }
+
+    #[test]
+    fn any_of_round_trips_and_is_validated() {
+        for s in ["tag:a,b", r#"tag:"a,b""#, "tag:a,b tag:c beach"] {
+            let q = p(s).query;
+            assert_eq!(SearchQuery::parse::<Media>(&q.to_text()).query, q, "{s}");
+        }
+        assert_eq!(p("tag:a,b").query.to_text(), "tag:a,b");
+        assert_eq!(p(r#"tag:"a,b""#).query.to_text(), r#"tag:"a,b""#);
+
+        let wire = |v: &str| SearchQuery {
+            text: vec![],
+            clauses: vec![clause("tag", Op::HasAny, v)],
+        };
+        assert_eq!(wire("a,b").validate::<Media>(), Ok(()));
+        assert_eq!(wire("a,b").validate::<Collection>(), Ok(()));
+        for bad in ["a", "a,,b", "a,a", "a,b c", "a,\"b", "a,x|y", ""] {
+            assert!(wire(bad).validate::<Media>().is_err(), "{bad:?}");
+        }
+        let many: Vec<String> = (0..=MAX_ANY_VALUES).map(|i| format!("t{i}")).collect();
+        assert!(wire(&many.join(",")).validate::<Media>().is_err());
+        assert_eq!(
+            wire(&many[..MAX_ANY_VALUES].join(",")).validate::<Media>(),
+            Ok(())
+        );
+        // libraries have no tags at all
+        assert!(wire("a,b").validate::<Library>().is_err());
+        // and only tag fields take any-of
+        let desc = SearchQuery {
+            text: vec![],
+            clauses: vec![clause("description", Op::HasAny, "a,b")],
+        };
+        assert!(desc.validate::<Media>().is_err());
+    }
+
+    #[test]
+    fn issues_carry_a_kind() {
+        let kinds = |s: &str| p(s).issues.iter().map(|i| i.kind).collect::<Vec<_>>();
+        assert_eq!(kinds("colour:red"), [IssueKind::UnknownField]);
+        assert_eq!(kinds("tag:>a"), [IssueKind::BadOp]);
+        assert_eq!(kinds("type:Painting"), [IssueKind::BadValue]);
+        assert_eq!(kinds("date:june"), [IssueKind::BadValue]);
+        assert_eq!(kinds("tag:"), [IssueKind::BadValue]);
+        assert_eq!(kinds(r#""open"#), [IssueKind::Syntax]);
+        assert_eq!(kinds("beach tag:a"), []);
     }
 
     #[test]
