@@ -47,7 +47,7 @@ All of them are idempotent.
 |---|---|---|
 | `seed_counttest.sql` | Library `/counttest` with **20,000 media** (2,000 hidden) and collections `counttest-c000..c039` (400 each; `c000` is all hidden) | **Ask the user before running it.** It loads 20k searchable rows into their dev DB; offer the smaller seeds if they only need a few cases. The rows have no image files, so they show "No preview" tiles. |
 | `seed_search.sql` | Rewrites only counttest rows: tags (`ct-even/odd`, `ct-mod7`, `ct-rare`), description words, hostile values, `checkpoint/checko/checkpt`, plus a hand-testing set of ~1000 items with happy tags (`sunshine/joyful/delight/cheer`) and English phrases; adds `counttest-phrase…` / `counttest-evil…` collections | Needs `seed_counttest.sql` first |
-| `seed_rbac.sql` | Standalone. Library `/counttest-rbac` (300 media owned by `counttest-othergroup`), `/counttest-rbac-dev` (20 media dev can see), a foreign collection, a devgroup "bridge" collection (10 foreign media made visible to dev by design), a foreign comment, and a phash twin | Works on any branch |
+| `seed_rbac.sql` | Standalone. Library `/counttest-rbac` (300 media owned by `counttest-othergroup`; all but the bridged ones carry `ct-rbac-foreign-only`, and the foreign collection carries `ct-rbac-foreign-coll`, tags dev must never be offered; dev item 20 is hidden and alone carries `ct-rbac-hidden-only`), `/counttest-rbac-dev` (20 media dev can see), a foreign collection, a devgroup "bridge" collection (10 foreign media made visible to dev by design), a foreign comment, and a phash twin | Works on any branch |
 
 **Cleanup**, everything counttest, in this order:
 
@@ -68,9 +68,9 @@ Some scripts arrive with later branches of the search/paging stack (PR #8 and th
 
 | Script | Proves | Needs |
 |---|---|---|
-| `api_check.sh` (zsh + python) | Paging metadata (`meta`, `has_more`, clamps), count-only requests, `GetCounts`, structured field queries, prefix matching of plain words, rejections (400), hostile values, old request shapes, paging integrity (pages vs unpaged: equal, no dupes), all vs raw SQL | counttest seeds; the `pagetest`/`bulktest` libraries for the older grids |
-| `rbac_check.py` | Out-of-group records never surface: media searches and totals, batch labels, scoped searches, collection and library lists, `GetCounts`, direct lookups (401), `SimilarMedia`, streams, and writes (DB unchanged) | `seed_rbac.sql` (the richer version also uses the search seeds) |
-| `ui_check.js` (Playwright) | Search bar: chips, completions, double-click field hints, parse issues, filter builder, `?q=` prefill/commit/reload, local-storage fallback, back-navigation landing on the same card, "No preview" tiles | counttest and search seeds |
+| `api_check.sh` (zsh + python) | Paging metadata (`meta`, `has_more`, clamps), count-only requests, `GetCounts`, `GetSlugs` lists vs raw SQL `GROUP BY` (prefix, limit, static values, hostile prefixes, rejections), any-of tags (`tag:a,b`) vs raw SQL `?|`, structured field queries, prefix matching of plain words, rejections (400), hostile values, old request shapes, paging integrity (pages vs unpaged: equal, no dupes), all vs raw SQL | counttest seeds; the `pagetest`/`bulktest` libraries for the older grids |
+| `rbac_check.py` | Out-of-group records never surface: `GetSlugs` never offers a tag only foreign or hidden records carry and counts over visible records only; media searches and totals, batch labels, scoped searches, collection and library lists, `GetCounts`, direct lookups (401), `SimilarMedia`, streams, and writes (DB unchanged) | `seed_rbac.sql` (the richer version also uses the search seeds) |
+| `ui_check.js` (Playwright) | Search bar: chips, completions (including `tag:` values from `GetSlugs`), double-click field hints, parse issues, filter builder (including the tag picker: list and counts vs raw SQL, picking two adds one any-of chip), `?q=` prefill/commit/reload, local-storage fallback, back-navigation landing on the same card, "No preview" tiles | counttest and search seeds |
 | `ui_modal_check.js` (Playwright) | Create/edit collection modal: width and padding, the close button, tags typed with any separator stored as a set, help text | the dev stack only (creates and deletes its own `counttest-modal-*` collection) |
 
 **Reading the output:**

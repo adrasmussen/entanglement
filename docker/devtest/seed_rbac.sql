@@ -13,11 +13,14 @@
 --   comments    text '[counttest] rbac secret comment'
 --
 -- layout
---   /counttest-rbac-dev: 20 media dev can see (dev items 1..20)
+--   /counttest-rbac-dev: 20 media in a devgroup library (dev items 1..20); item 20 is hidden
+--                       and alone carries the tag ct-rbac-hidden-only
 --   /counttest-rbac:    300 foreign media, every one tagged ct-rbac-secret, notes containing
---                       'lighthouse beach', 30 hidden
+--                       'lighthouse beach', 30 hidden; all but the bridged ones (201..211) also
+--                       carry ct-rbac-foreign-only, a tag dev can never see
 --   counttest-rbac-other (foreign): foreign items 1..50 plus the odd dev items -- a foreign
---                       collection holding media dev can see must not be revealed to dev
+--                       collection holding media dev can see must not be revealed to dev;
+--                       tagged ct-rbac-foreign-coll, which no dev collection carries
 --   counttest-rbac-bridge (devgroup): foreign items 201..211 except the hidden 210; by design
 --                       these 10 become visible to dev through the collection (positive control)
 --   comment by uid counttest-rbac on foreign item 3
@@ -53,10 +56,13 @@ SELECT
     rpad(md5('rbac-dev' || n), 128, '0'),
     rpad(md5('rbac-dev-p' || n), 64, '0'),
     1794534907,
-    FALSE,
+    -- item 20 is hidden, and the only carrier of ct-rbac-hidden-only, which GetSlugs must
+    -- therefore never offer
+    n = 20,
     to_char(date '2021-01-01' + n * 11, 'YYYY-MM-DD'),
     format('[counttest] rbac dev item %s harbour', n),
-    hstore('ct-rbac-dev', NULL),
+    hstore('ct-rbac-dev', NULL)
+        || CASE WHEN n = 20 THEN hstore('ct-rbac-hidden-only', NULL) ELSE ''::hstore END,
     'Image'
 FROM generate_series(1, 20) AS n;
 
@@ -82,14 +88,18 @@ SELECT
                   'rain on the kitchen window', 'friends laughing around the campfire',
                   'the city lights after midnight'])[n % 8 + 1]),
     hstore(ARRAY['ct-rbac-secret', 'ct-mod7', (ARRAY['sunshine', 'joyful', 'delight', 'cheer'])[n % 4 + 1]],
-           ARRAY[NULL, NULL, NULL]),
+           ARRAY[NULL, NULL, NULL])
+        -- a tag no dev-visible item carries (the bridged items are 201..211), which
+        -- GetSlugs must never offer
+        || CASE WHEN n NOT BETWEEN 201 AND 211 THEN hstore('ct-rbac-foreign-only', NULL) ELSE ''::hstore END,
     'Image'
 FROM generate_series(1, 300) AS n;
 
 INSERT INTO collections (collection_uuid, uid, gid, name, note, tags, cover)
 VALUES
     (gen_random_uuid(), 'counttest-rbac', 'counttest-othergroup', 'counttest-rbac-other',
-     '[counttest] rbac foreign collection lighthouse', hstore(ARRAY['ct-rbac-secret'], ARRAY[NULL]), NULL),
+     '[counttest] rbac foreign collection lighthouse',
+     hstore(ARRAY['ct-rbac-secret', 'ct-rbac-foreign-coll'], ARRAY[NULL, NULL]), NULL),
     (gen_random_uuid(), 'dev', 'devgroup', 'counttest-rbac-bridge',
      '[counttest] rbac bridge collection', hstore(ARRAY['ct-rbac-bridge'], ARRAY[NULL]), NULL);
 

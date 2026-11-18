@@ -191,7 +191,7 @@ async function submit(page, text) {
   await open(page, '/gallery', '');
   await submit(page, 'tag:ct-mod7 date:2022');
   let raw = count(media(rawTag('v0'), rawDatePrefix('v1')), { v0: 'ct-mod7', v1: '2022' });
-  let got = await settleTotal(page, raw);
+  got = await settleTotal(page, raw);
   check(s, 'tag:ct-mod7 date:2022', media(rawTag('v0'), rawDatePrefix('v1')) + ' v0=ct-mod7 v1=2022', {
     chips: await chipLabels(page),
     total: got,
@@ -386,8 +386,9 @@ async function submit(page, text) {
     input: await inputValue(page),
     total: got,
   }, { input: 'type:Image', total: raw });
+  // tags take a values picker now (phase 5a); adding with nothing picked is refused the same way
   await page.selectOption('[data-testid=builder-field]', 'tag');
-  await page.fill('[data-testid=builder-value]', '');
+  await page.waitForSelector('[data-testid=builder-value] [data-testid=slug-options]');
   await page.click('[data-testid=builder-add]');
   check(s, 'an empty value is refused with a message', '-', {
     error: await page.$eval('[data-testid=builder-error]', e => e.textContent),
@@ -614,6 +615,90 @@ async function submit(page, text) {
     same_card: !!(before2 && after2 && before2.href === after2.href),
     top_within_4px: !!(before2 && after2 && Math.abs(after2.top - before2.top) <= 4),
   }, { same_card: true, top_within_4px: true });
+
+  // ================================================================ 8. phase 5a: tag values
+  s = section('phase 5a: tag values in the filter builder and the search bar (GetSlugs)', HEADER);
+  // the slugs, as raw SQL over dev's visible media: value and count, most used first
+  const rawSlugs = (prefix, limit = 50) => sql(
+    MEDIA_VISIBLE.replace('SELECT count(*) FROM media m WHERE', "SELECT k || '=' || count(*) FROM media m, skeys(m.tags) k WHERE") +
+      ` AND left(lower(k), length(:'p')) = lower(:'p') GROUP BY k ORDER BY count(*) DESC, k COLLATE "C" LIMIT ${limit}`,
+    { p: prefix }).split('\n').filter(Boolean);
+  // the picker leaves out values that can't travel unquoted in a tag:a,b list (whitespace, a
+  // comma, a quote or a backslash; webapp/src/common/slugs.rs pickable), so its raw SQL does too
+  const pickable = r => !/[\s,"\\]/.test(r.slice(0, r.lastIndexOf('=')));
+  const pickerList = () => page.$$eval('[data-testid=builder-value] [data-testid=slug-option]', els =>
+    els.map(e => e.querySelector('.slug-value').textContent + '=' + ((e.querySelector('.slug-count') || {}).textContent || '')));
+  async function settleList(want, ms = 8000) {
+    const end = Date.now() + ms;
+    let last = [];
+    while (Date.now() < end) {
+      last = await pickerList();
+      if (JSON.stringify(last) === JSON.stringify(want)) return last;
+      await sleep(200);
+    }
+    return last;
+  }
+
+  await open(page, '/gallery', '');
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+  await page.waitForSelector('[data-testid=builder-field]');
+  await page.selectOption('[data-testid=builder-field]', 'tag');
+  const all = rawSlugs('');
+  let want = all.filter(pickable);
+  check(s, 'tag picker lists dev-visible tags with counts (first 50)', 'raw SQL GROUP BY k over visible media, pickable values', {
+    same_list: JSON.stringify(await settleList(want)) === JSON.stringify(want), n: (await pickerList()).length,
+  }, { same_list: true, n: want.length });
+  check(s, 'values left out of the picker (they need quoting)', 'raw SQL, not pickable', {
+    left_out: all.filter(r => !pickable(r)).map(r => r.slice(0, r.lastIndexOf('='))),
+  }, { left_out: ["'; DROP TABLE media; --", '\\'] });
+  check(s, 'the picker hides the operator select (it picks its own)', '-', {
+    op_hidden: await page.$eval('[data-testid=builder-op]', e => e.closest('.form-group').offsetParent === null),
+  }, { op_hidden: true });
+
+  await page.fill('[data-testid=slug-filter]', 'CT-MO');
+  want = rawSlugs('CT-MO').filter(pickable);
+  check(s, "filter box 'CT-MO' narrows the list (case-insensitive)", "raw SQL prefix 'ct-mo'", {
+    same_list: JSON.stringify(await settleList(want)) === JSON.stringify(want),
+  }, { same_list: true });
+
+  await page.fill('[data-testid=slug-filter]', 'ct-');
+  await settleList(rawSlugs('ct-').filter(pickable));
+  await page.check('[data-testid=builder-value] [data-testid=slug-option]:has(.slug-value:text-is("ct-mod7")) input');
+  await page.check('[data-testid=builder-value] [data-testid=slug-option]:has(.slug-value:text-is("ct-rare")) input');
+  const picked = await page.$$eval('[data-testid=slug-picked] .query-chip', els => els.map(e => e.textContent.replace('\u00d7', '')));
+  await page.click('[data-testid=builder-add]');
+  raw = count(media("m.tags ?| ARRAY[:'v0', :'v1']"), { v0: 'ct-mod7', v1: 'ct-rare' });
+  got = await settleTotal(page, raw);
+  check(s, 'picking ct-mod7 and ct-rare adds one any-of clause', media("m.tags ?| ARRAY[:'v0', :'v1']") + ' v0=ct-mod7 v1=ct-rare', {
+    picked, input: await inputValue(page), chips: await chipLabels(page), total: got,
+  }, { picked: ['ct-mod7', 'ct-rare'], input: 'tag:ct-mod7,ct-rare', chips: ['Tag: ct-mod7 or ct-rare'], total: raw });
+  check(s, 'the any-of case is not vacuous', '-', { nonzero: raw > 0 }, { nonzero: true });
+
+  // the search bar completes tag values from the same endpoint, after a short pause
+  await open(page, '/gallery', '');
+  await page.click(INPUT);
+  await page.fill(INPUT, 'tag:ct-m');
+  want = rawSlugs('ct-m').map(r => 'tag:' + r.split('=')[0]).slice(0, 12);
+  let ins = [];
+  for (let i = 0; i < 40 && JSON.stringify(ins) !== JSON.stringify(want); i++) {
+    await sleep(150);
+    ins = await suggestions(page);
+  }
+  check(s, "typing 'tag:ct-m' suggests dev's matching tags", "raw SQL prefix 'ct-m'", { inserts: ins }, { inserts: want });
+  const help = await page.$eval('[data-testid=query-suggestion] .query-suggestion-help', e => e.textContent);
+  check(s, 'a tag suggestion shows its count', 'raw SQL', { help }, { help: rawSlugs('ct-m')[0].split('=')[1] + ' matches' });
+  await page.fill(INPUT, 'tag:ct-mod7,ct-r');
+  want = rawSlugs('ct-r').map(r => 'tag:ct-mod7,' + r.split('=')[0]).filter(x => x !== 'tag:ct-mod7,ct-mod7').slice(0, 12);
+  ins = [];
+  for (let i = 0; i < 40 && JSON.stringify(ins) !== JSON.stringify(want); i++) {
+    await sleep(150);
+    ins = await suggestions(page);
+  }
+  check(s, "'tag:ct-mod7,ct-r' completes the last item of the list", "raw SQL prefix 'ct-r'", { inserts: ins }, { inserts: want });
+  const noForeign = rawSlugs('ct-rbac', 200).map(r => r.split('=')[0]);
+  check(s, 'no foreign-only or hidden-only tag is offered', 'seed_rbac.sql tags', {
+    offered: noForeign.filter(t => ['ct-rbac-foreign-only', 'ct-rbac-hidden-only'].includes(t)),
+  }, { offered: [] });
 
   await t.browser.close();
   printGrids();

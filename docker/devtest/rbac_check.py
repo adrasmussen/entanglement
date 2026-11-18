@@ -248,6 +248,60 @@ for kind in ("thumbnails", "originals"):
     cases.append([f"stream {kind} foreign (http {c})", "denied", "denied" if c in (401, 403) else str(c), 0])
 grid("direct lookups and streams (denied = 401/403 or any non-200)", cases)
 
+# --- GetSlugs: the tag values the filters offer ---------------------------------------
+# every slug must be a tag of a record dev can see, counted over visible records only
+FORBIDDEN_MEDIA_TAGS = {"ct-rbac-foreign-only", "ct-rbac-hidden-only"}
+FORBIDDEN_COLL_TAGS = {"ct-rbac-foreign-coll"}
+
+
+def slug_rows(sql):
+    return [tuple(r.split("|")) for r in rows(sql)]
+
+
+def slugs(kind, prefix="", limit=200):
+    code, d = call("GetSlugs", {"kind": kind, "field": "tag", "prefix": prefix, "limit": limit})
+    return code, [(s["value"], str(s["count"])) for s in (d or {}).get("slugs", [])]
+
+
+cases = []
+for prefix in ("", "ct-rbac"):
+    like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    raw = slug_rows(f"""SELECT k, count(*) FROM media m, skeys(m.tags) k
+                        WHERE {VIS} AND lower(k) LIKE '{like}'
+                        GROUP BY k ORDER BY count(*) DESC, k COLLATE "C" LIMIT 200""")
+    code, got = slugs("Media", prefix)
+    bad = len({v for v, _ in got} & FORBIDDEN_MEDIA_TAGS)
+    cases.append([f"media tags, prefix {prefix!r} (http {code}): list vs raw SQL", len(raw),
+                  len(got) if got == raw else f"differs ({len(got)} returned)", bad])
+code, got = slugs("Media", "ct-rbac")
+counts = dict(got)
+cases.append(["media tag ct-rbac-secret counted over the 10 bridged items only",
+              raw_count("m.tags ? 'ct-rbac-secret'"), counts.get("ct-rbac-secret"), 0])
+cases.append(["media tags offered from foreign or hidden records", 0,
+              len(set(counts) & FORBIDDEN_MEDIA_TAGS), len(set(counts) & FORBIDDEN_MEDIA_TAGS)])
+raw = slug_rows(f"""SELECT k, count(*) FROM collections c, skeys(c.tags) k WHERE c.gid = '{GID}'
+                    GROUP BY k ORDER BY count(*) DESC, k COLLATE "C" LIMIT 200""")
+code, got = slugs("Collection")
+bad = len({v for v, _ in got} & FORBIDDEN_COLL_TAGS)
+cases.append([f"collection tags (http {code}): list vs raw SQL", len(raw),
+              len(got) if got == raw else f"differs ({len(got)} returned)", bad])
+cases.append(["collection tags offered from the foreign collection", 0, bad, bad])
+# any-of searches on tags only foreign or hidden records carry find nothing, and mixing in a
+# visible tag finds exactly the visible ones
+for label, value in [("foreign-only,hidden-only", "ct-rbac-foreign-only,ct-rbac-hidden-only"),
+                     ("foreign-only,dev", "ct-rbac-foreign-only,ct-rbac-dev")]:
+    code, d = call("SearchMedia", {"opts": opts(q(clauses=[("tag", "HasAny", value)]))})
+    exp = raw_count("m.tags ?| ARRAY[" + ",".join(f"'{t}'" for t in value.split(",")) + "]")
+    cases.append([f"SearchMedia tag:{label} (any of)", exp,
+                  (d or {}).get("meta", {}).get("total", f"http {code}"), leaked((d or {}).get("media", []))])
+code, d = call("SearchCollections", {"filter": "", "query": q(clauses=[("tag", "HasAny", "ct-rbac-foreign-coll,ct-rbac-bridge")])["Query"],
+                                     "limit": None, "with_total": True})
+cases.append(["SearchCollections tag:ct-rbac-foreign-coll,ct-rbac-bridge (any of)",
+              coll_raw("tags ?| ARRAY['ct-rbac-foreign-coll','ct-rbac-bridge']"),
+              (d or {}).get("meta", {}).get("total", f"http {code}"),
+              int(C_OTHER in (d or {}).get("collections", []))])
+grid("GetSlugs (expected = raw SQL over dev-visible records)", cases)
+
 # --- writes (each checked against the database afterwards) ----------------------------
 cases = []
 before = psql(f"SELECT note FROM media WHERE media_uuid = '{F_PLAIN}'")

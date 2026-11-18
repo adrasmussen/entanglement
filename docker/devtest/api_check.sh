@@ -856,6 +856,132 @@ check(rows, legend, "text c0 + tag:ct-even, pages of 7", raw_sql, raw,
 grid("phase 4: paging integrity, collection query", ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 show_legend(legend)
 
+# ---- phase 5a: any-of tags and GetSlugs ----
+
+def raw_any(*vars_):
+    """tag:a,b: the record has any of the tags."""
+    return "m.tags ?| ARRAY[" + ", ".join(f":'{v}'" for v in vars_) + "]"
+
+
+rows, legend = [], []
+for name, scope, clauses, conds, vars_ in [
+    ("tag:ct-mod7,ct-rare", "gallery", [("tag", "HasAny", "ct-mod7,ct-rare")], [raw_any("v0", "v1")],
+     {"v0": "ct-mod7", "v1": "ct-rare"}),
+    ("tag:ct-even,ct-odd (everything tagged)", "counttest library", [("tag", "HasAny", "ct-even,ct-odd")],
+     [raw_any("v0", "v1")], {"v0": "ct-even", "v1": "ct-odd"}),
+    ("tag:ct-mod7,ct-nonesuch", "counttest-c007", [("tag", "HasAny", "ct-mod7,ct-nonesuch")],
+     [raw_any("v0", "v1")], {"v0": "ct-mod7", "v1": "ct-nonesuch"}),
+    ("tag:ct-nonesuch,ct-nothing (intentional zero)", "gallery", [("tag", "HasAny", "ct-nonesuch,ct-nothing")],
+     [raw_any("v0", "v1")], {"v0": "ct-nonesuch", "v1": "ct-nothing"}),
+    ("tag:ct-mod7,ct-rare AND tag:ct-even", "gallery",
+     [("tag", "HasAny", "ct-mod7,ct-rare"), ("tag", "Has", "ct-even")],
+     [raw_any("v0", "v1"), raw_tag("v2")], {"v0": "ct-mod7", "v1": "ct-rare", "v2": "ct-even"}),
+    ("hostile tag:'x',%_ (bound literally)", "gallery", [("tag", "HasAny", "'x',%_")],
+     [raw_any("v0", "v1")], {"v0": "'x'", "v1": "%_"}),
+]:
+    scope_sql, search, _ = SCOPES[scope]
+    raw, raw_sql = count_with(scope_sql, conds, **vars_)
+    sc, sd = post(*search(query([], *clauses), limit=0, with_total=True))
+    check(rows, legend, f"{name} [{scope}]", f"{raw_sql} {kv(vars_)}", raw,
+          {"count_only": sd["meta"]["total"] if sc == 200 else f"http {sc}"}, {"count_only": raw})
+raw, raw_sql = count_collections(["c.tags ?| ARRAY[:'v0', :'v1']"], v0="ct-even", v1="ct-mod7")
+sc, sd = post("SearchCollections", {"filter": "", "query": list_query([], ("tag", "HasAny", "ct-even,ct-mod7")),
+                                    "limit": 0, "with_total": True})
+check(rows, legend, "collections tag:ct-even,ct-mod7", f"{raw_sql} v0=ct-even v1=ct-mod7", raw,
+      {"count_only": sd["meta"]["total"] if sc == 200 else f"http {sc}"}, {"count_only": raw})
+nonvacuous = [r for r in rows if "intentional zero" not in r[0] and "hostile" not in r[0]]
+grid("phase 5a: any-of tags (raw SQL ?| vs endpoint count-only)", ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+grid("phase 5a: the any-of cases above are not vacuous", ("case", "raw SQL", "observed", "expected", "match"),
+     [(r[0], r[1], "non-zero" if int(r[1]) > 0 else "zero", "non-zero", "OK" if int(r[1]) > 0 else "FAIL")
+      for r in nonvacuous])
+
+# rejections: any-of lists the server must refuse
+rows = []
+many = ",".join(f"t{i}" for i in range(17))
+for name, clauses, scope in [
+    ("17 values (max 16)", [("tag", "HasAny", many)], "gallery"),
+    ("empty item a,,b", [("tag", "HasAny", "a,,b")], "gallery"),
+    ("repeated item a,a", [("tag", "HasAny", "a,a")], "gallery"),
+    ("item with a space", [("tag", "HasAny", "a,b c")], "gallery"),
+    ("HasAny on description", [("description", "HasAny", "a,b")], "gallery"),
+]:
+    sc, _ = post(*SCOPES[scope][1](query([], *clauses), limit=0, with_total=True))
+    rows.append((name, "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+sc, _ = post("SearchLibraries", {"filter": "", "query": list_query([], ("tag", "HasAny", "a,b")), "limit": 0, "with_total": True})
+rows.append(("libraries have no tag field", "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+grid("phase 5a: any-of rejections (raw SQL column is '-', expected values are constants)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+
+
+# GetSlugs: the list (value, count) must equal raw SQL over the visible records, in the
+# server's order (count desc, then byte order)
+VIS_M = sql_media_visible().replace("SELECT count(*) FROM media m WHERE ", "")
+
+
+def raw_slugs(kind, prefix, limit):
+    if kind == "Media":
+        frm, vis = "media m, skeys(m.tags) k", VIS_M
+    else:
+        frm, vis = "collections c, skeys(c.tags) k", f"c.gid = '{GID}'"
+    text = (f"SELECT k || '=' || count(*) FROM {frm} WHERE {vis} "
+            f"AND left(lower(k), length(:'p')) = lower(:'p') "
+            f"GROUP BY k ORDER BY count(*) DESC, k COLLATE \"C\" LIMIT {limit}")
+    out = sql(text, p=prefix)
+    return [l for l in out.split("\n") if l], text
+
+
+rows, legend = [], []
+for name, kind, prefix, limit in [
+    ("media tags, all (limit 200)", "Media", "", 200),
+    ("media tags, prefix ct-", "Media", "ct-", 200),
+    ("media tags, prefix CT-MO (case-insensitive)", "Media", "CT-MO", 200),
+    ("media tags, limit 3", "Media", "", 3),
+    ("collection tags, all", "Collection", "", 200),
+    ("hostile prefix %", "Media", "%", 200),
+    ("hostile prefix _", "Media", "_", 200),
+    ("hostile prefix '", "Media", "'", 200),
+    ("hostile prefix \\", "Media", "\\", 200),
+    ("hostile prefix '; DROP TABLE media; --", "Media", "'; DROP TABLE media; --", 200),
+    ("hostile prefix $1", "Collection", "$1", 200),
+]:
+    raw, raw_sql = raw_slugs(kind, prefix, limit)
+    sc, sd = post("GetSlugs", {"kind": kind, "field": "tag", "prefix": prefix, "limit": limit})
+    got = [f"{s['value']}={s['count']}" for s in sd["slugs"]] if sc == 200 else f"http {sc}"
+    check(rows, legend, name, f"{raw_sql} p={prefix!r}", len(raw),
+          {"same_list": got == raw, "n": len(got) if sc == 200 else got},
+          {"same_list": True, "n": len(raw)})
+sc, sd = post("GetSlugs", {"kind": "Media", "field": "type"})
+rows.append(("static: media type (no DB)", "-", kv({"values": [s["value"] for s in sd["slugs"]], "counts": {s["count"] for s in sd["slugs"]}}),
+             kv({"values": ["Image", "Video", "VideoSlice", "Audio"], "counts": {None}}),
+             "OK" if [s["value"] for s in sd["slugs"]] == ["Image", "Video", "VideoSlice", "Audio"] and all(s["count"] is None for s in sd["slugs"]) else "FAIL"))
+sc, sd = post("GetSlugs", {"kind": "Media", "field": "type", "prefix": "vid"})
+rows.append(("static: media type, prefix vid", "-", str([s["value"] for s in sd["slugs"]]), str(["Video", "VideoSlice"]),
+             "OK" if [s["value"] for s in sd["slugs"]] == ["Video", "VideoSlice"] else "FAIL"))
+n_media = one("SELECT count(*) FROM media")
+rows.append(("media table intact after the hostile prefixes", "-", str(n_media), "> 0", "OK" if n_media > 0 else "FAIL"))
+grid("phase 5a: GetSlugs (raw SQL list vs endpoint list)", ("case", "raw SQL rows", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+first = raw_slugs("Media", "", 200)[0]
+grid("phase 5a: GetSlugs is not vacuous", ("case", "raw SQL", "observed", "expected", "match"),
+     [("media tags exist for dev", len(first), "non-zero" if first else "zero", "non-zero", "OK" if first else "FAIL")])
+
+rows = []
+for name, body in [
+    ("description has no values", {"kind": "Media", "field": "description"}),
+    ("date has no values", {"kind": "Media", "field": "date"}),
+    ("unknown field", {"kind": "Media", "field": "colour"}),
+    ("libraries have no tags", {"kind": "Library", "field": "tag"}),
+    ("collection name has no values", {"kind": "Collection", "field": "name"}),
+    ("prefix over 64 bytes", {"kind": "Media", "field": "tag", "prefix": "x" * 65}),
+]:
+    sc, _ = post("GetSlugs", body)
+    rows.append((name, "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+sc, _ = post("GetSlugs", {"kind": "Nope", "field": "tag"})
+rows.append(("unknown kind", "-", f"http {sc}", "http 422", "OK" if sc == 422 else "FAIL"))
+grid("phase 5a: GetSlugs rejections (raw SQL column is '-', expected values are constants)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+
 print(f"\n{'ALL CASES MATCH' if FAILED == 0 else f'{FAILED} CASE(S) FAILED'}")
 sys.exit(1 if FAILED else 0)
 PY
