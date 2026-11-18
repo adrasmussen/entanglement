@@ -45,7 +45,10 @@ const rawTag = v => `m.tags ? :'${v}'`;
 const rawDatePrefix = v => `left(m.date, length(:'${v}')) = :'${v}'`;
 const rawDateRange = (a, b) => `(m.date >= :'${a}' AND (m.date <= :'${b}' OR ${rawDatePrefix(b)}))`;
 const rawType = v => `m.media_type::text = :'${v}'`;
-const rawText = v => `m.ts_vec @@ to_tsquery('english', quote_literal(:'${v}') || ':*')`;
+// a plain word: a prefix, and from 3 characters also anywhere inside the date, description
+// or tags (phase 5b)
+const rawText = v => `(m.ts_vec @@ to_tsquery('english', quote_literal(:'${v}') || ':*') OR ` +
+  `(char_length(:'${v}') >= 3 AND position(lower(:'${v}') in lower(m.date || ' ' || m.note || ' ' || array_to_string(akeys(m.tags), ' '))) > 0))`;
 const media = (...conds) => MEDIA_VISIBLE + conds.map(c => ' AND ' + c).join('');
 
 const lookup = (q, what) => {

@@ -379,8 +379,13 @@ def raw_type(var):
 
 
 def raw_text(*vars_):
-    """plain words of a structured query: each word is a prefix, ORed (phase 4)."""
-    return "m.ts_vec @@ (" + " || ".join(f"to_tsquery('english', quote_literal(:'{v}') || ':*')" for v in vars_) + ")"
+    """plain words of a structured query, ORed: each word is a prefix (phase 4), and a word
+    of 3 or more characters also matches anywhere inside the date, description or tags
+    (phase 5b), written here with position() rather than the server's indexed function."""
+    prefix = "m.ts_vec @@ (" + " || ".join(f"to_tsquery('english', quote_literal(:'{v}') || ':*')" for v in vars_) + ")"
+    text = "lower(m.date || ' ' || m.note || ' ' || array_to_string(akeys(m.tags), ' '))"
+    infix = [f"(char_length(:'{v}') >= 3 AND position(lower(:'{v}') in {text}) > 0)" for v in vars_]
+    return "(" + " OR ".join([prefix] + infix) + ")"
 
 
 def raw_text_whole(*vars_):
@@ -537,10 +542,12 @@ show_legend(legend)
 
 # phase 4: plain words of a structured query match as prefixes.  the seed puts checkpoint /
 # checko / checkpt on counttest items 2001..2003; whole words would match none of them for
-# "check", and "eckp" (inside a word) is a phase 5 pg_trgm case, so it matches nothing yet
+# "check".  since phase 5b a word of 3+ characters also matches inside words, so "eckp"
+# finds checkpoint and checkpt, and "ec" (2 characters) stays prefix-only
 rows, legend = [], []
 for words, expect_nonzero in ((["check"], True), (["checkp"], True), (["checkpoint"], True),
-                              (["lighthou"], True), (["check", "sunse"], True), (["eckp"], False)):
+                              (["lighthou"], True), (["check", "sunse"], True), (["eckp"], True),
+                              (["ECKP"], True)):
     vs = {f"w{i}": w for i, w in enumerate(words)}
     want, raw_sql = count_with(sql_media_visible, [raw_text(*vs)], **vs)
     whole, _ = count_with(sql_media_visible, [raw_text_whole(*vs)], **vs)
@@ -549,7 +556,17 @@ for words, expect_nonzero in ((["check"], True), (["checkp"], True), (["checkpoi
     check(rows, legend, f"text: {' '.join(words)}", raw_sql + " " + kv(vs), want,
           {"count_only": got, "nonzero": (got or 0) > 0 if isinstance(got, int) else None, "whole_word_count": whole},
           {"count_only": want, "nonzero": expect_nonzero, "whole_word_count": whole})
-grid("phase 4: plain words match as prefixes (raw SQL uses 'word':*)",
+# a 2-character word stays a prefix: the endpoint equals the prefix-only count, although
+# matching inside words would find more (proving the rule, not just a zero)
+vs = {"w0": "ec"}
+prefix_only, raw_sql = count_with(sql_media_visible, ["m.ts_vec @@ to_tsquery('english', quote_literal(:'w0') || ':*')"], **vs)
+would_be, _ = count_with(sql_media_visible, ["position(:'w0' in lower(m.date || ' ' || m.note || ' ' || array_to_string(akeys(m.tags), ' '))) > 0"], **vs)
+code, d = post("SearchMedia", {"opts": opts(filt=query(["ec"]), limit=0, with_total=True)})
+got = d["meta"]["total"] if code == 200 else f"http {code}"
+check(rows, legend, "text: ec (2 chars, prefix only)", raw_sql + " w0=ec", prefix_only,
+      {"count_only": got, "inside_words_would_find_more": would_be > prefix_only},
+      {"count_only": prefix_only, "inside_words_would_find_more": True})
+grid("phase 4/5b: plain words match as prefixes, and inside words from 3 characters",
      ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 show_legend(legend)
 
@@ -981,6 +998,117 @@ sc, _ = post("GetSlugs", {"kind": "Nope", "field": "tag"})
 rows.append(("unknown kind", "-", f"http {sc}", "http 422", "OK" if sc == 422 else "FAIL"))
 grid("phase 5a: GetSlugs rejections (raw SQL column is '-', expected values are constants)",
      ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+
+# ---- phase 5b: name: (the file name only) ----
+
+def raw_name(var):
+    """the last path segment, written with regexp_replace rather than the server's substring()."""
+    return f"position(lower(:'{var}') in lower(regexp_replace(m.path, '^.*/', ''))) > 0"
+
+
+rows, legend = [], []
+for name, value, nonzero in [
+    ("name:ct_0001 (10 files)", "ct_0001", True),
+    ("name:CT_00012 (case)", "CT_00012", True),
+    ("name:.jpg (every seeded file)", ".jpg", True),
+    ("name:counttest (a folder, not a file name: zero)", "counttest", False),
+    ("name:/ (never in a file name: zero)", "/", False),
+    ("hostile name:%_'", "%_'", False),
+]:
+    raw, raw_sql = count_with(sql_media_visible, [raw_name("v0")], v0=value)
+    folder, _ = count_with(sql_media_visible, ["position(lower(:'v0') in lower(m.path)) > 0"], v0=value)
+    sc, sd = post("SearchMedia", {"opts": opts(filt=query([], ("name", "Contains", value)), limit=0, with_total=True)})
+    check(rows, legend, name, f"{raw_sql} v0={value!r}", raw,
+          {"count_only": sd["meta"]["total"] if sc == 200 else f"http {sc}", "nonzero": raw > 0},
+          {"count_only": raw, "nonzero": nonzero})
+    if value == "counttest":
+        check(rows, legend, "  ...though the full path does contain it", "position in m.path", folder,
+              {"path_matches": folder > 0}, {"path_matches": True})
+grid("phase 5b: name: matches the file name, not the folders (raw SQL vs endpoint)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+
+# ---- phase 5b: OmniSearch, every group against raw SQL and against its local page ----
+
+def omni(text, **kw):
+    sc, d = post("OmniSearch", {"query": text, **kw})
+    return sc, ({g["kind"]: g for g in d["groups"]} if sc == 200 else d)
+
+
+def hit_ids(g):
+    return [list(h["id"].values())[0] for h in g["hits"]]
+
+
+rows, legend = [], []
+# (case, text, raw media conds, raw collection conds, raw library conds, vars); None = not applicable
+OMNI = [
+    ("words: lighthouse", "lighthouse", [raw_text("w0")], [c_text("w0")], [l_text("w0")], {"w0": "lighthouse"}),
+    ("words inside words: eckp", "eckp", [raw_text("w0")], [c_text("w0")], [l_text("w0")], {"w0": "eckp"}),
+    ("words: c03 (collections)", "c03", [raw_text("w0")], [c_text("w0")], [l_text("w0")], {"w0": "c03"}),
+    ("tag:ct-mod7 sunset (libraries n/a)", "tag:ct-mod7 sunset", [raw_tag("v0"), raw_text("w0")],
+     [c_tag("v0"), c_text("w0")], None, {"v0": "ct-mod7", "w0": "sunset"}),
+    ("path:counttest (media, collections n/a)", "path:counttest", None, None, [l_path("v0")], {"v0": "counttest"}),
+    ("name:ct_0001 (media only)", "name:ct_0001", [raw_name("v0")], None, None, {"v0": "ct_0001"}),
+    ("hostile: '; DROP TABLE media; --", "'; DROP TABLE media; --",
+     [raw_text("w0", "w1", "w2", "w3", "w4")], [c_text("w0", "w1", "w2", "w3", "w4")], [l_text("w0", "w1", "w2", "w3", "w4")],
+     {"w0": "';", "w1": "DROP", "w2": "TABLE", "w3": "media;", "w4": "--"}),
+]
+for name, text, mc, cc, lc, vars_ in OMNI:
+    sc, groups = omni(text, per_group=5)
+    if sc != 200:
+        rows.append((name, "-", f"http {sc}", "http 200", "FAIL"))
+        continue
+    obs, exp = {}, {}
+    for kind, conds, counter in [("Media", mc, lambda c: count_with(sql_media_visible, c, **vars_)),
+                                 ("Collection", cc, lambda c: count_collections(c, **vars_)),
+                                 ("Library", lc, lambda c: count_libraries(c, **vars_))]:
+        g = groups[kind]
+        if conds is None:
+            obs[kind] = "n/a" if "NotApplicable" in g["status"] else f"status {g['status']}"
+            exp[kind] = "n/a"
+            continue
+        raw, raw_sql = counter(conds)
+        legend.append((f"{name} [{kind}]", " ".join(raw_sql.split()) + " " + kv(vars_)))
+        obs[kind] = f"{g['meta']['total']}/{len(g['hits'])}"
+        exp[kind] = f"{raw}/{min(raw, 5)}"
+    rows.append((name, "-", kv(obs), kv(exp), "OK" if obs == exp else "FAIL"))
+grid("phase 5b: OmniSearch totals/hits per group vs raw SQL (n/a = NotApplicable)",
+     ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
+show_legend(legend)
+
+# the hits are the first rows of each class's local page for the same query, in its order,
+# titled from the records themselves
+rows = []
+sc, groups = omni("tag:ct-mod7 sunset", per_group=5)
+q_ = query(["sunset"], ("tag", "Has", "ct-mod7"))
+ls, ld = post("SearchMedia", {"opts": opts(filt=q_, limit=5)})
+mg = groups["Media"]
+rows.append(("media hits = first 5 of SearchMedia (DateDesc)", "-", str(hit_ids(mg) == ld["media"]), "True",
+             "OK" if hit_ids(mg) == ld["media"] else "FAIL"))
+titles_ok = all(h["title"] == sql(f"SELECT regexp_replace(path, '^.*/', '') FROM media WHERE media_uuid = '{list(h['id'].values())[0]}'")
+                for h in mg["hits"])
+rows.append(("media hit titles are the file names", "SELECT regexp_replace(path, ...)", str(titles_ok), "True", "OK" if titles_ok else "FAIL"))
+lc_, cd = post("SearchCollections", {"filter": "", "query": list_query(["sunset"], ("tag", "Has", "ct-mod7")), "limit": 5})
+cg = groups["Collection"]
+rows.append(("collection hits = first 5 of SearchCollections", "-", str(hit_ids(cg) == cd["collections"]), "True",
+             "OK" if hit_ids(cg) == cd["collections"] else "FAIL"))
+nonvac = mg["meta"]["total"] > 0 and cg["meta"]["total"] > 0
+rows.append(("the hit comparisons are not vacuous", "-", str(nonvac), "True", "OK" if nonvac else "FAIL"))
+sc, groups = omni("lighthouse", kinds=["Library", "Media"], per_group=1000)
+got = list(groups) if sc == 200 else f"http {sc}"
+rows.append(("kinds [Library, Media] -> provider order", "-", str(got), str(["Media", "Library"]),
+             "OK" if got == ["Media", "Library"] else "FAIL"))
+lim = groups["Media"]["meta"]["limit"] if sc == 200 else None
+rows.append(("per_group 1000 is clamped to 20", "-", str(lim), "20", "OK" if lim == 20 else "FAIL"))
+sc, _ = post("OmniSearch", {"query": "x" * 257})
+rows.append(("a query over 256 bytes", "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+sc, groups = omni("")
+ok = sc == 200 and all(g["status"] == "Ok" for g in groups.values()) and groups["Media"]["meta"]["total"] == one(sql_media_visible())
+rows.append(("an empty query lists every class (media total = all visible)", sql_media_visible(), str(ok), "True", "OK" if ok else "FAIL"))
+n_media = one("SELECT count(*) FROM media")
+rows.append(("media table intact after the hostile query", "-", str(n_media), "> 0", "OK" if n_media > 0 else "FAIL"))
+grid("phase 5b: OmniSearch hits, kinds, limits and rejections", ("case", "raw SQL", "endpoint(s)", "expected", "match"), rows)
 
 print(f"\n{'ALL CASES MATCH' if FAILED == 0 else f'{FAILED} CASE(S) FAILED'}")
 sys.exit(1 if FAILED else 0)

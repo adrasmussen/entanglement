@@ -302,6 +302,57 @@ cases.append(["SearchCollections tag:ct-rbac-foreign-coll,ct-rbac-bridge (any of
               int(C_OTHER in (d or {}).get("collections", []))])
 grid("GetSlugs (expected = raw SQL over dev-visible records)", cases)
 
+# --- phase 5b: matching inside words, name:, and OmniSearch -------------------------
+# the foreign records carry 'lighthouse' in their notes, ct-rbac-foreign-only in their tags
+# and rbac_ in their file names; dev sees only the bridged ones
+cases = []
+TXT = "lower(m.date || ' ' || m.note || ' ' || array_to_string(akeys(m.tags), ' '))"
+for label, text in [("inside a word: ighthous", "ighthous"),
+                    ("inside a foreign-only tag: eign-onl", "eign-onl")]:
+    code, d = call("SearchMedia", {"opts": opts(q(text=[text]))})
+    cases.append([f"SearchMedia words {label}", raw_count(f"position('{text}' in {TXT}) > 0"),
+                  (d or {}).get("meta", {}).get("total", f"http {code}"), leaked((d or {}).get("media", []))])
+code, d = call("SearchMedia", {"opts": opts(q(clauses=[("name", "Contains", "rbac_")]))})
+cases.append(["SearchMedia name:rbac_ (foreign file names)",
+              raw_count("position('rbac_' in regexp_replace(m.path, '^.*/', '')) > 0"),
+              (d or {}).get("meta", {}).get("total", f"http {code}"), leaked((d or {}).get("media", []))])
+unfiltered = int(psql(f"SELECT count(*) FROM media m WHERE position('eign-onl' in {TXT}) > 0"))
+cases.append(["(the foreign-only infix exists unfiltered: non-zero)", "non-zero",
+              "non-zero" if unfiltered > 0 else "zero", 0])
+
+
+def omni_groups(text, **kw):
+    code, d = call("OmniSearch", {"query": text, **kw})
+    return code, {g["kind"]: g for g in (d or {}).get("groups", [])}
+
+
+def hit_ids(g):
+    return [list(h["id"].values())[0] for h in g.get("hits", [])]
+
+
+for text in ("lighthouse", "rbac", "ct-rbac-secret", "tag:ct-rbac-secret", "name:rbac_", "eign-onl"):
+    code, groups = omni_groups(text, per_group=20)
+    mi, ci, li = (hit_ids(groups.get(k, {})) for k in ("Media", "Collection", "Library"))
+    cases.append([f"OmniSearch {text!r} (http {code}): foreign-only media among hits", 0,
+                  len(set(mi) & NEVER), len(set(mi) & NEVER)])
+    cases.append([f"OmniSearch {text!r}: foreign collection / library among hits", "False/False",
+                  f"{C_OTHER in ci}/{L_OTHER in li}", int(C_OTHER in ci) + int(L_OTHER in li)])
+
+# totals over visible records only
+LIGHT = f"(m.ts_vec @@ to_tsquery('english', quote_literal('lighthouse') || ':*') OR position('lighthouse' in {TXT}) > 0)"
+code, groups = omni_groups("lighthouse")
+cases.append(["OmniSearch lighthouse: media total = visible raw SQL", raw_count(LIGHT),
+              groups.get("Media", {}).get("meta", {}).get("total"), 0])
+cases.append(["OmniSearch lighthouse: collection total = devgroup raw SQL", coll_raw("name ILIKE '%lighthouse%'"),
+              groups.get("Collection", {}).get("meta", {}).get("total"), 0])
+code, groups = omni_groups("eign-onl")
+cases.append(["OmniSearch eign-onl: media total (foreign-only infix) = visible raw SQL",
+              raw_count(f"position('eign-onl' in {TXT}) > 0"), groups.get("Media", {}).get("meta", {}).get("total"), 0])
+code, groups = omni_groups("rbac")
+cases.append(["OmniSearch rbac: library total = devgroup raw SQL", lib_raw("path ILIKE '%rbac%'"),
+              groups.get("Library", {}).get("meta", {}).get("total"), int(L_OTHER in hit_ids(groups.get("Library", {})))])
+grid("phase 5b: inside-word matching, name: and OmniSearch (expected = raw SQL over visible records)", cases)
+
 # --- writes (each checked against the database afterwards) ----------------------------
 cases = []
 before = psql(f"SELECT note FROM media WHERE media_uuid = '{F_PLAIN}'")
