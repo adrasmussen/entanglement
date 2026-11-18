@@ -101,6 +101,7 @@ Some scripts arrive with later branches of the search/paging stack (PR #8 and th
 ## Pitfalls seen before
 - The server speaks HTTP/2 only: use curl or Playwright, not Python urllib. Retry on curl exit 16.
 - `docker/dev-certs/` is gitignored. Run scripts from the main checkout, or symlink the certs into a worktree. Never copy the keys around.
+- Browser access needs the client cert imported: `client.p12` into the macOS keychain, `client-modern.p12` into Firefox (it rejects the legacy cipher of `client.p12` as a wrong password). Playwright needs neither: it takes `clientCertificates` directly. Its `ignoreHTTPSErrors: true` stays, because Playwright's client-cert proxy verifies the server with Node's CA list, not the dev CA.
 - Seeded counttest media have no files. Use media with real files (e.g. `type:Image` on the gallery, or the `pagetest`/`bulktest` libraries) when a check depends on images loading.
 - `prevent_default()` in a Dioxus `onsubmit` reloads the page (see `CLAUDE.md`). A Playwright `framenavigated` to `?<input name>=…` is the tell.
 - A full Docker disk breaks Postgres writes ("No space left on device"). Check `docker system df` and prune the build cache.

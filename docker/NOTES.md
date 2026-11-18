@@ -30,7 +30,7 @@ itself) vs. things that are just properties of the **local tooling** we built.
 - **What we did instead**: switched to `authn_backend = "x509cert"` (mTLS), which
   *is* fully wired up (`cert_auth` in `server/src/http/auth.rs`), and generate a
   throwaway client cert (`docker/certgen/generate.sh`, CN=`dev`) for local
-  testing. No application source was changed.
+  testing (see "Dev certificates" below). No application source was changed.
 - **If this should be fixed upstream** (not attempted here, out of scope for a
   local-dev setup task): either (a) finish `_password_auth`/`_authorize` and wire
   it into `server/src/http/svc.rs`'s middleware selection, plus build a login
@@ -39,6 +39,53 @@ itself) vs. things that are just properties of the **local tooling** we built.
   `_password_auth`/`_authorize` code and the `TomlFile` variant from
   `AuthnBackend` so the config schema doesn't advertise a backend that can't
   actually authenticate anyone over HTTP.
+
+## Dev certificates
+
+`docker/certgen/generate.sh` runs as the one-shot `certgen` service before
+postgres and the server, and writes everything into the gitignored
+`docker/dev-certs/`. It is idempotent: each file is generated only when missing,
+with two exceptions (below). Setup for humans is QUICKSTART steps 6–7;
+`docker/devtest/cert_check.sh` verifies all of this.
+
+- **The CA is name-constrained** (a critical `nameConstraints` extension) to
+  `localhost`, `127.0.0.1`, `::1` and the compose service names `server` and
+  `postgres`, with `pathlen:0`. That makes it safe to trust in a browser or the
+  macOS keychain: a certificate it signs for any other name is rejected by
+  browsers, macOS and OpenSSL ("permitted subtree violation"), even if `ca.key`
+  leaks. Adding a hostname means adding it to both `SERVER_SAN` and
+  `NAME_CONSTRAINTS` in the script, then regenerating (README).
+- **The server cert follows the rules browsers apply even to a locally trusted
+  CA.** macOS rejects TLS server certs valid for more than 825 days or without
+  the `serverAuth` extended key usage ("not standards compliant"), however the
+  CA is trusted. The server cert is valid for 397 days, has `serverAuth`,
+  `CA:FALSE` and SANs for every name above. `certgen` reissues it from the same
+  CA when it is within 30 days of expiry (exception 1); restart postgres and the
+  server to serve it. The CA itself lasts 10 years, so it is trusted once.
+- **Old certificates are retired automatically** (exception 2). Checkouts from
+  before the constrained CA had an unconstrained one with a 10-year server cert,
+  which browsers rejected even when trusted. If `ca.crt` has no name
+  constraints, `certgen` moves every cert, key and bundle into
+  `docker/dev-certs/legacy-<timestamp>/` and generates a fresh set, so the old
+  keychain items can still be found by fingerprint to delete them.
+- **Two client bundles, one identity.** `client.p12` is exported with the
+  legacy RC2-40 cipher for the macOS keychain (older macOS can't import modern
+  PKCS#12). **Current Firefox rejects that cipher and reports it as a wrong
+  password**, so `client-modern.p12` holds the same certificate and key with
+  AES-256 / PBKDF2 / a SHA-256 MAC for Firefox. Both use
+  `ENTG_CLIENT_P12_PASSWORD`. Both also carry `ca.crt`, so importing one into
+  Firefox adds the CA under Authorities *untrusted for websites*; importing
+  `ca.crt` afterwards says "already installed", and the fix is **Edit Trust…**
+  on the existing entry.
+- **Containers trust the CA too.** `docker/entrypoint.sh` installs `ca.crt` into
+  the server container's OS trust store, because the server's Postgres TLS
+  connection verifies against that store (see below). `postgres` is within the
+  name constraints, so that keeps working.
+- **Things that bit us during the upgrade** (2026-11-18): keychain commands with
+  relative paths (`docker/dev-certs/...`, `.env`) silently find nothing outside
+  the repo root, so `security delete-*` reports no match and `security import`
+  fails on an empty password; and Firefox keeps a per-site "accept the risk"
+  exception (Servers tab) and its client cert choice until restarted.
 
 ## Local tooling gotchas (docker/ files in this repo, not the app)
 

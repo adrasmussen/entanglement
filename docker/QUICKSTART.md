@@ -60,8 +60,11 @@ docker compose up -d certgen postgres
 docker compose up -d server
 ```
 
-`certgen` generates a throwaway dev CA + server cert + client cert (CN=`dev`)
-into `docker/dev-certs/` (gitignored, regenerated per-machine). `postgres`
+`certgen` generates a throwaway, name-constrained dev CA, a server cert and a
+client cert (CN=`dev`) with two import bundles (`client.p12` for the macOS
+keychain, `client-modern.p12` for Firefox) into `docker/dev-certs/` (gitignored,
+per-machine). The README table and `docker/NOTES.md` "Dev certificates" explain
+each file. `postgres`
 applies `db/schema.sql` on first boot. Check `docker compose logs server` for
 `startup complete!` with no panics.
 
@@ -147,13 +150,13 @@ LIBRARY_UUID=$(docker exec entanglement-postgres-1 psql -U entanglement -d entan
   -t -A -c "SELECT library_uuid FROM libraries WHERE path = 'testlib';")
 
 # 4. trigger a scan
-curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
+curl -s --cacert docker/dev-certs/ca.crt --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
   -X POST https://127.0.0.1:8444/entanglement/api/StartTask \
   -H "Content-Type: application/json" \
   -d "{\"library_uuid\":\"$LIBRARY_UUID\",\"task_type\":\"ScanLibrary\"}"
 
 # 5. check what got indexed
-curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
+curl -s --cacert docker/dev-certs/ca.crt --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
   -X POST https://127.0.0.1:8444/entanglement/api/SearchMediaInLibrary \
   -H "Content-Type: application/json" \
   -d "{\"library_uuid\":\"$LIBRARY_UUID\",\"hidden\":null,\"opts\":{\"filter\":{\"SubstringAny\":{\"filter\":[]}},\"order\":\"DateDesc\",\"limit\":null,\"offset\":0}}"
@@ -166,8 +169,18 @@ inside the container yet — go back to the restart step. Check
 ## 6. Import the client certificate
 
 The app uses mutual TLS: identity comes from a client certificate, not a
-password (see `docker/NOTES.md`). Your browser needs `docker/dev-certs/client.p12`
-(password: `ENTG_CLIENT_P12_PASSWORD` from `.env`) imported before `https://127.0.0.1:8444` will work.
+password (see `docker/NOTES.md`). Your browser needs the client certificate
+imported before `https://127.0.0.1:8444` will work. There are two bundles of the
+same certificate, both with the password `ENTG_CLIENT_P12_PASSWORD` from `.env`:
+
+| bundle | for | why |
+|---|---|---|
+| `docker/dev-certs/client.p12` | the macOS keychain (Safari, Chrome) | legacy RC2-40 encryption, which older macOS needs |
+| `docker/dev-certs/client-modern.p12` | Firefox | AES-256; current Firefox rejects the legacy one as a "wrong password" |
+
+Run the commands below **from the repo root**: their paths (`docker/dev-certs/…`,
+`.env`) are relative, and elsewhere they fail quietly (an empty password, or
+"no matching item").
 
 **macOS** — import into your login keychain so Safari/Chrome can present it:
 
@@ -185,10 +198,13 @@ security import docker/dev-certs/client.p12 \
 - The first time a site requests it, macOS may still prompt you to allow the
   browser to access the keychain item — click "Always Allow".
 - If you get "SecKeychainItemImport: The specified data is either damaged or
-  wasn't in the correct format", double check the `-P` password matches
-  `ENTG_CLIENT_P12_PASSWORD` in `.env`. If you changed that value after
-  `client.p12` was generated, delete `docker/dev-certs/client.p12` and run
-  `docker compose up certgen` to re-export it with the new password.
+  wasn't in the correct format", the password was wrong or empty: check you are
+  in the repo root (so `.env` is found) and that it matches
+  `ENTG_CLIENT_P12_PASSWORD`. If you changed that value after the bundles were
+  generated, delete `docker/dev-certs/client.p12` and `client-modern.p12` and
+  run `docker compose up certgen` to re-export them with the new password.
+- Check the import with `security find-identity | grep '"dev"'`: there should
+  be exactly one, issued by `entanglement-dev-ca (localhost only)`.
 
 **Firefox** doesn't use the macOS keychain — import manually instead:
 Settings → Privacy & Security → Certificates → View Certificates →
@@ -202,10 +218,11 @@ Importing the client certificate also adds the dev CA to Firefox's
 "Authorities" tab, untrusted for websites, so importing `ca.crt` there (step 7)
 reports it as already installed: select it and use **Edit Trust…** instead.
 
-**Skip the browser entirely** and just hit the API with curl:
+**Skip the browser entirely** and just hit the API with curl. `--cacert`
+verifies the server against the dev CA, so no `-k` is needed:
 
 ```sh
-curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
+curl -s --cacert docker/dev-certs/ca.crt --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
   -X POST https://127.0.0.1:8444/entanglement/api/SearchLibraries \
   -H "Content-Type: application/json" -d '{"filter":""}'
 ```
@@ -244,9 +261,12 @@ When the browser asks for a client certificate, pick the one with CN `dev`.
 had an unconstrained CA that browsers rejected even when trusted. The next
 `docker compose up` retires those certs into `docker/dev-certs/legacy-<timestamp>/`
 and generates new ones. Then remove the old keychain items, re-import the new
-`client.p12` (step 6), trust the new CA (above), and restart the browser:
+`client.p12` (step 6), trust the new CA (above), and restart the browser.
+In Firefox, delete the old `dev` certificate, the old `entanglement-dev-ca`
+authority and any Servers exception, then import `client-modern.p12`.
 
-Run these from the repo root (the paths are relative):
+Run these from the repo root (the paths are relative); each removes the old
+item by its exact fingerprint, so the new certificates are untouched:
 
 ```sh
 cd /path/to/entanglement
