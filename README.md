@@ -40,7 +40,7 @@ you need it there (see QUICKSTART step 6).
 
 ### Regenerating all dev certificates (CA, server, client)
 
-Do this if the certs expire, leak, or need different hostnames. It replaces the
+Do this if the certs leak or need different hostnames. Expiry is handled for you: `docker compose up` reissues the server cert from the same CA when it nears expiry. It replaces the
 dev CA, so every old certificate stops being trusted.
 
 ```sh
@@ -55,9 +55,8 @@ Afterwards:
    identity. On macOS, use Keychain Access (search "dev") or
    `security delete-identity -c dev`. Then re-import the new
    `docker/dev-certs/client.p12` with `ENTG_CLIENT_P12_PASSWORD`.
-2. **Trusted dev CA:** if you trusted the old CA system-wide (optional
-   QUICKSTART step 7), remove it from the System keychain and trust the new
-   `docker/dev-certs/ca.crt` instead.
+2. **Trusted dev CA:** remove the old CA from your keychain and trust the new
+   `docker/dev-certs/ca.crt` (QUICKSTART step 7).
 3. **pgAdmin and other GUI clients:** if they use `sslmode=verify-ca`, point
    them at the new `ca.crt`. With `sslmode=require` nothing changes.
 

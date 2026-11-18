@@ -203,22 +203,45 @@ curl -sk --cert docker/dev-certs/client.crt --key docker/dev-certs/client.key \
   -H "Content-Type: application/json" -d '{"filter":""}'
 ```
 
-## 7. Open the app
+## 7. Trust the dev CA and open the app
 
-Visit `https://127.0.0.1:8444/entanglement/app`. The server's own TLS cert is
-self-signed (separate from the client cert above), so your browser will warn
-about it — click through ("Advanced" → "Proceed"). If you'd rather not see
-that warning at all, trust the dev CA system-wide (optional, more invasive —
-this affects every app on your machine that consults the system trust store,
-so only do it if that tradeoff is fine for you):
+The server's TLS cert is signed by the dev CA that `certgen` made. Trust that CA
+once and the browser stops warning:
 
 ```sh
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain docker/dev-certs/ca.crt
+# login keychain, SSL only; macOS asks for your password in a dialog
+security add-trusted-cert -r trustRoot -p ssl \
+  -k ~/Library/Keychains/login.keychain-db docker/dev-certs/ca.crt
 ```
 
-When your browser is prompted for a client certificate, pick the one with
-subject `entanglement-dev` / CN `dev`.
+**Firefox** keeps its own store: Settings → Privacy & Security → Certificates →
+View Certificates → "Authorities" → Import → `docker/dev-certs/ca.crt` → tick
+"Trust this CA to identify websites".
+
+This is safe to trust because the CA is **name-constrained**: it can only vouch
+for `localhost`, `127.0.0.1`, `::1` and the compose service names (`server`,
+`postgres`). A certificate it signs for any other site is rejected by the
+browser, even if `ca.key` leaks. The server cert is valid for 397 days, and
+`docker compose up` reissues it from the same CA when it is within 30 days of
+expiry (then `docker compose restart postgres server` to serve it), so you only
+trust the CA once.
+
+Then visit `https://127.0.0.1:8444/entanglement/app` (or `https://localhost:8444/...`).
+When the browser asks for a client certificate, pick the one with CN `dev`.
+
+**Upgrading from the old dev certs:** checkouts from before the constrained CA
+had an unconstrained CA that browsers rejected even when trusted. The next
+`docker compose up` retires those certs into `docker/dev-certs/legacy-<timestamp>/`
+and generates new ones. Then remove the old keychain items, re-import the new
+`client.p12` (step 6), trust the new CA (above), and restart the browser:
+
+```sh
+L=$(ls -d docker/dev-certs/legacy-* | tail -1)
+security delete-identity -Z "$(openssl x509 -in $L/client.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+security delete-certificate -Z "$(openssl x509 -in $L/ca.crt -noout -fingerprint -sha1 | cut -d= -f2 | tr -d :)"
+```
+
+Once the new certs work, you can delete the `legacy-*` folder.
 
 ## Inspecting the database
 
