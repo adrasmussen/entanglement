@@ -111,6 +111,40 @@ function parseHeading(t) {
   await sleep(200);
   check('a click outside the panel closes it', '-', await isOpen(), false);
 
+  // ---- the header's search box, on every kind of page
+  const firstMedia = sql(`SELECT media_uuid FROM media m WHERE NOT hidden AND EXISTS (SELECT 1 FROM libraries l
+      WHERE l.library_uuid = m.library_uuid AND l.gid = 'devgroup') ORDER BY media_uuid LIMIT 1`);
+  for (const [label, url, ready] of [
+    ['gallery', '/gallery', '[data-testid=query-input]'],
+    ['collections', '/collections', '[data-testid=query-input]'],
+    ['libraries', '/library', '[data-testid=query-input]'],
+    ['a media page', '/gallery/' + firstMedia, '[data-testid=header-search]'],
+  ]) {
+    await page.goto(BASE + url);
+    await page.waitForSelector(ready);
+    await page.waitForSelector('[data-testid=header-search]');
+    await sleep(500);
+    await page.click('[data-testid=header-search]');
+    await page.waitForSelector('[data-testid=palette-input]', { timeout: 5000 }).catch(() => null);
+    check(`header search on ${label}: a click opens the palette, box focused`, '-',
+      await page.evaluate(() => document.activeElement && document.activeElement.dataset.testid), 'palette-input');
+    await page.keyboard.press('Escape');
+    await sleep(200);
+  }
+  const mac = await page.evaluate(() => /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || ''));
+  check(`header search's placeholder names this platform's shortcut (${mac ? 'Mac' : 'not Mac'})`, '-',
+    (await page.textContent('[data-testid=header-search]')).trim(), mac ? '⌘K to search' : 'Ctrl+K to search');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sleep(300);
+  check('phone: the header search is a magnifier inside the viewport', '-', await page.evaluate(() => {
+    const b = document.querySelector('[data-testid=header-search]').getBoundingClientRect();
+    const t = document.querySelector('.header-search-text').getBoundingClientRect();
+    return { inside: b.left >= 0 && b.right <= window.innerWidth && b.width > 0, text_hidden: t.width === 0 };
+  }), { inside: true, text_hidden: true });
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/header_390.png` });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/header_1440.png` });
+
   // ---- grouped results vs raw SQL; libraries have no tag: field
   await openPalette();
   await search('tag:ct-mod7 sunset');
@@ -206,6 +240,9 @@ function parseHeading(t) {
   await page.keyboard.press('Control+k');
   await sleep(300);
   check('the shortcut does nothing while a modal is open', '-', await isOpen(), false);
+  await page.click('[data-testid=header-search]', { force: true, timeout: 2000 }).catch(() => null);
+  await sleep(300);
+  check('the header search does nothing while a modal is open', '-', await isOpen(), false);
 
   check('no page errors', '-', errors, []);
   await browser.close();

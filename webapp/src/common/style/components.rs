@@ -997,6 +997,36 @@ body:has(.modal-overlay) {
 
 .filter-builder-error { margin-top: var(--space-2); color: var(--error); font-size: 0.875rem; }
 
+/* the header's search box: opens the palette.  sits between the logo and the nav links */
+.header-search {
+  flex: 1 1 auto;
+  max-width: 360px;
+  min-width: 0;
+  margin: 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  background-color: var(--neutral-50);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: text;
+  text-align: left;
+  transition: border-color var(--transition-fast) var(--easing-standard),
+              background-color var(--transition-fast) var(--easing-standard);
+}
+.header-search:hover { border-color: var(--neutral-300); background-color: var(--surface); }
+.header-search:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.header-search-icon { flex: none; }
+.header-search-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 768px) {
+  .header-search { flex: none; margin: 0 var(--space-2); padding: var(--space-2); cursor: pointer; }
+  .header-search-text { display: none; }
+}
+
 /* the ⌘K search palette (components/palette.rs): a panel near the top of the screen with
    the box, a hint line and grouped results; the active row follows the arrow keys */
 .palette-overlay {

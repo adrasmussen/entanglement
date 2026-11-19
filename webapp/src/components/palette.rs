@@ -78,6 +78,54 @@ fn close() {
     *PALETTE_OPEN.write() = false;
 }
 
+// the shortcut as the platform writes it
+const IS_MAC_JS: &str = r#"return /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || "");"#;
+
+pub fn shortcut_label(mac: bool) -> &'static str {
+    if mac { "\u{2318}K" } else { "Ctrl+K" }
+}
+
+// the header's search box: a button that looks like one and opens the palette, so the palette's
+// input stays the only place to type.  on a phone it shrinks to the magnifier
+#[component]
+pub fn HeaderSearch() -> Element {
+    let mut mac = use_signal(|| true);
+    use_hook(|| {
+        spawn(async move {
+            if let Ok(v) = document::eval(IS_MAC_JS).await {
+                mac.set(v.as_bool().unwrap_or(true));
+            }
+        });
+    });
+    let keys = shortcut_label(mac());
+
+    rsx! {
+        button {
+            class: "header-search",
+            r#type: "button",
+            "data-testid": "header-search",
+            "aria-label": "Search everything ({keys})",
+            "aria-keyshortcuts": "Meta+K Control+K",
+            "aria-haspopup": "dialog",
+            onclick: move |_| *PALETTE_OPEN.write() = true,
+            svg {
+                class: "header-search-icon",
+                view_box: "0 0 24 24",
+                width: "16",
+                height: "16",
+                fill: "none",
+                stroke: "currentColor",
+                stroke_width: "2",
+                stroke_linecap: "round",
+                "aria-hidden": "true",
+                circle { cx: "11", cy: "11", r: "7" }
+                line { x1: "16.5", y1: "16.5", x2: "21", y2: "21" }
+            }
+            span { class: "header-search-text", "{keys} to search" }
+        }
+    }
+}
+
 #[component]
 fn PalettePanel() -> Element {
     let mut text = use_signal(String::new);

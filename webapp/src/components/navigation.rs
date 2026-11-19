@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::palette::SearchPalette;
+use crate::components::palette::{HeaderSearch, SearchPalette};
 use dioxus_router::prelude::*;
 
 use crate::Route;
@@ -55,6 +55,8 @@ fn NavBarInner() -> Element {
                         span { style: "font-weight: 600; font-size: 1.25rem;", "Entanglement" }
                     }
                 }
+
+                HeaderSearch {}
 
                 nav { class: "nav-links",
                     NavBarButton {
