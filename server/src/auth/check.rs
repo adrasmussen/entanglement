@@ -151,9 +151,10 @@ pub trait AuthCheck: ESInner + Debug {
             )
             .await?;
 
-        let comment = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
+        // an unknown id is answered like a forbidden one, so callers can't probe which exist
+        let Some(comment) = rx.await?? else {
+            return Ok(false);
+        };
 
         self.can_access_media(uid, &comment.media_uuid).await
     }
@@ -173,9 +174,10 @@ pub trait AuthCheck: ESInner + Debug {
             )
             .await?;
 
-        let comment = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown comment_uuid"))?;
+        // an unknown id is answered like a forbidden one, so callers can't probe which exist
+        let Some(comment) = rx.await?? else {
+            return Ok(false);
+        };
 
         Ok(uid == comment.uid)
     }
@@ -199,9 +201,10 @@ pub trait AuthCheck: ESInner + Debug {
             )
             .await?;
 
-        let collection = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
+        // an unknown id is answered like a forbidden one, so callers can't probe which exist
+        let Some(collection) = rx.await?? else {
+            return Ok(false);
+        };
 
         self.is_group_member(uid, HashSet::from([collection.gid]))
             .await
@@ -222,9 +225,10 @@ pub trait AuthCheck: ESInner + Debug {
             )
             .await?;
 
-        let collection = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown collection_uuid"))?;
+        // an unknown id is answered like a forbidden one, so callers can't probe which exist
+        let Some(collection) = rx.await?? else {
+            return Ok(false);
+        };
 
         Ok(uid == collection.uid)
     }
@@ -244,9 +248,10 @@ pub trait AuthCheck: ESInner + Debug {
             )
             .await?;
 
-        let library = rx
-            .await??
-            .ok_or_else(|| anyhow::Error::msg("unknown library_uuid"))?;
+        // an unknown id is answered like a forbidden one, so callers can't probe which exist
+        let Some(library) = rx.await?? else {
+            return Ok(false);
+        };
 
         self.is_group_member(uid, HashSet::from([library.gid]))
             .await

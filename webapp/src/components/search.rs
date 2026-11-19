@@ -29,6 +29,7 @@ pub fn CompactSearchBar(props: CompactSearchBarProps) -> Element {
                         r#type: "text",
                         name: "search_filter",
                         value: "{search_signal()}",
+                        maxlength: "{api::query::MAX_FILTER_CHARS}",
                         placeholder: "{placeholder}",
                         style: "flex: 1;",
                     }

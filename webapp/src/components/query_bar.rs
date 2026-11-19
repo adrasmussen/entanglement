@@ -251,6 +251,7 @@ pub fn QueryBar<C: SearchClass + 'static>(props: QueryBarProps<C>) -> Element {
                         placeholder: "{placeholder}",
                         title: "{placeholder}",
                         "data-testid": "query-input",
+                        maxlength: "{api::query::MAX_FILTER_CHARS}",
                         value: "{draft}",
                         oninput: move |evt| {
                             draft.set(evt.value());

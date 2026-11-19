@@ -17,7 +17,7 @@ use crate::{
     page::{PageMeta, PageRequest, PagedResp},
     query::{
         Clause, ColumnExpr, DataType, FieldSpec, FreeText, MIN_INFIX_CHARS, Op, SearchClass,
-        SearchQuery, any_values, field_spec,
+        SearchQuery, any_values, check_filter_text, field_spec,
     },
 };
 
@@ -328,12 +328,16 @@ impl SearchFilter {
         }
     }
 
-    // the checks the server applies to a request before it reaches a backend: only
-    // structured queries can be invalid, and every search filter today is over media
+    // the checks the server applies to a request before it reaches a backend; every search
+    // filter today is over media.  the older term-set filters get the same text checks as a
+    // typed query, over their terms as one text
     pub fn validate_media(&self) -> Result<(), String> {
         match self {
             Self::Query(q) => q.validate::<Media>(),
-            _ => Ok(()),
+            Self::Fulltext { filter } => check_filter_text(filter),
+            Self::SubstringAny { filter }
+            | Self::SubstringAll { filter }
+            | Self::Keyword { filter } => check_filter_text(&filter.iter().join(" ")),
         }
     }
 }
@@ -358,7 +362,7 @@ impl ListFilter {
     pub fn validate<C: SearchClass>(&self) -> Result<(), String> {
         match self {
             Self::Query(q) => q.validate::<C>(),
-            Self::Literal(_) => Ok(()),
+            Self::Literal(text) => check_filter_text(text),
         }
     }
 
@@ -815,6 +819,50 @@ mod tests {
             filter,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn every_filter_form_gets_the_text_checks() {
+        let long: String = "x".repeat(crate::query::MAX_FILTER_CHARS + 1);
+        // 50 two-letter terms: each short, 149 characters together
+        let many: Vec<String> = (0..50).map(|i| format!("{i:02}")).collect();
+        let many: Vec<&str> = many.iter().map(String::as_str).collect();
+        for bad in [
+            SearchFilter::Fulltext {
+                filter: long.clone(),
+            },
+            SearchFilter::Fulltext {
+                filter: "a\0".into(),
+            },
+            SearchFilter::SubstringAny {
+                filter: set(&["a\0"]),
+            },
+            SearchFilter::SubstringAll { filter: set(&many) },
+            SearchFilter::Keyword {
+                filter: set(&[&long]),
+            },
+        ] {
+            assert!(bad.validate_media().is_err(), "{bad}");
+        }
+        assert_eq!(SearchFilter::default().validate_media(), Ok(()));
+        assert_eq!(
+            SearchFilter::SubstringAll {
+                filter: set(&["beach", "sunset"])
+            }
+            .validate_media(),
+            Ok(())
+        );
+
+        assert!(ListFilter::Literal(long).validate::<Media>().is_err());
+        assert!(
+            ListFilter::Literal("a\0".into())
+                .validate::<Media>()
+                .is_err()
+        );
+        assert_eq!(
+            ListFilter::Literal("c007".into()).validate::<Media>(),
+            Ok(())
+        );
     }
 
     #[test]

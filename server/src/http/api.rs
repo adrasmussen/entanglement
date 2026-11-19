@@ -107,7 +107,7 @@ pub(super) async fn get_media(
         .can_access_media(&current_user.uid, &message.media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -153,7 +153,7 @@ pub(super) async fn update_media(
         .owns_media(&current_user.uid, &message.media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -242,7 +242,7 @@ pub(super) async fn similar_media(
         .can_access_media(&current_user.uid, &message.media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let gid = state.groups_for_user(&current_user.uid).await?;
@@ -277,7 +277,7 @@ pub(super) async fn add_comment(
         .can_access_media(&current_user.uid, &message.comment.media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -316,7 +316,7 @@ pub(super) async fn get_comment(
         .can_access_comment(&current_user.uid, &message.comment_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -349,7 +349,7 @@ pub(super) async fn delete_comment(
         .owns_comment(&current_user.uid, &message.comment_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -380,7 +380,7 @@ pub(super) async fn update_comment(
         .owns_comment(&current_user.uid, &message.comment_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -417,6 +417,13 @@ pub(super) async fn add_collection(
         .await?
     {
         return Err(anyhow::Error::msg("User must be a member of collection group").into());
+    }
+
+    // the cover must be media the creator can see; otherwise it's answered like any unknown id
+    if let Some(cover) = &message.collection.cover
+        && !state.can_access_media(&current_user.uid, cover).await?
+    {
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -457,7 +464,7 @@ pub(super) async fn get_collection(
         .can_access_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -490,7 +497,7 @@ pub(super) async fn delete_collection(
         .owns_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -521,7 +528,7 @@ pub(super) async fn update_collection(
         .owns_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -553,14 +560,14 @@ pub(super) async fn add_media_to_collection(
         .owns_media(&current_user.uid, &message.media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     if !state
         .can_access_collection(&current_user.uid, &message.collection_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -602,7 +609,7 @@ pub(super) async fn rm_media_from_collection(
                 .can_access_collection(&current_user.uid, &message.collection_uuid)
                 .await?)
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -722,7 +729,7 @@ pub(super) async fn get_library(
         .owns_library(&current_user.uid, &message.library_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1141,7 +1148,7 @@ pub(super) async fn start_task(
         .owns_library(&current_user.uid, &message.library_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1178,7 +1185,7 @@ pub(super) async fn stop_task(
         .owns_library(&current_user.uid, &message.library_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1210,7 +1217,7 @@ pub(super) async fn show_tasks(
     match message.library {
         TaskLibrary::User { library_uuid } => {
             if !state.owns_library(&current_user.uid, &library_uuid).await? {
-                return Ok(StatusCode::UNAUTHORIZED.into_response());
+                return Ok(StatusCode::NOT_FOUND.into_response());
             }
         }
         TaskLibrary::System => {}

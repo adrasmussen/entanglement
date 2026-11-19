@@ -384,7 +384,23 @@ pub struct Parsed {
 // limits on what the server accepts, so a request can't ask for an absurd statement
 pub const MAX_TEXT_TERMS: usize = 32;
 pub const MAX_CLAUSES: usize = 32;
-pub const MAX_VALUE_LEN: usize = 256;
+pub const MAX_VALUE_LEN: usize = MAX_FILTER_CHARS;
+// the longest search text any endpoint accepts, in characters
+pub const MAX_FILTER_CHARS: usize = 100;
+
+// the checks every search text gets, whatever its form: no NUL (the backends reject it with an
+// error) and at most MAX_FILTER_CHARS characters
+pub fn check_filter_text(text: &str) -> Result<(), String> {
+    if text.contains('\0') {
+        return Err("search text can't contain NUL characters".to_string());
+    }
+    if text.chars().count() > MAX_FILTER_CHARS {
+        return Err(format!(
+            "search text is limited to {MAX_FILTER_CHARS} characters"
+        ));
+    }
+    Ok(())
+}
 // values in one any-of clause (tag:a,b,...)
 pub const MAX_ANY_VALUES: usize = 16;
 
@@ -522,8 +538,10 @@ impl SearchQuery {
         if self.clauses.len() > MAX_CLAUSES {
             return Err(format!("at most {MAX_CLAUSES} search clauses"));
         }
-        if self.text.iter().any(|t| t.len() > MAX_VALUE_LEN) {
-            return Err(format!("search words are limited to {MAX_VALUE_LEN} bytes"));
+        if self.text.iter().any(|t| t.chars().count() > MAX_VALUE_LEN) {
+            return Err(format!(
+                "search words are limited to {MAX_VALUE_LEN} characters"
+            ));
         }
 
         for c in &self.clauses {
@@ -550,7 +568,8 @@ impl SearchQuery {
             check_value(spec, c.op, &c.value)?;
         }
 
-        Ok(())
+        // the whole query, as the text the user would have typed
+        check_filter_text(&self.to_text())
     }
 }
 
@@ -577,11 +596,14 @@ fn push_text(query: &mut SearchQuery, term: String) {
 
 // value rules shared by the parser and validate
 fn check_value(spec: &FieldSpec, op: Op, value: &str) -> Result<(), String> {
-    if value.is_empty() || value.len() > MAX_VALUE_LEN {
+    if value.is_empty() || value.chars().count() > MAX_VALUE_LEN {
         return Err(format!(
-            "{} values must be 1 to {MAX_VALUE_LEN} bytes",
+            "{} values must be 1 to {MAX_VALUE_LEN} characters",
             spec.name
         ));
+    }
+    if value.contains('\0') {
+        return Err(format!("{} values can't contain NUL characters", spec.name));
     }
 
     let single = |v: &str| -> Result<(), String> {
@@ -992,6 +1014,45 @@ mod tests {
         let q = SearchQuery::parse::<Library>("path:photos").query;
         assert_eq!(q.validate::<Library>(), Ok(()));
         assert!(q.validate::<Media>().is_err());
+    }
+
+    #[test]
+    fn search_text_has_no_nul_and_a_length_cap() {
+        let text = |t: &str| SearchQuery {
+            text: vec![t.into()],
+            clauses: vec![],
+        };
+        assert!(
+            text("a\0b")
+                .validate::<Media>()
+                .unwrap_err()
+                .contains("NUL")
+        );
+        let nul_value = SearchQuery {
+            text: vec![],
+            clauses: vec![clause("tag", Op::Has, "a\0b")],
+        };
+        assert!(nul_value.validate::<Media>().unwrap_err().contains("NUL"));
+        // the parser reports a NUL in a field value as an issue and drops the clause
+        let parsed = SearchQuery::parse::<Media>("tag:a\0b");
+        assert!(parsed.query.clauses.is_empty());
+        assert!(!parsed.issues.is_empty());
+
+        // the cap counts characters, not bytes
+        let at_cap = "\u{e9}".repeat(MAX_FILTER_CHARS);
+        assert_eq!(text(&at_cap).validate::<Media>(), Ok(()));
+        assert!(text(&format!("{at_cap}x")).validate::<Media>().is_err());
+        // and covers the whole query, not each word: 30 three-letter words are 119 characters
+        let words = SearchQuery {
+            text: (0..30).map(|i| format!("w{i:02}")).collect(),
+            clauses: vec![],
+        };
+        assert!(
+            words
+                .validate::<Media>()
+                .unwrap_err()
+                .contains("limited to 100 characters")
+        );
     }
 
     #[test]

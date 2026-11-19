@@ -5,7 +5,7 @@ use crate::{
     http_endpoint,
     library::Library,
     media::Media,
-    query::{DataType, FieldSpec, FilterType, SearchKind, Values, field_spec},
+    query::{DataType, FieldSpec, FilterType, SearchKind, Values, check_filter_text, field_spec},
 };
 
 // slugs: the values a select or multiselect offers for one field
@@ -77,6 +77,7 @@ impl GetSlugsReq {
                 "slug prefixes are limited to {MAX_SLUG_PREFIX} bytes"
             ));
         }
+        check_filter_text(&self.prefix)?;
 
         let limit = self.limit.unwrap_or(SLUG_LIMIT).clamp(1, MAX_SLUG_LIMIT);
         let prefix = self.prefix.trim().to_lowercase();
@@ -130,6 +131,16 @@ mod tests {
             prefix: prefix.into(),
             limit,
         }
+    }
+
+    #[test]
+    fn prefixes_are_checked_like_search_text() {
+        assert!(
+            req(SearchKind::Media, "tag", "be\0", None)
+                .source()
+                .unwrap_err()
+                .contains("NUL")
+        );
     }
 
     #[test]

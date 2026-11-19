@@ -221,6 +221,7 @@ fn PalettePanel() -> Element {
                     placeholder: "Search media, collections and libraries...",
                     autocomplete: "off",
                     spellcheck: "false",
+                    maxlength: "{api::query::MAX_FILTER_CHARS}",
                     role: "combobox",
                     "aria-expanded": "{!row_list.is_empty()}",
                     "aria-controls": "palette-list",

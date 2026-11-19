@@ -125,4 +125,28 @@ pub trait ESInner: Sized + Send + Sync + 'static {
             ))
         })
     }
+
+    // respond() for read-only work whose requester may give up first (a timeout, a client
+    // that went away): when the receiving end is dropped the work is dropped with it, and
+    // the backend cancels whatever it had running.  never for writes, which must finish
+    async fn respond_or_abandon<T, Fut>(&self, mut resp: EsmResp<T>, fut: Fut) -> Result<()>
+    where
+        T: Send + Sync,
+        Fut: Future<Output = Result<T>> + Send,
+    {
+        let out = tokio::select! {
+            out = fut => Some(out),
+            _ = resp.closed() => None,
+        };
+        match out {
+            Some(out) => self.respond(resp, async { out }).await,
+            None => {
+                tracing::debug!(
+                    "requester gave up on a {} message; dropped it",
+                    std::any::type_name::<T>()
+                );
+                Ok(())
+            }
+        }
+    }
 }

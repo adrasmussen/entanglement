@@ -6,7 +6,7 @@ use crate::{
     library::{Library, LibraryUuid},
     media::{Media, MediaUuid},
     page::PageMeta,
-    query::{IssueKind, SearchClass, SearchKind, SearchQuery},
+    query::{IssueKind, SearchClass, SearchKind, SearchQuery, check_filter_text},
 };
 
 // omnisearch: one query text searched across every class at once
@@ -98,7 +98,6 @@ pub const PROVIDERS: &[ProviderSpec] = &[
 
 pub const DEFAULT_PER_GROUP: u32 = 5;
 pub const MAX_PER_GROUP: u32 = 20;
-pub const MAX_OMNI_QUERY: usize = 256;
 pub const PROVIDER_TIMEOUT_MS: u64 = 1500;
 
 // what to do for one provider, decided before anything runs
@@ -145,11 +144,7 @@ fn plan_for<C: SearchClass>(text: &str) -> Result<GroupPlan, String> {
 impl OmniSearchReq {
     // check the request (Err is a 400 message) and decide what each provider does
     pub fn plan(&self) -> Result<OmniPlan, String> {
-        if self.query.len() > MAX_OMNI_QUERY {
-            return Err(format!(
-                "omnisearch queries are limited to {MAX_OMNI_QUERY} bytes"
-            ));
-        }
+        check_filter_text(&self.query)?;
 
         let per_group = self
             .per_group
@@ -296,7 +291,10 @@ mod tests {
 
     #[test]
     fn bad_requests_are_rejected() {
-        assert!(req(&"x".repeat(MAX_OMNI_QUERY + 1)).plan().is_err());
+        use crate::query::MAX_FILTER_CHARS;
+        assert!(req(&"x".repeat(MAX_FILTER_CHARS + 1)).plan().is_err());
+        assert!(req(&"x".repeat(MAX_FILTER_CHARS)).plan().is_ok());
+        assert!(req("beach\0").plan().is_err());
         // a valid-looking clause the class can't run is a 400, like on the local pages
         let many = (0..=crate::query::MAX_ANY_VALUES)
             .map(|i| format!("t{i}"))

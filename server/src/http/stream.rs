@@ -64,7 +64,7 @@ pub(super) async fn stream_media(
         .can_access_media(&current_user.uid, &media_uuid)
         .await?
     {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Ok(StatusCode::NOT_FOUND.into_response());
     }
 
     // the layout of the srv directory is completely controlled by the server,

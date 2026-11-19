@@ -1105,8 +1105,10 @@ rows.append(("kinds [Library, Media] -> provider order", "-", str(got), str(["Me
              "OK" if got == ["Media", "Library"] else "FAIL"))
 lim = groups["Media"]["meta"]["limit"] if sc == 200 else None
 rows.append(("per_group 1000 is clamped to 20", "-", str(lim), "20", "OK" if lim == 20 else "FAIL"))
-sc, _ = post("OmniSearch", {"query": "x" * 257})
-rows.append(("a query over 256 bytes", "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+sc, _ = post("OmniSearch", {"query": "x" * 101})
+rows.append(("a query over 100 characters", "-", f"http {sc}", "http 400", "OK" if sc == 400 else "FAIL"))
+sc, _ = post("OmniSearch", {"query": "\u00e9" * 100})
+rows.append(("100 two-byte characters (the cap counts characters)", "-", f"http {sc}", "http 200", "OK" if sc == 200 else "FAIL"))
 sc, groups = omni("")
 ok = sc == 200 and all(g["status"] == "Ok" for g in groups.values()) and groups["Media"]["meta"]["total"] == one(sql_media_visible())
 rows.append(("an empty query lists every class (media total = all visible)", sql_media_visible(), str(ok), "True", "OK" if ok else "FAIL"))

@@ -231,6 +231,19 @@ function parseHeading(t) {
   }, { at_most_two: true, last: 'checkpoint' });
   await page.keyboard.press('Escape');
 
+  // ---- the box takes at most the 100 characters the server accepts, so typing past it
+  // never turns into an error
+  await openPalette();
+  omniRequests.length = 0;
+  await page.type('[data-testid=palette-input]', 'x'.repeat(120), { delay: 0 });
+  await sleep(1200);
+  check('typing 120 characters: the box keeps 100 and the search runs', '-', {
+    kept: (await page.inputValue('[data-testid=palette-input]')).length,
+    note: await page.$$eval('[data-testid=palette-note]', ns => ns.map(n => n.textContent)),
+    last_sent: (omniRequests[omniRequests.length - 1] || '').length,
+  }, { kept: 100, note: [], last_sent: 100 });
+  await page.keyboard.press('Escape');
+
   // ---- a modal owns the keyboard
   await page.goto(BASE + '/collections');
   await page.waitForSelector('button:has-text("Create Collection")');

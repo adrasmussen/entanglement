@@ -48,6 +48,9 @@ Setup for humans is in `docker/QUICKSTART.md`. For testing help (what to run, wr
 - **Access control (RBAC):**
   - **Visibility rule:** a media item is visible to a user when it isn't hidden and its library's `gid`, or the `gid` of a collection containing it, is one of the user's groups.
   - Every search, count, lookup and stream must apply it, and every new endpoint gets out-of-group leak cases in `docker/devtest/rbac_check.py`.
+  - A forbidden id is answered exactly like an unknown one: 404 with an empty body, so callers can't probe which ids exist.
+  - Search text is at most 100 characters with no NUL, in every filter form (`check_filter_text` in `api/src/query.rs`).
+  - Group memberships are cached and re-read from the providers every 30s (`USER_REFRESH`); a change takes effect within that, with no restart.
   - An RBAC bug is fixed on the branch that introduced it, then merged forward.
 - **Git:**
   - Never force-push; merge the base into a stacked branch instead.

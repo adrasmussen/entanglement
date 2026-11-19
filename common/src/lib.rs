@@ -121,4 +121,51 @@ impl<K: Clone + Debug + Eq + Hash, V: Clone + Debug> AwaitCache<K, V> {
     pub fn remove(&self, key: &K) {
         self.items.remove(key);
     }
+
+    // the keys present, including any still initializing
+    pub fn keys(&self) -> Vec<K> {
+        self.items.iter().map(|e| e.key().clone()).collect()
+    }
+
+    // the value for a key if one is set, without waiting on an initialization in progress
+    pub fn peek(&self, key: &K) -> Option<V> {
+        self.items
+            .get(key)
+            .and_then(|cell| cell.try_get().flatten())
+    }
+
+    // replace a key's value outright, e.g. with a fresher one from the source of truth;
+    // later lookups get it without running their init
+    pub fn insert(&self, key: K, val: V) {
+        let cell = Arc::new(AsyncCell::new());
+        cell.set(Some(val));
+        self.items.insert(key, cell);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn await_cache_values_can_be_replaced_and_dropped() {
+        let cache: AwaitCache<String, u32> = AwaitCache::new();
+        let k = || "dev".to_string();
+
+        assert_eq!(cache.perhaps(k(), async { Ok(1) }).await.unwrap(), 1);
+        // a cached value is served without running init
+        assert_eq!(cache.perhaps(k(), async { Ok(2) }).await.unwrap(), 1);
+        assert_eq!(cache.keys(), vec![k()]);
+        assert_eq!(cache.peek(&k()), Some(1));
+
+        // a refresh replaces it outright
+        cache.insert(k(), 3);
+        assert_eq!(cache.peek(&k()), Some(3));
+        assert_eq!(cache.perhaps(k(), async { Ok(4) }).await.unwrap(), 3);
+
+        // once removed, the next lookup runs init again
+        cache.remove(&k());
+        assert_eq!(cache.peek(&k()), None);
+        assert_eq!(cache.perhaps(k(), async { Ok(5) }).await.unwrap(), 5);
+    }
 }

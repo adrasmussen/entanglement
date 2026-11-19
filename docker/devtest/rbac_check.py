@@ -224,19 +224,21 @@ got = [c["count"] for c in (d or {}).get("counts", [])] or [f"http {code}"] * le
 grid("GetCounts", [[f"GetCounts {n}", e, g, 0] for (n, _, e), g in zip(scopes, got)])
 
 # --- direct lookups and streams --------------------------------------------------------
+# a forbidden id is answered exactly like one that doesn't exist (404, empty body), so a
+# caller can't learn which ids exist
+UNKNOWN = "00000000-0000-7000-8000-00000000dead"
 cases = []
 for label, ep, body, expect in [
-    ("GetMedia foreign", "GetMedia", {"media_uuid": F_PLAIN}, "denied"),
-    ("GetMedia foreign hidden", "GetMedia", {"media_uuid": F_HIDDEN}, "denied"),
+    ("GetMedia foreign", "GetMedia", {"media_uuid": F_PLAIN}, "404"),
+    ("GetMedia foreign hidden", "GetMedia", {"media_uuid": F_HIDDEN}, "404"),
     ("GetMedia bridged (positive control)", "GetMedia", {"media_uuid": F_BRIDGED}, "200"),
-    ("GetCollection foreign", "GetCollection", {"collection_uuid": C_OTHER}, "denied"),
-    ("GetLibrary foreign", "GetLibrary", {"library_uuid": L_OTHER}, "denied"),
-    ("GetComment on foreign media", "GetComment", {"comment_uuid": COMMENT}, "denied"),
-    ("SimilarMedia from a foreign source", "SimilarMedia", {"media_uuid": F_SIMILAR, "distance": 64}, "denied"),
+    ("GetCollection foreign", "GetCollection", {"collection_uuid": C_OTHER}, "404"),
+    ("GetLibrary foreign", "GetLibrary", {"library_uuid": L_OTHER}, "404"),
+    ("GetComment on foreign media", "GetComment", {"comment_uuid": COMMENT}, "404"),
+    ("SimilarMedia from a foreign source", "SimilarMedia", {"media_uuid": F_SIMILAR, "distance": 64}, "404"),
 ]:
     code, d = call(ep, body)
-    obs = "200" if code == 200 else "denied"
-    cases.append([f"{label} (http {code})", expect, obs, 0])
+    cases.append([f"{label} (http {code})", expect, str(code), 0])
 code, d = call("GetMedia", {"media_uuid": V_IN_OTHER})
 cases.append(["GetMedia visible item in a foreign collection: foreign collection listed", "False",
               str(C_OTHER in (d or {}).get("collections", [])), 0])
@@ -245,8 +247,49 @@ cases.append(["SimilarMedia from a visible twin of a foreign phash: foreign twin
               str(F_SIMILAR in (d or {}).get("media", [])), leaked((d or {}).get("media", []))])
 for kind in ("thumbnails", "originals"):
     c = get(f"media/{kind}/{F_PLAIN}")
-    cases.append([f"stream {kind} foreign (http {c})", "denied", "denied" if c in (401, 403) else str(c), 0])
-grid("direct lookups and streams (denied = 401/403 or any non-200)", cases)
+    cases.append([f"stream {kind} foreign (http {c})", "404", str(c), 0])
+grid("direct lookups and streams (forbidden = 404)", cases)
+
+
+def raw(ep, body):
+    # status and exact body bytes
+    p = subprocess.run(
+        ["curl", "-sk", *CERT, "-o", "-", "-w", "\n%{http_code}", "-X", "POST",
+         "-H", "content-type: application/json", "--data-binary", "@-", f"{U}/api/{ep}"],
+        input=json.dumps(body).encode(), capture_output=True)
+    text, _, code = p.stdout.decode().rpartition("\n")
+    return code, text
+
+
+cases = []
+for label, ep, field, forbidden in [
+    ("GetMedia", "GetMedia", "media_uuid", F_PLAIN),
+    ("SimilarMedia", "SimilarMedia", "media_uuid", F_PLAIN),
+    ("GetCollection", "GetCollection", "collection_uuid", C_OTHER),
+    ("UpdateCollection", "UpdateCollection", "collection_uuid", C_OTHER),
+    ("DeleteCollection", "DeleteCollection", "collection_uuid", C_OTHER),
+    ("GetLibrary", "GetLibrary", "library_uuid", L_OTHER),
+    ("GetComment", "GetComment", "comment_uuid", COMMENT),
+    ("UpdateComment", "UpdateComment", "comment_uuid", COMMENT),
+    ("DeleteComment", "DeleteComment", "comment_uuid", COMMENT),
+]:
+    extra = {"update": {"name": None, "note": None, "tags": None}} if ep == "UpdateCollection" else \
+            {"text": "[counttest] rbac overwritten"} if ep == "UpdateComment" else \
+            {"distance": 1} if ep == "SimilarMedia" else {}
+    f = raw(ep, {field: forbidden, **extra})
+    u = raw(ep, {field: UNKNOWN, **extra})
+    cases.append([f"{label}: forbidden {f} vs unknown {u}", "same 404", "same 404" if f == u == ("404", "") else "DIFFERENT", 0])
+for kind in ("thumbnails", "originals"):
+    f, u = get(f"media/{kind}/{F_PLAIN}"), get(f"media/{kind}/{UNKNOWN}")
+    cases.append([f"stream {kind}: forbidden {f} vs unknown {u}", "same 404", "same 404" if f == u == 404 else "DIFFERENT", 0])
+for label, ep, body in [
+    ("StartTask on a foreign library", "StartTask", {"library_uuid": L_OTHER, "task_type": "ScanLibrary"}),
+    ("StartTask on an unknown library", "StartTask", {"library_uuid": UNKNOWN, "task_type": "ScanLibrary"}),
+    ("AddMediaToCollection, unknown media", "AddMediaToCollection", {"collection_uuid": C_BRIDGE, "media_uuid": UNKNOWN}),
+]:
+    code, _ = raw(ep, body)
+    cases.append([f"{label} (http {code})", "404", code, 0])
+grid("unknown vs forbidden ids (expected = the same 404 with an empty body)", cases)
 
 # --- GetSlugs: the tag values the filters offer ---------------------------------------
 # every slug must be a tag of a record dev can see, counted over visible records only
@@ -374,7 +417,47 @@ before = psql(f"SELECT name FROM collections WHERE collection_uuid = '{C_OTHER}'
 code, _ = call("UpdateCollection", {"collection_uuid": C_OTHER, "update": {"name": "counttest-rbac-pwned"}})
 after = psql(f"SELECT name FROM collections WHERE collection_uuid = '{C_OTHER}'")
 cases.append([f"UpdateCollection foreign (http {code})", before, after, 0])
+
+# a new collection's cover must be media the creator can see
+COVER_NAME = "counttest-rbac-cover"
+psql(f"DELETE FROM collections WHERE name = '{COVER_NAME}'")
+new = lambda cover: {"collection": {"uid": "dev", "gid": GID, "name": COVER_NAME, "note": "", "tags": [], "cover": cover}}
+for label, cover, expect_code, expect_rows in [
+    ("AddCollection with a foreign cover", F_PLAIN, 404, "0"),
+    ("AddCollection with a foreign hidden cover", F_HIDDEN, 404, "0"),
+    ("AddCollection with an unknown cover", UNKNOWN, 404, "0"),
+    ("AddCollection with a bridged cover (positive control)", F_BRIDGED, 200, "1"),
+]:
+    code, _ = call("AddCollection", new(cover))
+    n = psql(f"SELECT count(*) FROM collections WHERE name = '{COVER_NAME}'")
+    psql(f"DELETE FROM collections WHERE name = '{COVER_NAME}'")
+    cases.append([f"{label} (http {code}): collections created", f"{expect_code}/{expect_rows}", f"{code}/{n}", 0])
 grid("writes against foreign records (expected = database unchanged)", cases)
+
+# --- hostile search text: a 400 with a reason, never a 500 ------------------------------
+# no NUL anywhere, and at most 100 characters of search text in any filter form
+LONG, CAP = "x" * 101, "x" * 100
+cases = []
+for label, ep, body, expect in [
+    ("SearchMedia query word with NUL", "SearchMedia", {"opts": opts(q(["be\0ach"]))}, 400),
+    ("SearchMedia query tag with NUL", "SearchMedia", {"opts": opts(q(clauses=[("tag", "Has", "a\0")]))}, 400),
+    ("SearchMedia legacy SubstringAny with NUL", "SearchMedia", {"opts": opts({"SubstringAny": {"filter": ["a\0"]}})}, 400),
+    ("SearchMedia legacy SubstringAll, 103 characters of terms", "SearchMedia",
+     {"opts": opts({"SubstringAll": {"filter": [f"t{i:02}" for i in range(26)]}})}, 400),
+    ("SearchMedia legacy Fulltext 101 characters", "SearchMedia", {"opts": opts({"Fulltext": {"filter": LONG}})}, 400),
+    ("SearchMedia query of 101 characters", "SearchMedia", {"opts": opts(q([LONG]))}, 400),
+    ("SearchMedia query of exactly 100 characters", "SearchMedia", {"opts": opts(q([CAP]))}, 200),
+    ("SearchCollections literal with NUL", "SearchCollections", {"filter": "a\0"}, 400),
+    ("SearchCollections literal of 101 characters", "SearchCollections", {"filter": LONG}, 400),
+    ("SearchLibraries literal of 100 characters", "SearchLibraries", {"filter": CAP}, 200),
+    ("OmniSearch with NUL", "OmniSearch", {"query": "beach\0"}, 400),
+    ("OmniSearch of 101 characters", "OmniSearch", {"query": LONG}, 400),
+    ("OmniSearch of 100 characters", "OmniSearch", {"query": CAP}, 200),
+    ("GetSlugs prefix with NUL", "GetSlugs", {"kind": "Media", "field": "tag", "prefix": "a\0"}, 400),
+]:
+    code, _ = call(ep, body)
+    cases.append([f"{label} (http {code})", expect, code, 0])
+grid("hostile search text (expected = 400, never 500)", cases)
 
 print("\nALL RBAC CASES MATCH" if FAILS == 0 else f"\n{FAILS} RBAC CASE(S) MISMATCH")
 sys.exit(1 if FAILS else 0)

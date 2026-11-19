@@ -6,13 +6,13 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bb8::Pool;
+use bb8::{Pool, PooledConnection};
 use bb8_postgres::PostgresConnectionManager;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs::load_native_certs;
 use serde::{Deserialize, Serialize};
 
-use tokio_postgres::{Row, types::ToSql};
+use tokio_postgres::{Client, Row, types::ToSql};
 use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::{debug, info, instrument};
 use url::Url;
@@ -116,8 +116,71 @@ pub struct PostgresConfig {
     pub url: Url,
 }
 
+type PgManager = PostgresConnectionManager<MakeRustlsConnect>;
+
+// no statement runs longer than this, whatever asked for it; a safety net under the per-request
+// limits (omnisearch's provider timeout), so one runaway query can't hold a pooled connection
+const STATEMENT_TIMEOUT: &str = "60s";
+
 pub struct PostgresBackend {
-    pool: Pool<PostgresConnectionManager<MakeRustlsConnect>>,
+    pool: Pool<PgManager>,
+    tls: MakeRustlsConnect,
+}
+
+// a pooled connection for a search the caller may give up on (omnisearch's per-group timeout,
+// a client that went away).  the db service drops the search's future when its requester has
+// gone, and dropped before finish(), this asks the server to cancel whatever statement is
+// running, then keeps the connection out of the pool until a round trip shows the server has
+// stopped, so the abandoned work doesn't keep a backend busy and the cancel can't land on the
+// next query that borrows the connection
+struct Cancellable {
+    conn: Option<PooledConnection<'static, PgManager>>,
+    tls: MakeRustlsConnect,
+}
+
+impl Cancellable {
+    // the search completed: the connection goes back to the pool as usual
+    fn finish(mut self) {
+        self.conn.take();
+    }
+}
+
+impl std::ops::Deref for Cancellable {
+    type Target = Client;
+
+    fn deref(&self) -> &Client {
+        self.conn
+            .as_ref()
+            .expect("a Cancellable holds its connection until it is finished or dropped")
+    }
+}
+
+impl Drop for Cancellable {
+    fn drop(&mut self) {
+        let Some(conn) = self.conn.take() else {
+            return;
+        };
+        let token = conn.cancel_token();
+        let tls = self.tls.clone();
+        tokio::spawn(async move {
+            if let Err(err) = token.cancel_query(tls).await {
+                debug!("cancelling an abandoned search failed: {err}");
+            }
+            // queued behind the cancelled statement on this connection, so the connection
+            // returns to the pool only once the server is idle on it
+            let _ = conn.simple_query("").await;
+            debug!("cancelled an abandoned search");
+        });
+    }
+}
+
+impl PostgresBackend {
+    async fn cancellable(&self) -> Result<Cancellable> {
+        Ok(Cancellable {
+            conn: Some(self.pool.get_owned().await?),
+            tls: self.tls.clone(),
+        })
+    }
 }
 
 impl UuidSource for PostgresBackend {}
@@ -148,12 +211,21 @@ impl DbBackend for PostgresBackend {
 
         let tls_config = MakeRustlsConnect::new(tls_config);
 
-        let manager =
-            PostgresConnectionManager::new_from_stringlike(config.url.as_str(), tls_config)?;
+        let mut pg_config: tokio_postgres::Config = config.url.as_str().parse()?;
+        let options = match pg_config.get_options() {
+            Some(o) => format!("{o} -c statement_timeout={STATEMENT_TIMEOUT}"),
+            None => format!("-c statement_timeout={STATEMENT_TIMEOUT}"),
+        };
+        pg_config.options(&options);
+
+        let manager = PostgresConnectionManager::new(pg_config, tls_config.clone());
 
         let pool = Pool::builder().build(manager).await?;
 
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            tls: tls_config,
+        })
     }
 
     async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()> {
@@ -519,7 +591,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
@@ -542,6 +614,8 @@ impl DbBackend for PostgresBackend {
         let page = paged_search(&conn, &base, &[&gid], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media");
+
+        conn.finish();
 
         Ok(page)
     }
@@ -906,7 +980,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         let base = r#"-- search_collections
             SELECT
@@ -940,6 +1014,7 @@ impl DbBackend for PostgresBackend {
 
         // a count-only request has no page to fetch
         if page.limit == Some(0) {
+            conn.finish();
             return Ok(SearchPage::count_only(total));
         }
 
@@ -960,6 +1035,8 @@ impl DbBackend for PostgresBackend {
         let page = SearchPage::from_probe(collections, total, page.limit);
 
         debug!({ count = page.items.len(), total = total }, "found collections");
+
+        conn.finish();
 
         Ok(page)
     }
@@ -1007,7 +1084,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in collection");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // non-hidden media in the collection, provided the collection is owned by one of
         // the user's groups
@@ -1028,6 +1105,8 @@ impl DbBackend for PostgresBackend {
         let page = paged_search(&conn, base, &[&gid, &collection_uuid], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media in collection");
+
+        conn.finish();
 
         Ok(page)
     }
@@ -1131,7 +1210,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching for libraries");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         let base = r#"-- search_libraries
             SELECT
@@ -1162,6 +1241,7 @@ impl DbBackend for PostgresBackend {
         };
 
         if page.limit == Some(0) {
+            conn.finish();
             return Ok(SearchPage::count_only(total));
         }
 
@@ -1183,6 +1263,8 @@ impl DbBackend for PostgresBackend {
 
         debug!({ count = page.items.len(), total = total }, "found libraries");
 
+        conn.finish();
+
         Ok(page)
     }
 
@@ -1196,7 +1278,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in library");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // this is the only search query where media with "hidden = true" can be found
         let base = r#"-- search_media_in_library
@@ -1218,6 +1300,8 @@ impl DbBackend for PostgresBackend {
         let page = paged_search(&conn, base, &[&gid, &library_uuid, &hidden], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media in library");
+
+        conn.finish();
 
         Ok(page)
     }

@@ -168,7 +168,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     .await
                 }
                 DbMsg::SearchMedia { resp, gid, opts } => {
-                    self.respond(resp, self.backend.search_media(gid, opts))
+                    self.respond_or_abandon(resp, self.backend.search_media(gid, opts))
                         .await
                 }
                 DbMsg::SimilarMedia {
@@ -262,8 +262,11 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     filter,
                     page,
                 } => {
-                    self.respond(resp, self.backend.search_collections(gid, filter, page))
-                        .await
+                    self.respond_or_abandon(
+                        resp,
+                        self.backend.search_collections(gid, filter, page),
+                    )
+                    .await
                 }
                 DbMsg::TagSlugs {
                     resp,
@@ -281,7 +284,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     collection_uuid,
                     opts,
                 } => {
-                    self.respond(
+                    self.respond_or_abandon(
                         resp,
                         self.backend
                             .search_media_in_collection(gid, collection_uuid, opts),
@@ -311,7 +314,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     filter,
                     page,
                 } => {
-                    self.respond(resp, self.backend.search_libraries(gid, filter, page))
+                    self.respond_or_abandon(resp, self.backend.search_libraries(gid, filter, page))
                         .await
                 }
                 DbMsg::SearchMediaInLibrary {
@@ -321,7 +324,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     hidden,
                     opts,
                 } => {
-                    self.respond(
+                    self.respond_or_abandon(
                         resp,
                         self.backend
                             .search_media_in_library(gid, library_uuid, hidden, opts),
