@@ -6,20 +6,23 @@ use std::{
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bb8::Pool;
+use bb8::{Pool, PooledConnection};
 use bb8_postgres::PostgresConnectionManager;
 use rustls::{ClientConfig, RootCertStore};
 use rustls_native_certs::load_native_certs;
 use serde::{Deserialize, Serialize};
 
-use tokio_postgres::{Row, types::ToSql};
+use tokio_postgres::{Client, Row, types::ToSql};
 use tokio_postgres_rustls::MakeRustlsConnect;
 use tracing::{debug, info, instrument};
 use url::Url;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
+    db::{
+        DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage, column_check_result,
+        missing_columns, tables_of,
+    },
 };
 use api::{
     UuidSource,
@@ -27,8 +30,62 @@ use api::{
     comment::{Comment, CommentUuid},
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaUpdate, MediaUuid},
-    search::{SearchOptions, escape_like},
+    page::PageRequest,
+    query::SearchKind,
+    search::{ListFilter, SearchOptions, escape_like},
+    slug::Slug,
 };
+
+// the media visibility rule as one predicate on `media`, with the user's groups bound as $1:
+// not hidden, and in a library or a collection owned by one of the groups.  it drives from
+// the media table (rather than a UNION of the two access paths) so that the planner can walk
+// idx_media_visible_date and stop at a LIMIT.  search_media and the tag slugs share it, so
+// what a list shows and what its filters offer can't drift apart
+pub(crate) const PG_VISIBLE_MEDIA: &str = r#"media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND collections.gid = ANY($1)
+                    )
+                )"#;
+
+// the postgres function plain media words match inside words through (FreeText::pg_infix)
+fn media_infix_function() -> &'static str {
+    match <Media as api::query::SearchClass>::FREE_TEXT {
+        api::query::FreeText::Fulltext { pg_infix, .. } => pg_infix,
+        api::query::FreeText::Column(_) => "",
+    }
+}
+
+// the tag slugs statement: $1 the groups, $2 the LIKE pattern, $3 the limit.  ties sort by
+// byte order (COLLATE "C") so the result doesn't depend on the database locale
+pub(crate) fn pg_tag_slugs_sql(kind: SearchKind) -> Result<String> {
+    let (from, visible) = match kind {
+        SearchKind::Media => ("media, skeys(media.tags) AS k", PG_VISIBLE_MEDIA),
+        SearchKind::Collection => (
+            "collections, skeys(collections.tags) AS k",
+            "collections.gid = ANY($1)",
+        ),
+        SearchKind::Library => return Err(anyhow::Error::msg("libraries have no tags")),
+    };
+    Ok(format!(
+        r#"-- tag_slugs
+            SELECT k, COUNT(*)
+            FROM {from}
+            WHERE
+                {visible}
+                AND lower(k) LIKE $2
+            GROUP BY k
+            ORDER BY COUNT(*) DESC, k COLLATE "C"
+            LIMIT $3"#
+    ))
+}
 
 fn set_to_hstore(set: HashSet<String>) -> HashMap<String, Option<String>> {
     set.into_iter().map(|s| (s, None)).collect()
@@ -59,8 +116,71 @@ pub struct PostgresConfig {
     pub url: Url,
 }
 
+type PgManager = PostgresConnectionManager<MakeRustlsConnect>;
+
+// no statement runs longer than this, whatever asked for it; a safety net under the per-request
+// limits (omnisearch's provider timeout), so one runaway query can't hold a pooled connection
+const STATEMENT_TIMEOUT: &str = "60s";
+
 pub struct PostgresBackend {
-    pool: Pool<PostgresConnectionManager<MakeRustlsConnect>>,
+    pool: Pool<PgManager>,
+    tls: MakeRustlsConnect,
+}
+
+// a pooled connection for a search the caller may give up on (omnisearch's per-group timeout,
+// a client that went away).  the db service drops the search's future when its requester has
+// gone, and dropped before finish(), this asks the server to cancel whatever statement is
+// running, then keeps the connection out of the pool until a round trip shows the server has
+// stopped, so the abandoned work doesn't keep a backend busy and the cancel can't land on the
+// next query that borrows the connection
+struct Cancellable {
+    conn: Option<PooledConnection<'static, PgManager>>,
+    tls: MakeRustlsConnect,
+}
+
+impl Cancellable {
+    // the search completed: the connection goes back to the pool as usual
+    fn finish(mut self) {
+        self.conn.take();
+    }
+}
+
+impl std::ops::Deref for Cancellable {
+    type Target = Client;
+
+    fn deref(&self) -> &Client {
+        self.conn
+            .as_ref()
+            .expect("a Cancellable holds its connection until it is finished or dropped")
+    }
+}
+
+impl Drop for Cancellable {
+    fn drop(&mut self) {
+        let Some(conn) = self.conn.take() else {
+            return;
+        };
+        let token = conn.cancel_token();
+        let tls = self.tls.clone();
+        tokio::spawn(async move {
+            if let Err(err) = token.cancel_query(tls).await {
+                debug!("cancelling an abandoned search failed: {err}");
+            }
+            // queued behind the cancelled statement on this connection, so the connection
+            // returns to the pool only once the server is idle on it
+            let _ = conn.simple_query("").await;
+            debug!("cancelled an abandoned search");
+        });
+    }
+}
+
+impl PostgresBackend {
+    async fn cancellable(&self) -> Result<Cancellable> {
+        Ok(Cancellable {
+            conn: Some(self.pool.get_owned().await?),
+            tls: self.tls.clone(),
+        })
+    }
 }
 
 impl UuidSource for PostgresBackend {}
@@ -91,12 +211,58 @@ impl DbBackend for PostgresBackend {
 
         let tls_config = MakeRustlsConnect::new(tls_config);
 
-        let manager =
-            PostgresConnectionManager::new_from_stringlike(config.url.as_str(), tls_config)?;
+        let mut pg_config: tokio_postgres::Config = config.url.as_str().parse()?;
+        let options = match pg_config.get_options() {
+            Some(o) => format!("{o} -c statement_timeout={STATEMENT_TIMEOUT}"),
+            None => format!("-c statement_timeout={STATEMENT_TIMEOUT}"),
+        };
+        pg_config.options(&options);
+
+        let manager = PostgresConnectionManager::new(pg_config, tls_config.clone());
 
         let pool = Pool::builder().build(manager).await?;
 
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            tls: tls_config,
+        })
+    }
+
+    async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()> {
+        let conn = self.pool.get().await?;
+
+        let tables = tables_of(columns);
+
+        let rows = conn
+            .query(
+                "SELECT table_name::text, column_name::text FROM information_schema.columns \
+                 WHERE table_schema = current_schema() AND table_name = ANY($1)",
+                &[&tables],
+            )
+            .await?;
+
+        let found = rows
+            .iter()
+            .map(|r| Ok((r.try_get(0)?, r.try_get(1)?)))
+            .collect::<Result<HashSet<(String, String)>>>()?;
+
+        column_check_result(missing_columns(columns, &found))?;
+
+        // plain media words also match inside words through this function (and its
+        // trigram index), which a migration adds; without it every such search would fail
+        let infix = media_infix_function();
+        let exists: bool = conn
+            .query_one("SELECT to_regproc($1) IS NOT NULL", &[&infix])
+            .await?
+            .try_get(0)?;
+        if !exists {
+            return Err(anyhow::Error::msg(format!(
+                "database is missing the search function {infix}(); apply \
+                 db/migrations/2026-11-18_trigram_search.sql"
+            )));
+        }
+
+        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -425,7 +591,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
@@ -433,31 +599,23 @@ impl DbBackend for PostgresBackend {
         //
         // this drives from the media table (rather than a UNION of the two access paths)
         // so that the planner can walk idx_media_visible_date and stop at the LIMIT
-        let base = r#"-- search_media
+        let base = format!(
+            r#"-- search_media
             SELECT
                 media.media_uuid
             FROM
                 media
             WHERE
-                media.hidden = FALSE
-                AND (
-                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE gid = ANY($1))
-                    OR EXISTS (
-                        SELECT 1
-                        FROM
-                            collection_contents
-                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
-                        WHERE
-                            collection_contents.media_uuid = media.media_uuid
-                            AND collections.gid = ANY($1)
-                    )
-                )"#;
+                {PG_VISIBLE_MEDIA}"#
+        );
 
         let gid = gid.into_iter().collect::<Vec<String>>();
 
-        let page = paged_search(&conn, base, &[&gid], &opts).await?;
+        let page = paged_search(&conn, &base, &[&gid], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media");
+
+        conn.finish();
 
         Ok(page)
     }
@@ -817,12 +975,12 @@ impl DbBackend for PostgresBackend {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
-        page: PageOptions,
+        filter: ListFilter,
+        page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         let base = r#"-- search_collections
             SELECT
@@ -830,34 +988,91 @@ impl DbBackend for PostgresBackend {
             FROM
                 collections
             WHERE
-                gid = ANY($1) AND name LIKE $2"#;
+                gid = ANY($1)"#;
 
         let gid = gid.into_iter().collect::<Vec<String>>();
-        let filter = format!("%{}%", escape_like(&filter));
-        let limit = page.limit.map(|l| i64::try_from(l).unwrap_or(i64::MAX));
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter
+            .validate::<Collection>()
+            .map_err(anyhow::Error::msg)?;
+
+        // every user value is a bound parameter ($2.. for the filter, then limit and offset)
+        let (filter_sql, filter_params) = filter.postgres_sql::<Collection>(2);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&gid];
+        params.extend(filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
+        let base = format!("{base}{filter_sql}");
         let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
 
         let total = if page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
-            let n: i64 = conn.query_one(&count, &[&gid, &filter]).await?.try_get(0)?;
+            let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
             Some(n as u64)
         } else {
             None
         };
 
-        // matches idx_collection_name; LIMIT NULL is no limit
-        let statement = format!("{base} ORDER BY name, collection_uuid LIMIT $3 OFFSET $4");
+        // a count-only request has no page to fetch
+        if page.limit == Some(0) {
+            conn.finish();
+            return Ok(SearchPage::count_only(total));
+        }
 
-        let collections = conn
-            .query_scalar(&statement, &[&gid, &filter, &limit, &offset])
-            .await?;
+        // one row past the limit is a probe for has_more; matches idx_collection_name,
+        // and LIMIT NULL is no limit
+        let limit = SearchPage::<CollectionUuid>::probe_limit(page.limit)
+            .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
+        let statement = format!(
+            "{base} ORDER BY name, collection_uuid LIMIT ${} OFFSET ${}",
+            params.len() + 1,
+            params.len() + 2
+        );
+        params.push(&limit);
+        params.push(&offset);
 
-        debug!({ count = collections.len(), total = total }, "found collections");
+        let collections = conn.query_scalar(&statement, &params).await?;
 
-        Ok(SearchPage {
-            items: collections,
-            total,
-        })
+        let page = SearchPage::from_probe(collections, total, page.limit);
+
+        debug!({ count = page.items.len(), total = total }, "found collections");
+
+        conn.finish();
+
+        Ok(page)
+    }
+
+    #[instrument(skip(self))]
+    async fn tag_slugs(
+        &self,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
+    ) -> Result<Vec<Slug>> {
+        debug!("listing tag slugs");
+
+        let statement = pg_tag_slugs_sql(kind)?;
+        let conn = self.pool.get().await?;
+
+        let gid = gid.into_iter().collect::<Vec<String>>();
+        let pattern = format!("{}%", escape_like(&prefix.to_lowercase()));
+        let limit = i64::from(limit);
+
+        let rows = conn.query(&statement, &[&gid, &pattern, &limit]).await?;
+
+        let slugs = rows
+            .iter()
+            .map(|row| {
+                Ok(Slug {
+                    value: row.try_get(0)?,
+                    count: Some(u64::try_from(row.try_get::<_, i64>(1)?)?),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        debug!({ count = slugs.len() }, "found tag slugs");
+
+        Ok(slugs)
     }
 
     #[instrument(skip(self, opts))]
@@ -869,7 +1084,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in collection");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // non-hidden media in the collection, provided the collection is owned by one of
         // the user's groups
@@ -890,6 +1105,8 @@ impl DbBackend for PostgresBackend {
         let page = paged_search(&conn, base, &[&gid, &collection_uuid], &opts).await?;
 
         debug!({ count = page.items.len(), total = page.total }, "found media in collection");
+
+        conn.finish();
 
         Ok(page)
     }
@@ -988,36 +1205,67 @@ impl DbBackend for PostgresBackend {
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
-        filter: String,
-    ) -> Result<Vec<LibraryUuid>> {
+        filter: ListFilter,
+        page: PageRequest,
+    ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching for libraries");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
-        let statement = r#"-- search_libraries
+        let base = r#"-- search_libraries
             SELECT
                 library_uuid
             FROM
                 libraries
             WHERE
-                gid = ANY($1) AND path LIKE $2
-            ORDER BY
-                path, library_uuid
-        "#;
+                gid = ANY($1)"#;
 
-        let libraries = conn
-            .query_scalar(
-                statement,
-                &[
-                    &gid.into_iter().collect::<Vec<String>>(),
-                    &format!("%{}%", escape_like(&filter)),
-                ],
-            )
-            .await?;
+        let gid = gid.into_iter().collect::<Vec<String>>();
 
-        debug!({ count = libraries.len() }, "found libraries");
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter.validate::<Library>().map_err(anyhow::Error::msg)?;
 
-        Ok(libraries)
+        // every user value is a bound parameter ($2.. for the filter, then limit and offset)
+        let (filter_sql, filter_params) = filter.postgres_sql::<Library>(2);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&gid];
+        params.extend(filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
+        let base = format!("{base}{filter_sql}");
+        let offset = i64::try_from(page.offset).unwrap_or(i64::MAX);
+
+        let total = if page.with_total {
+            let count = format!("SELECT COUNT(*) FROM ({base}) AS counted");
+            let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
+            Some(n as u64)
+        } else {
+            None
+        };
+
+        if page.limit == Some(0) {
+            conn.finish();
+            return Ok(SearchPage::count_only(total));
+        }
+
+        let limit = SearchPage::<LibraryUuid>::probe_limit(page.limit)
+            .map(|l| i64::try_from(l).unwrap_or(i64::MAX));
+
+        // path is unique (so it has an index), and library_uuid keeps the order total
+        let statement = format!(
+            "{base} ORDER BY path, library_uuid LIMIT ${} OFFSET ${}",
+            params.len() + 1,
+            params.len() + 2
+        );
+        params.push(&limit);
+        params.push(&offset);
+
+        let libraries = conn.query_scalar(&statement, &params).await?;
+
+        let page = SearchPage::from_probe(libraries, total, page.limit);
+
+        debug!({ count = page.items.len(), total = total }, "found libraries");
+
+        conn.finish();
+
+        Ok(page)
     }
 
     #[instrument(skip(self, hidden, opts))]
@@ -1030,7 +1278,7 @@ impl DbBackend for PostgresBackend {
     ) -> Result<SearchPage<MediaUuid>> {
         debug!("searching for media in library");
 
-        let conn = self.pool.get().await?;
+        let conn = self.cancellable().await?;
 
         // this is the only search query where media with "hidden = true" can be found
         let base = r#"-- search_media_in_library
@@ -1053,6 +1301,8 @@ impl DbBackend for PostgresBackend {
 
         debug!({ count = page.items.len(), total = page.total }, "found media in library");
 
+        conn.finish();
+
         Ok(page)
     }
 }
@@ -1062,7 +1312,7 @@ impl DbBackend for PostgresBackend {
 // base must be a SELECT of a single media_uuid column over a FROM clause that includes
 // the media table, ending inside its WHERE clause, and using placeholders $1..$n for the
 // n base_params.  the filter, ORDER BY, LIMIT and OFFSET are appended with all user input
-// bound as further parameters.  when opts.with_total is set, a separate COUNT(*) without
+// bound as further parameters.  when opts.page.with_total is set, a separate COUNT(*) without
 // the ORDER/LIMIT is run so that the page query itself can stay a top-N index walk.
 async fn paged_search(
     conn: &tokio_postgres::Client,
@@ -1070,14 +1320,15 @@ async fn paged_search(
     base_params: &[&(dyn ToSql + Sync)],
     opts: &SearchOptions,
 ) -> Result<SearchPage<MediaUuid>> {
+    // the server validates requests, but a backend never runs a query it didn't check
+    opts.filter.validate_media().map_err(anyhow::Error::msg)?;
+
     let q = opts.postgres_sql("media.ts_vec", base_params.len() + 1);
 
     let mut params: Vec<&(dyn ToSql + Sync)> = base_params.to_vec();
-    if let Some(filter) = &q.filter_param {
-        params.push(filter);
-    }
+    params.extend(q.filter_params.iter().map(|p| p as &(dyn ToSql + Sync)));
 
-    let total = if opts.with_total {
+    let total = if opts.page.with_total {
         let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
         let n: i64 = conn.query_one(&count, &params).await?.try_get(0)?;
         Some(n as u64)
@@ -1085,12 +1336,40 @@ async fn paged_search(
         None
     };
 
-    params.push(&q.limit);
+    // a count-only request has no page to fetch
+    if opts.page.limit == Some(0) {
+        return Ok(SearchPage::count_only(total));
+    }
+
+    // fetch one row past the limit as a probe for has_more (LIMIT NULL is no limit)
+    let limit = q.limit.map(|l| l.saturating_add(1));
+
+    params.push(&limit);
     params.push(&q.offset);
 
     let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
 
-    let items = conn.query_scalar(&statement, &params).await?;
+    let rows = conn.query_scalar(&statement, &params).await?;
 
-    Ok(SearchPage { items, total })
+    Ok(SearchPage::from_probe(rows, total, opts.page.limit))
+}
+
+#[cfg(test)]
+mod slug_tests {
+    use super::*;
+
+    #[test]
+    fn tag_slugs_sql_is_static_and_applies_visibility() {
+        let media = pg_tag_slugs_sql(SearchKind::Media).unwrap();
+        assert!(media.contains("FROM media, skeys(media.tags) AS k"));
+        // the very predicate search_media uses
+        assert!(media.contains(PG_VISIBLE_MEDIA));
+        assert!(media.contains("lower(k) LIKE $2") && media.contains("LIMIT $3"));
+
+        let coll = pg_tag_slugs_sql(SearchKind::Collection).unwrap();
+        assert!(coll.contains("FROM collections, skeys(collections.tags) AS k"));
+        assert!(coll.contains("collections.gid = ANY($1)"));
+
+        assert!(pg_tag_slugs_sql(SearchKind::Library).is_err());
+    }
 }

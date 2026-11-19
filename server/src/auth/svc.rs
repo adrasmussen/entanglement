@@ -4,7 +4,7 @@ use async_cell::sync::AsyncCell;
 use async_trait::async_trait;
 use regex::Regex;
 use tokio::{sync::Mutex, task::spawn, time::timeout};
-use tracing::{Instrument, Level, debug, error, info, instrument, span};
+use tracing::{Instrument, Level, debug, error, info, instrument, span, warn};
 
 use crate::{
     auth::{ESAuthService, msg::AuthMsg},
@@ -29,11 +29,16 @@ use common::{
 // the auth service is really two services in one -- a way to query several authentication (authn)
 // and authorization (authz) providers, and a cache so we don't have to query them often
 //
-// the cache semantics are not ideal (need to be flushed manually when the group information
-// changes), but the database service will flush individual media files when their collections change
+// group membership lives outside the app (the toml file, ldap), so nothing tells us when it
+// changes: every USER_REFRESH the cached users' groups are fetched again and replaced, and a
+// user the providers no longer answer for is dropped (the next request asks afresh).  the
+// database service flushes individual media files when their collections change
 //
 // there are almost certainly several better ways of doing this, which will likely matter when we
 // switch to using ldap instead of a fixed file, but the services should roughly stay the same
+// how stale a user's cached groups can get after their membership changes
+const USER_REFRESH: Duration = Duration::from_secs(30);
+
 pub struct AuthService {
     config: Arc<ESConfig>,
     receiver: Arc<Mutex<EsmReceiver>>,
@@ -66,12 +71,20 @@ impl EntanglementService for AuthService {
         let receiver = self.receiver.clone();
         let state = Arc::new(AuthCache::new(config.clone(), registry.clone()).await?);
 
-        // for the first pass, we don't need any further machinery for this service
-        //
-        // however, if we want things like timers, batching updates, or other optimizations,
-        // they would all go here with corresponding handles in the AuthService struct
-        //
-        // example would use StreamExt's ready_chunks() method
+        // timers and other machinery for this service go here; the one so far keeps the cached
+        // group memberships current
+        {
+            let state = Arc::clone(&state);
+            spawn(async move {
+                let mut tick = tokio::time::interval(USER_REFRESH);
+                tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                tick.tick().await;
+                loop {
+                    tick.tick().await;
+                    state.refresh_user_cache().await;
+                }
+            });
+        }
 
         let serve = {
             async move {
@@ -210,6 +223,36 @@ impl AuthCache {
         groups.retain(|s| self.group_regex.is_match(s));
 
         Ok(groups)
+    }
+
+    // fetch every cached user's groups again: a change replaces the cached set, and a user the
+    // providers no longer answer for (removed, or the provider is failing) is dropped, so the
+    // next request for them asks the providers and fails closed if they still can't answer
+    async fn refresh_user_cache(&self) {
+        for uid in self.user_cache.keys() {
+            let fresh = timeout(
+                Duration::from_secs(10),
+                self.groups_from_providers(uid.clone()),
+            )
+            .await;
+            match fresh {
+                Ok(Ok(groups)) => {
+                    let old = self.user_cache.peek(&uid);
+                    if old.as_ref() != Some(&groups) {
+                        info!({ uid, old = ?old, new = ?groups }, "group membership changed");
+                        self.user_cache.insert(uid, groups);
+                    }
+                }
+                Ok(Err(err)) => {
+                    warn!({ uid, error = %err }, "dropping cached groups: providers failed");
+                    self.user_cache.remove(&uid);
+                }
+                Err(_) => {
+                    warn!({ uid }, "dropping cached groups: providers timed out");
+                    self.user_cache.remove(&uid);
+                }
+            }
+        }
     }
 
     // for a given media_uuid, this is the db lookup that establishes which groups are allowed

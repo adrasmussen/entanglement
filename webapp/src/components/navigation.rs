@@ -1,7 +1,21 @@
 use dioxus::prelude::*;
+
+use crate::components::palette::{HeaderSearch, SearchPalette};
 use dioxus_router::prelude::*;
 
 use crate::Route;
+
+// whether a nav link's page is the current one or an ancestor of it.  a search route carries
+// its ?q= in the route, so two routes to the same page are only equal without the query
+fn is_active(current: &Route, target: &Route) -> bool {
+    let path = |r: &Route| {
+        let s = r.to_string();
+        let s = s.split(['?', '#']).next().unwrap_or_default();
+        s.trim_end_matches('/').to_string()
+    };
+
+    current.is_child_of(target) || path(current) == path(target)
+}
 
 #[derive(Clone, PartialEq, Props)]
 struct NavBarButtonProps {
@@ -17,7 +31,7 @@ fn NavBarButton(props: NavBarButtonProps) -> Element {
     let current_path: Route = use_route();
     rsx! {
         Link {
-            class: if current_path.is_child_of(&target) || current_path == (target) { "nav-link active" } else { "nav-link" },
+            class: if is_active(&current_path, &target) { "nav-link active" } else { "nav-link" },
             to: target,
             "{name}"
         }
@@ -42,18 +56,20 @@ fn NavBarInner() -> Element {
                     }
                 }
 
+                HeaderSearch {}
+
                 nav { class: "nav-links",
                     NavBarButton {
                         name: "Gallery".to_owned(),
-                        target: Route::GallerySearch {},
+                        target: Route::GallerySearch { q: String::new() },
                     }
                     NavBarButton {
                         name: "Collections".to_owned(),
-                        target: Route::CollectionSearch {},
+                        target: Route::CollectionSearch { q: String::new() },
                     }
                     NavBarButton {
                         name: "Libraries".to_owned(),
-                        target: Route::LibrarySearch {},
+                        target: Route::LibrarySearch { q: String::new() },
                     }
                 }
             }
@@ -65,6 +81,43 @@ fn NavBarInner() -> Element {
 pub fn NavBar() -> Element {
     rsx! {
         NavBarInner {}
+        // the ⌘K search palette, on every page
+        SearchPalette {}
         Outlet::<Route> {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::query_ui::q_param;
+
+    #[test]
+    fn a_search_in_the_url_keeps_the_nav_link_active() {
+        let gallery = Route::GallerySearch { q: String::new() };
+
+        for q in ["", "tag:beach", "a b&c"] {
+            let current = Route::GallerySearch { q: q_param(q) };
+            assert!(is_active(&current, &gallery), "{q}");
+            assert!(!is_active(
+                &current,
+                &Route::CollectionSearch { q: String::new() }
+            ));
+            assert!(!is_active(
+                &current,
+                &Route::LibrarySearch { q: String::new() }
+            ));
+        }
+
+        // a page below the section, and the section from the detail page of another
+        let detail = Route::CollectionDetail {
+            collection_uuid: "x".into(),
+            q: q_param("t"),
+        };
+        assert!(is_active(
+            &detail,
+            &Route::CollectionSearch { q: String::new() }
+        ));
+        assert!(!is_active(&detail, &gallery));
     }
 }

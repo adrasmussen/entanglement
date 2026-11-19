@@ -15,7 +15,10 @@ use uuid::Uuid;
 
 use crate::{
     config::ESConfig,
-    db::{DbBackend, MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage},
+    db::{
+        DbBackend, MediaByCHash, MediaByPath, MediaDetails, SearchPage, column_check_result,
+        missing_columns, tables_of,
+    },
 };
 use api::{
     FOLDING_SEPARATOR, UuidSource,
@@ -24,7 +27,10 @@ use api::{
     fold_set,
     library::{Library, LibraryUpdate, LibraryUuid},
     media::{Media, MediaMetadata, MediaUpdate, MediaUuid},
-    search::{SearchOptions, escape_like},
+    page::PageRequest,
+    query::SearchKind,
+    search::{ListFilter, SearchOptions, escape_like},
+    slug::Slug,
     unfold_set,
 };
 
@@ -91,6 +97,29 @@ impl DbBackend for MariaDBBackend {
             pool: Pool::new(config.url.as_str()),
             locks: TableLocks::default(),
         })
+    }
+
+    async fn check_columns(&self, columns: &[(&str, &str)]) -> Result<()> {
+        // the table names are bound like any other value
+        let names = tables_of(columns);
+        let placeholders = vec!["?"; names.len()].join(", ");
+        let statement = format!(
+            "SELECT table_name, column_name FROM information_schema.columns \
+             WHERE table_schema = DATABASE() AND table_name IN ({placeholders})"
+        );
+        let params: Vec<Value> = names.into_iter().map(Value::from).collect();
+
+        let found = statement
+            .with(params)
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?
+            .into_iter()
+            .map(|row| from_row_opt::<(String, String)>(row))
+            .collect::<Result<HashSet<(String, String)>, FromRowError>>()?;
+
+        column_check_result(missing_columns(columns, &found))
     }
 
     #[instrument(skip(self))]
@@ -536,7 +565,7 @@ impl DbBackend for MariaDBBackend {
         // for a given uid and filter, find all non-hidden media that either:
         //  * is in a library owned by a group containing the uid
         //  * is in a collection owned by a group containing the uid
-        let gid_match = &*GID_MATCH;
+        let visible = &*MARIA_VISIBLE_MEDIA;
         let base = format!(
             r"
             SELECT
@@ -544,19 +573,7 @@ impl DbBackend for MariaDBBackend {
             FROM
                 media
             WHERE
-                media.hidden = FALSE
-                AND (
-                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {gid_match})
-                    OR EXISTS (
-                        SELECT 1
-                        FROM
-                            collection_contents
-                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
-                        WHERE
-                            collection_contents.media_uuid = media.media_uuid
-                            AND {gid_match}
-                    )
-                )"
+                {visible}"
         );
 
         let page = self
@@ -1051,12 +1068,19 @@ impl DbBackend for MariaDBBackend {
     async fn search_collections(
         &self,
         gid: HashSet<String>,
-        filter: String,
-        page: PageOptions,
+        filter: ListFilter,
+        page: PageRequest,
     ) -> Result<SearchPage<CollectionUuid>> {
         debug!("searching for collections");
 
         let _cr = self.locks.collection.read().await;
+
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter
+            .validate::<Collection>()
+            .map_err(anyhow::Error::msg)?;
+
+        let (filter_sql, filter_params) = filter.mariadb_sql::<Collection>();
 
         let gid_match = &*GID_MATCH;
         let base = format!(
@@ -1066,16 +1090,14 @@ impl DbBackend for MariaDBBackend {
             FROM
                 collections
             WHERE
-                {gid_match} AND name LIKE :filter"
+                {gid_match}{filter_sql}"
         );
 
-        let mut params: HashMap<Vec<u8>, Value> = HashMap::from([
-            (b"gid".to_vec(), fold_set(gid)?.into()),
-            (
-                b"filter".to_vec(),
-                format!("%{}%", escape_like(&filter)).into(),
-            ),
-        ]);
+        let mut params: HashMap<Vec<u8>, Value> =
+            HashMap::from([(b"gid".to_vec(), fold_set(gid)?.into())]);
+        for (name, value) in &filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
 
         let total = if page.with_total {
             let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")
@@ -1088,7 +1110,19 @@ impl DbBackend for MariaDBBackend {
             None
         };
 
-        params.insert(b"limit".to_vec(), page.limit.unwrap_or(u64::MAX).into());
+        // a count-only request has no page to fetch
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        // one row past the limit is a probe for has_more; mariadb has no LIMIT NULL, so
+        // the max u64 is the unbounded idiom
+        params.insert(
+            b"limit".to_vec(),
+            SearchPage::<CollectionUuid>::probe_limit(page.limit)
+                .unwrap_or(u64::MAX)
+                .into(),
+        );
         params.insert(b"offset".to_vec(), page.offset.into());
 
         let data = format!("{base} ORDER BY name, collection_uuid LIMIT :limit OFFSET :offset")
@@ -1105,9 +1139,58 @@ impl DbBackend for MariaDBBackend {
             })
             .collect::<Result<Vec<CollectionUuid>, FromRowError>>()?;
 
-        debug!({ count = data.len(), total = total }, "found collections");
+        let page = SearchPage::from_probe(data, total, page.limit);
 
-        Ok(SearchPage { items: data, total })
+        debug!({ count = page.items.len(), total = total }, "found collections");
+
+        Ok(page)
+    }
+
+    #[instrument(skip(self))]
+    async fn tag_slugs(
+        &self,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
+    ) -> Result<Vec<Slug>> {
+        debug!("listing tag slugs");
+
+        let _mr = self.locks.media.read().await;
+        let _lr = self.locks.library.read().await;
+        let _xr = self.locks.contents.read().await;
+        let _cr = self.locks.collection.read().await;
+
+        let statement = maria_tag_slugs_sql(kind)?;
+
+        let params: HashMap<Vec<u8>, Value> = HashMap::from([
+            (b"gid".to_vec(), fold_set(gid)?.into()),
+            (
+                b"prefix".to_vec(),
+                format!("{}%", escape_like(&prefix.to_lowercase())).into(),
+            ),
+            (b"limit".to_vec(), u64::from(limit).into()),
+        ]);
+
+        let slugs = statement
+            .with(Params::Named(params))
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?
+            .into_iter()
+            .map(|row| {
+                let (value, count) = from_row_opt::<(String, u64)>(row)?;
+                Ok(Slug {
+                    value,
+                    count: Some(count),
+                })
+            })
+            .collect::<Result<Vec<Slug>, FromRowError>>()?;
+
+        debug!({ count = slugs.len() }, "found tag slugs");
+
+        Ok(slugs)
     }
 
     #[instrument(skip(self, opts))]
@@ -1287,30 +1370,65 @@ impl DbBackend for MariaDBBackend {
     async fn search_libraries(
         &self,
         gid: HashSet<String>,
-        filter: String,
-    ) -> Result<Vec<LibraryUuid>> {
+        filter: ListFilter,
+        page: PageRequest,
+    ) -> Result<SearchPage<LibraryUuid>> {
         debug!("searching libraries");
 
         let _lr = self.locks.library.read().await;
 
+        // the server validates requests, but a backend never runs a query it didn't check
+        filter.validate::<Library>().map_err(anyhow::Error::msg)?;
+
+        let (filter_sql, filter_params) = filter.mariadb_sql::<Library>();
+
         let gid_match = &*GID_MATCH;
-        let result = format!(
+        let base = format!(
             r"
             SELECT
                 library_uuid
             FROM
                 libraries
             WHERE
-                {gid_match} AND path LIKE :filter"
-        )
-        .with(params! {
-            "gid" => fold_set(gid)?,
-            "filter" => format!("%{}%", escape_like(&filter)),
-        })
-        .run(self.pool.get_conn().await?)
-        .await?
-        .collect::<Row>()
-        .await?;
+                {gid_match}{filter_sql}"
+        );
+
+        let mut params: HashMap<Vec<u8>, Value> =
+            HashMap::from([(b"gid".to_vec(), fold_set(gid)?.into())]);
+        for (name, value) in &filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
+
+        let total = if page.with_total {
+            let n = format!("SELECT COUNT(*) FROM ({base}) AS counted")
+                .with(Params::Named(params.clone()))
+                .first::<u64, _>(self.pool.get_conn().await?)
+                .await?
+                .ok_or_else(|| anyhow::Error::msg("COUNT(*) returned no row"))?;
+            Some(n)
+        } else {
+            None
+        };
+
+        if page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        params.insert(
+            b"limit".to_vec(),
+            SearchPage::<LibraryUuid>::probe_limit(page.limit)
+                .unwrap_or(u64::MAX)
+                .into(),
+        );
+        params.insert(b"offset".to_vec(), page.offset.into());
+
+        // path is unique (so it has an index), and library_uuid keeps the order total
+        let result = format!("{base} ORDER BY path, library_uuid LIMIT :limit OFFSET :offset")
+            .with(Params::Named(params))
+            .run(self.pool.get_conn().await?)
+            .await?
+            .collect::<Row>()
+            .await?;
 
         let data = result
             .into_iter()
@@ -1321,9 +1439,11 @@ impl DbBackend for MariaDBBackend {
             })
             .collect::<Result<Vec<LibraryUuid>, anyhow::Error>>()?;
 
-        debug!({ count = data.len() }, "found libraries");
+        let page = SearchPage::from_probe(data, total, page.limit);
 
-        Ok(data)
+        debug!({ count = page.items.len(), total = total }, "found libraries");
+
+        Ok(page)
     }
 
     #[instrument(skip(self, hidden, opts))]
@@ -1390,6 +1510,66 @@ static GID_MATCH: LazyLock<String> = LazyLock::new(|| {
     let sep = FOLDING_SEPARATOR;
     format!("LOCATE(CONCAT('{sep}', gid, '{sep}'), CONCAT('{sep}', :gid, '{sep}')) > 0")
 });
+
+// the media visibility rule as one predicate on `media`, with the user's groups bound as
+// :gid; search_media and the tag slugs share it
+static MARIA_VISIBLE_MEDIA: LazyLock<String> = LazyLock::new(|| {
+    let gid_match = &*GID_MATCH;
+    format!(
+        r"media.hidden = FALSE
+                AND (
+                    media.library_uuid IN (SELECT library_uuid FROM libraries WHERE {gid_match})
+                    OR EXISTS (
+                        SELECT 1
+                        FROM
+                            collection_contents
+                            INNER JOIN collections ON collections.collection_uuid = collection_contents.collection_uuid
+                        WHERE
+                            collection_contents.media_uuid = media.media_uuid
+                            AND {gid_match}
+                    )
+                )"
+    )
+});
+
+// the tag slugs statement: the folded tags of the visible records are split into one row
+// per tag by a recursive CTE (mariadb has no hstore), then grouped like the postgres version.
+// :gid the groups, :prefix the LIKE pattern, :limit the limit; ties sort by byte order
+pub(crate) fn maria_tag_slugs_sql(kind: SearchKind) -> Result<String> {
+    let source = match kind {
+        SearchKind::Media => format!(
+            "SELECT media.tags AS tags FROM media WHERE {} AND media.tags <> ''",
+            &*MARIA_VISIBLE_MEDIA
+        ),
+        SearchKind::Collection => format!(
+            "SELECT collections.tags AS tags FROM collections WHERE {} AND collections.tags <> ''",
+            &*GID_MATCH
+        ),
+        SearchKind::Library => return Err(anyhow::Error::msg("libraries have no tags")),
+    };
+    let sep = FOLDING_SEPARATOR;
+    Ok(format!(
+        r"
+            WITH RECURSIVE split (tag, rest) AS (
+                SELECT
+                    SUBSTRING_INDEX(t.tags, '{sep}', 1),
+                    IF(LOCATE('{sep}', t.tags) > 0, SUBSTRING(t.tags, LOCATE('{sep}', t.tags) + 1), NULL)
+                FROM ({source}) AS t
+                UNION ALL
+                SELECT
+                    SUBSTRING_INDEX(rest, '{sep}', 1),
+                    IF(LOCATE('{sep}', rest) > 0, SUBSTRING(rest, LOCATE('{sep}', rest) + 1), NULL)
+                FROM split
+                WHERE rest IS NOT NULL
+            )
+            SELECT tag, COUNT(*)
+            FROM split
+            WHERE tag <> '' AND LOWER(tag) LIKE :prefix
+            GROUP BY tag
+            ORDER BY COUNT(*) DESC, BINARY tag
+            LIMIT :limit"
+    ))
+}
 
 const MEDIA_COLS: &str = "media.path, media.date, media.note, media.tags";
 
@@ -1489,22 +1669,27 @@ impl MariaDBBackend {
     // base must be a SELECT of a single media_uuid column over a FROM clause that includes
     // the media table, ending inside its WHERE clause; the filter, ORDER BY and LIMIT/OFFSET
     // are appended with all user input bound as the named parameters :filter, :limit and
-    // :offset.  when opts.with_total is set, a separate COUNT(*) is run without ORDER/LIMIT.
+    // :offset.  when opts.page.with_total is set, a separate COUNT(*) is run without ORDER/LIMIT.
     async fn paged_search(
         &self,
         base: &str,
         base_params: Vec<(&str, Value)>,
         opts: &SearchOptions,
     ) -> Result<SearchPage<MediaUuid>> {
+        // the server validates requests, but a backend never runs a query it didn't check
+        opts.filter.validate_media().map_err(anyhow::Error::msg)?;
+
         let q = opts.mariadb_sql(MEDIA_COLS);
 
         let mut params: HashMap<Vec<u8>, Value> = base_params
             .into_iter()
             .map(|(k, v)| (k.as_bytes().to_vec(), v))
             .collect();
-        params.insert(b"filter".to_vec(), q.filter_param.clone().into());
+        for (name, value) in &q.filter_params {
+            params.insert(name.as_bytes().to_vec(), value.clone().into());
+        }
 
-        let total = if opts.with_total {
+        let total = if opts.page.with_total {
             let count = format!("SELECT COUNT(*) FROM ({base}{}) AS counted", q.filter_sql);
             let n = count
                 .with(Params::Named(params.clone()))
@@ -1516,7 +1701,14 @@ impl MariaDBBackend {
             None
         };
 
-        params.insert(b"limit".to_vec(), q.limit.into());
+        // a count-only request has no page to fetch
+        if opts.page.limit == Some(0) {
+            return Ok(SearchPage::count_only(total));
+        }
+
+        // fetch one row past the limit as a probe for has_more (q.limit is already the
+        // max u64 when unbounded, which the saturating add leaves alone)
+        params.insert(b"limit".to_vec(), q.limit.saturating_add(1).into());
         params.insert(b"offset".to_vec(), q.offset.into());
 
         let statement = format!("{base}{}{}{}", q.filter_sql, q.order_sql, q.page_sql);
@@ -1531,6 +1723,24 @@ impl MariaDBBackend {
             .map(|row| Ok(MediaUuid::from_value(self, from_row_opt::<Uuid>(row)?)))
             .collect::<Result<Vec<MediaUuid>, FromRowError>>()?;
 
-        Ok(SearchPage { items, total })
+        Ok(SearchPage::from_probe(items, total, opts.page.limit))
+    }
+}
+
+#[cfg(test)]
+mod slug_tests {
+    use super::*;
+
+    #[test]
+    fn tag_slugs_sql_is_static_and_applies_visibility() {
+        let media = maria_tag_slugs_sql(SearchKind::Media).unwrap();
+        assert!(media.contains("WITH RECURSIVE split (tag, rest)"));
+        assert!(media.contains(&*MARIA_VISIBLE_MEDIA));
+        assert!(media.contains("LOWER(tag) LIKE :prefix") && media.contains("LIMIT :limit"));
+
+        let coll = maria_tag_slugs_sql(SearchKind::Collection).unwrap();
+        assert!(coll.contains("FROM collections WHERE") && coll.contains(&*GID_MATCH));
+
+        assert!(maria_tag_slugs_sql(SearchKind::Library).is_err());
     }
 }

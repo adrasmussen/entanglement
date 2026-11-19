@@ -1,7 +1,16 @@
 use std::collections::HashSet;
 
-use api::{collection::*, comment::*, library::*, media::*, search::SearchOptions};
-use common::db::{MediaByCHash, MediaByPath, MediaDetails, PageOptions, SearchPage};
+use api::{
+    collection::*,
+    comment::*,
+    library::*,
+    media::*,
+    page::PageRequest,
+    query::SearchKind,
+    search::{ListFilter, SearchOptions},
+    slug::Slug,
+};
+use common::db::{MediaByCHash, MediaByPath, MediaDetails, SearchPage};
 
 use crate::service::*;
 
@@ -113,8 +122,15 @@ pub enum DbMsg {
     SearchCollections {
         resp: EsmResp<SearchPage<CollectionUuid>>,
         gid: HashSet<String>,
-        filter: String,
-        page: PageOptions,
+        filter: ListFilter,
+        page: PageRequest,
+    },
+    TagSlugs {
+        resp: EsmResp<Vec<Slug>>,
+        gid: HashSet<String>,
+        kind: SearchKind,
+        prefix: String,
+        limit: u32,
     },
     SearchMediaInCollection {
         resp: EsmResp<SearchPage<MediaUuid>>,
@@ -138,9 +154,10 @@ pub enum DbMsg {
         update: LibraryUpdate,
     },
     SearchLibraries {
-        resp: EsmResp<Vec<LibraryUuid>>,
+        resp: EsmResp<SearchPage<LibraryUuid>>,
         gid: HashSet<String>,
-        filter: String,
+        filter: ListFilter,
+        page: PageRequest,
     },
     SearchMediaInLibrary {
         resp: EsmResp<SearchPage<MediaUuid>>,

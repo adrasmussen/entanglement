@@ -1,23 +1,37 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
-    common::storage::*,
-    components::{modal::ModalBox, search::SearchBar},
+    Route,
+    common::{query_ui::q_param, search::parse_query},
+    components::{
+        modal::ModalBox,
+        query_bar::{QueryBar, use_search_state},
+    },
     library::{LIBRARY_SEARCH_KEY, table::LibraryTable},
 };
 use api::library::*;
 
 #[component]
-pub fn LibrarySearch() -> Element {
+pub fn LibrarySearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let library_search_signal = use_signal::<String>(|| try_local_storage(LIBRARY_SEARCH_KEY));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::LibrarySearch { q: q_param(&text) });
+    });
+    let search = use_search_state(LIBRARY_SEARCH_KEY, &q, on_commit);
+    let library_search_signal = search.signal;
 
     let library_future = use_resource(move || async move {
         update_signal();
 
-        let filter = library_search_signal();
-        search_libraries(&SearchLibrariesReq { filter }).await
+        let text = library_search_signal();
+        search_libraries(&SearchLibrariesReq {
+            query: Some(parse_query::<Library>(&text)),
+            ..Default::default()
+        })
+        .await
     });
 
     let status = match &*library_future.read() {
@@ -37,10 +51,8 @@ pub fn LibrarySearch() -> Element {
                     p { "Manage your media source libraries" }
                 }
 
-                SearchBar {
-                    search_signal: library_search_signal,
-                    storage_key: LIBRARY_SEARCH_KEY,
-                    placeholder: "Search by library path...",
+                QueryBar::<Library> {
+                    search,
                     status,
                 }
             }

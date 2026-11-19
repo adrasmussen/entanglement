@@ -8,11 +8,17 @@ use regex::escape;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    FOLDING_SEPARATOR,
     collection::{CollectionUuid, SearchMediaInCollectionReq},
     comment::CommentUuid,
     http_endpoint,
-    library::SearchMediaInLibraryReq,
+    library::{LibraryUuid, SearchMediaInLibraryReq},
     media::{Media, MediaUuid, SearchMediaReq},
+    page::{PageMeta, PageRequest, PagedResp},
+    query::{
+        Clause, ColumnExpr, DataType, FieldSpec, FreeText, MIN_INFIX_CHARS, Op, SearchClass,
+        SearchQuery, any_values, check_filter_text, field_spec,
+    },
 };
 
 // paging limits
@@ -27,37 +33,39 @@ pub const MAX_PAGE: u64 = 200;
 
 // search options
 //
-// limit = None means "no limit"; with_total asks the backend to run an additional
-// COUNT(*) over the filtered set (without ORDER/LIMIT), which the webapp only does for
-// the first page of a search so that subsequent pages stay cheap top-N index walks
+// page.limit = None means "no limit"; page.with_total asks the backend to run an
+// additional COUNT(*) over the filtered set (without ORDER/LIMIT), which the webapp only
+// does for the first page of a search so that subsequent pages stay cheap top-N index
+// walks.  the page fields are flattened, so the wire keys are unchanged
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchOptions {
     pub filter: SearchFilter,
     pub order: SortMethod,
-    pub limit: Option<u64>,
-    pub offset: u64,
-    #[serde(default)]
-    pub with_total: bool,
+    #[serde(flatten)]
+    pub page: PageRequest,
 }
 
 // sql fragments for a postgres search, with every piece of user input bound as a
 // numbered parameter -- callers append these to their base query (which must end in a
-// WHERE clause) and push the parameters in the order: filter_param (if Some), limit, offset
+// WHERE clause) and push the parameters in the order: filter_params, limit, offset
 #[derive(Clone, Debug)]
 pub struct PgSearchSql {
     pub filter_sql: String,
-    pub filter_param: Option<String>,
+    // every value is text (dates, tags, patterns and enum names too; the sql casts)
+    pub filter_params: Vec<String>,
     pub order_sql: &'static str,
     pub page_sql: String,
     pub limit: Option<i64>,
     pub offset: i64,
 }
 
-// sql fragments for a mariadb search, using named parameters :filter, :limit, :offset
+// sql fragments for a mariadb search, using named parameters :limit and :offset plus the
+// (name, value) filter_params, which are :filter for the older filters and :f0, :f1, ...
+// for structured queries; an empty filter has none
 #[derive(Clone, Debug)]
 pub struct MariaSearchSql {
     pub filter_sql: String,
-    pub filter_param: String,
+    pub filter_params: Vec<(String, String)>,
     pub order_sql: &'static str,
     pub page_sql: &'static str,
     pub limit: u64,
@@ -79,32 +87,32 @@ impl SearchOptions {
     // first_param is the $N index of the first placeholder this function may use, i.e.
     // one more than the number of parameters already used by the base query
     pub fn postgres_sql(&self, ts_col: &str, first_param: usize) -> PgSearchSql {
-        let (filter_sql, filter_param) = self.filter.format_postgres(ts_col, first_param);
+        let (filter_sql, filter_params) = self.filter.format_postgres(ts_col, first_param);
 
-        let next = first_param + usize::from(filter_param.is_some());
+        let next = first_param + filter_params.len();
 
         PgSearchSql {
             filter_sql,
-            filter_param,
+            filter_params,
             order_sql: self.order_sql(),
             // LIMIT NULL is equivalent to no limit in postgres
             page_sql: format!(" LIMIT ${} OFFSET ${}", next, next + 1),
-            limit: self.limit.map(clamp_i64),
-            offset: clamp_i64(self.offset),
+            limit: self.page.limit.map(clamp_i64),
+            offset: clamp_i64(self.page.offset),
         }
     }
 
     pub fn mariadb_sql(&self, cols: &str) -> MariaSearchSql {
-        let (filter_sql, filter_param) = self.filter.format_mariadb(cols);
+        let (filter_sql, filter_params) = self.filter.format_mariadb(cols);
 
         MariaSearchSql {
             filter_sql,
-            filter_param,
+            filter_params,
             order_sql: self.order_sql(),
             page_sql: " LIMIT :limit OFFSET :offset",
             // mariadb has no LIMIT NULL/ALL; the documented idiom is the max u64
-            limit: self.limit.unwrap_or(u64::MAX),
-            offset: self.offset,
+            limit: self.page.limit.unwrap_or(u64::MAX),
+            offset: self.page.offset,
         }
     }
 }
@@ -147,6 +155,8 @@ pub enum SearchFilter {
     SubstringAll { filter: HashSet<String> },
     Fulltext { filter: String },
     Keyword { filter: HashSet<String> },
+    // the structured query (typed fields plus free text); media only for now
+    Query(SearchQuery),
 }
 
 impl Default for SearchFilter {
@@ -172,6 +182,9 @@ impl Display for SearchFilter {
             Self::Keyword { filter } => {
                 write!(f, "Keyword{filter:?}")
             }
+            Self::Query(q) => {
+                write!(f, "Query{{{}}}", q.to_text())
+            }
         }
     }
 }
@@ -181,9 +194,9 @@ impl SearchFilter {
     //
     // https://www.postgresql.org/docs/current/textsearch-controls.html
     //
-    // returns (sql, param) where sql references the param as $idx; user input is never
-    // interpolated into the sql text itself
-    fn format_postgres(&self, ts_col: &str, idx: usize) -> (String, Option<String>) {
+    // returns (sql, params) where sql references the params as $idx, $idx+1, ...; user input
+    // is never interpolated into the sql text itself
+    fn format_postgres(&self, ts_col: &str, idx: usize) -> (String, Vec<String>) {
         let tsquery = |filter: &HashSet<String>, op: &str| -> Option<String> {
             let terms = filter
                 .iter()
@@ -202,45 +215,50 @@ impl SearchFilter {
                 match tsquery(filter, " | ") {
                     Some(q) => (
                         format!(" AND {ts_col} @@ to_tsquery('english', ${idx})"),
-                        Some(q),
+                        vec![q],
                     ),
-                    None => (String::new(), None),
+                    None => (String::new(), Vec::new()),
                 }
             }
 
             Self::SubstringAll { filter } => match tsquery(filter, " & ") {
                 Some(q) => (
                     format!(" AND {ts_col} @@ to_tsquery('english', ${idx})"),
-                    Some(q),
+                    vec![q],
                 ),
-                None => (String::new(), None),
+                None => (String::new(), Vec::new()),
             },
 
             // websearch_to_tsquery never raises on malformed input
             Self::Fulltext { filter } => {
                 if filter.trim().is_empty() {
-                    return (String::new(), None);
+                    return (String::new(), Vec::new());
                 }
 
                 (
                     format!(" AND {ts_col} @@ websearch_to_tsquery('english', ${idx})"),
-                    Some(filter.clone()),
+                    vec![filter.clone()],
                 )
             }
+
+            Self::Query(q) => q.postgres_filter::<Media>(ts_col, idx),
         }
     }
 
     // mariadb formatting for mysql_async queries
     //
-    // returns (sql, filter) where 'sql' is a fragment of an sql query
-    // and filter is the named parameter
-    fn format_mariadb(&self, cols: &str) -> (String, String) {
+    // returns (sql, params) where 'sql' is a fragment of an sql query
+    // and params are its named parameters
+    fn format_mariadb(&self, cols: &str) -> (String, Vec<(String, String)>) {
+        // the older filters all bind a single :filter
+        let single = |sql: String, value: String| (sql, vec![("filter".to_string(), value)]);
+
         match self {
             // match any of the strings using the normal regex logical OR |
             // (?i) enables case-insensitive matching
             Self::SubstringAny { filter } => {
                 if filter.is_empty() {
-                    return (String::new(), String::new());
+                    return (String::new(), Vec::new());
                 }
 
                 // note that, while this is superficially the same as fold_set(), the pipe here is a
@@ -252,7 +270,7 @@ impl SearchFilter {
                     .trim_matches('|')
                     .to_string();
 
-                (
+                single(
                     format!(" AND CONCAT_WS(\"|\", {cols}) RLIKE :filter"),
                     regex,
                 )
@@ -261,7 +279,7 @@ impl SearchFilter {
             // match all of the strings using an expensive lookahead assertion (?=) and word boundary \b
             Self::SubstringAll { filter } => {
                 if filter.is_empty() {
-                    return (String::new(), String::new());
+                    return (String::new(), Vec::new());
                 }
 
                 let regex = filter
@@ -271,7 +289,7 @@ impl SearchFilter {
                         a + &format!("(?=.*?\\b{b}\\b)")
                     });
 
-                (
+                single(
                     format!(" AND CONCAT_WS(\"|\", {cols}) RLIKE :filter"),
                     regex,
                 )
@@ -281,10 +299,10 @@ impl SearchFilter {
             // so we don't need to parse anything
             Self::Fulltext { filter } => {
                 if filter.is_empty() {
-                    return (String::new(), String::new());
+                    return (String::new(), Vec::new());
                 }
 
-                (
+                single(
                     format!(" AND MATCH({cols}) AGAINST(:filter IN BOOLEAN MODE)"),
                     filter.clone(),
                 )
@@ -293,19 +311,377 @@ impl SearchFilter {
             // use the fulltext search as keywords, which expects a comma-separated list
             Self::Keyword { filter } => {
                 if filter.is_empty() {
-                    return (String::new(), String::new());
+                    return (String::new(), Vec::new());
                 }
                 let keywords = filter
                     .iter()
                     .fold(String::from(""), |a, b| a + b + ",")
                     .trim_matches(',')
                     .to_string();
-                (
+                single(
                     format!(" AND MATCH({cols}) AGAINST(:filter IN NATURAL LANGUAGE MODE)"),
                     keywords,
                 )
             }
+
+            Self::Query(q) => q.mariadb_filter::<Media>(cols),
         }
+    }
+
+    // the checks the server applies to a request before it reaches a backend; every search
+    // filter today is over media.  the older term-set filters get the same text checks as a
+    // typed query, over their terms as one text
+    pub fn validate_media(&self) -> Result<(), String> {
+        match self {
+            Self::Query(q) => q.validate::<Media>(),
+            Self::Fulltext { filter } => check_filter_text(filter),
+            Self::SubstringAny { filter }
+            | Self::SubstringAll { filter }
+            | Self::Keyword { filter } => check_filter_text(&filter.iter().join(" ")),
+        }
+    }
+}
+
+// the filter of a collection or library list search: the older literal substring match on
+// the class's free-text column (what the pickers use), or a structured query
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ListFilter {
+    Literal(String),
+    Query(SearchQuery),
+}
+
+impl ListFilter {
+    // a request's `filter` text is only used when it has no structured query
+    pub fn from_req(filter: String, query: Option<SearchQuery>) -> Self {
+        match query {
+            Some(q) => Self::Query(q),
+            None => Self::Literal(filter),
+        }
+    }
+
+    pub fn validate<C: SearchClass>(&self) -> Result<(), String> {
+        match self {
+            Self::Query(q) => q.validate::<C>(),
+            Self::Literal(text) => check_filter_text(text),
+        }
+    }
+
+    // postgres fragment (starting with " AND ") and parameters, first placeholder $first_param
+    pub fn postgres_sql<C: SearchClass>(&self, first_param: usize) -> (String, Vec<String>) {
+        match self {
+            Self::Query(q) => q.postgres_filter::<C>("", first_param),
+            Self::Literal(text) => (
+                format!(" AND {} LIKE ${first_param}", literal_column::<C>()),
+                vec![format!("%{}%", escape_like(text))],
+            ),
+        }
+    }
+
+    // mariadb fragment and named parameters (:f0, :f1, ...)
+    pub fn mariadb_sql<C: SearchClass>(&self) -> (String, Vec<(String, String)>) {
+        match self {
+            Self::Query(q) => q.mariadb_filter::<C>(""),
+            Self::Literal(text) => (
+                format!(" AND {} LIKE :f0", literal_column::<C>()),
+                vec![("f0".to_string(), format!("%{}%", escape_like(text)))],
+            ),
+        }
+    }
+}
+
+// the free-text column of a list class, qualified; only classes with a column have a literal
+// filter, and the others match nothing
+fn literal_column<C: SearchClass>() -> String {
+    match C::FREE_TEXT {
+        FreeText::Column(c) => format!("{}.{c}", C::TABLE),
+        FreeText::Fulltext { .. } => String::from("NULL"),
+    }
+}
+
+// the generic resolver: turns a SearchQuery into sql fragments by walking its clauses and
+// choosing a fixed template from each field's declared type and operator.  column names
+// come only from the class's static FIELDS table (and C::TABLE), operators and templates are
+// literals in this file, and every user value is a bound parameter -- never sql text.
+//
+// the fragments each start with " AND ", for appending to a base query that ends in a WHERE
+// clause.  a clause the declarations don't cover (which validate() rejects before a request
+// gets here) resolves to FALSE, so a bad query can only ever match nothing
+#[derive(Clone, Copy, PartialEq)]
+enum Dialect {
+    Postgres,
+    MariaDb,
+}
+
+struct Resolver {
+    dialect: Dialect,
+    // the $N number of the first placeholder (postgres only)
+    first: usize,
+    params: Vec<String>,
+}
+
+impl Resolver {
+    // bind a value, returning the placeholder to put in the sql: $N or :fN
+    fn bind(&mut self, value: String) -> String {
+        let n = self.params.len();
+        self.params.push(value);
+        match self.dialect {
+            Dialect::Postgres => format!("${}", self.first + n),
+            Dialect::MariaDb => format!(":f{n}"),
+        }
+    }
+
+    // the "a OR b OR c" free-text condition: for media the older SubstringAny match against
+    // the fulltext columns, for the list classes a LIKE per word against one column
+    fn text_sql<C: SearchClass>(&mut self, terms: &[String], cols: &str) -> Option<String> {
+        let terms: Vec<&str> = terms
+            .iter()
+            .map(|t| t.trim())
+            .filter(|t| !t.is_empty())
+            .sorted()
+            .dedup()
+            .collect();
+
+        if terms.is_empty() {
+            return None;
+        }
+
+        if let FreeText::Column(column) = C::FREE_TEXT {
+            let col = format!("{}.{column}", C::TABLE);
+            let like = if self.dialect == Dialect::Postgres {
+                "ILIKE"
+            } else {
+                "LIKE"
+            };
+            let any = terms
+                .iter()
+                .map(|t| {
+                    let p = self.bind(format!("%{}%", escape_like(t)));
+                    format!("{col} {like} {p}")
+                })
+                .join(" OR ");
+            return Some(format!("({any})"));
+        }
+
+        let FreeText::Fulltext { columns, pg_infix } = C::FREE_TEXT else {
+            unreachable!("the column case returned above");
+        };
+        let qualified: Vec<String> = columns
+            .iter()
+            .map(|c| format!("{}.{c}", C::TABLE))
+            .collect();
+
+        match self.dialect {
+            Dialect::Postgres => {
+                // each word is a prefix (`'check':*` matches checkpoint, checko, checkpt), so
+                // partial words match as the user types; the GIN index on ts_vec still applies.
+                // to_tsquery stems the prefix like any lexeme, so a prefix that stems
+                // differently from the full word (rare) can miss it
+                let q = terms
+                    .iter()
+                    .map(|t| format!("{}:*", quote_tsquery_lexeme(t)))
+                    .join(" | ");
+                let p = self.bind(q);
+                let mut any = vec![format!("{cols} @@ to_tsquery('english', {p})")];
+
+                // and anywhere inside a word, through the trigram index on pg_infix(columns),
+                // which lowercases: so the pattern is lowercased too and LIKE suffices
+                let infix = format!("{pg_infix}({})", qualified.join(", "));
+                for t in terms
+                    .iter()
+                    .filter(|t| t.chars().count() >= MIN_INFIX_CHARS)
+                {
+                    let p = self.bind(format!("%{}%", escape_like(&t.to_lowercase())));
+                    any.push(format!("{infix} LIKE {p}"));
+                }
+
+                Some(if any.len() == 1 {
+                    any.remove(0)
+                } else {
+                    format!("({})", any.join(" OR "))
+                })
+            }
+            Dialect::MariaDb => {
+                // a case-insensitive substring of the declared columns joined, so whole
+                // words, prefixes and the inside of words all match, like postgres
+                let regex = format!("(?i){}", terms.iter().map(|t| escape(t)).join("|"));
+                let p = self.bind(regex);
+                Some(format!(
+                    "CONCAT_WS(\"|\", {}) RLIKE {p}",
+                    qualified.join(", ")
+                ))
+            }
+        }
+    }
+
+    // one clause as a condition, or None when no template covers it
+    fn clause_sql<C: SearchClass>(&mut self, clause: &Clause) -> Option<String> {
+        let spec: &FieldSpec = field_spec::<C>(&clause.field)?;
+
+        if !spec.ops.contains(&clause.op) {
+            return None;
+        }
+
+        let pg = self.dialect == Dialect::Postgres;
+        let plain = format!("{}.{}", C::TABLE, spec.column);
+        // spelled exactly as the expression index on it (idx_media_name_trgm)
+        let col = match spec.expr {
+            ColumnExpr::Plain => plain,
+            ColumnExpr::Basename if pg => format!("substring({plain} from '[^/]*$')"),
+            ColumnExpr::Basename => format!("SUBSTRING_INDEX({plain}, '/', -1)"),
+        };
+        let v = clause.value.clone();
+
+        let sql = match (spec.data_type, clause.op) {
+            (DataType::Text, Op::Contains) => {
+                let p = self.bind(format!("%{}%", escape_like(&v)));
+                let like = if pg { "ILIKE" } else { "LIKE" };
+                format!("{col} {like} {p}")
+            }
+
+            // tags are an hstore on postgres and a folded string on mariadb; as with
+            // GID_MATCH, delimiting both sides with the separator (which no tag contains)
+            // makes the match exact
+            (DataType::Tag, Op::Has) => {
+                let p = self.bind(v);
+                if pg {
+                    format!("{col} ? {p}")
+                } else {
+                    let sep = FOLDING_SEPARATOR;
+                    format!(
+                        "LOCATE(CONCAT('{sep}', {p}, '{sep}'), CONCAT('{sep}', {col}, '{sep}')) > 0"
+                    )
+                }
+            }
+
+            // any of several tags.  on postgres the list travels as one parameter joined with
+            // the folding separator, which no tag can contain (fold_set rejects it on both
+            // backends); mariadb ORs the exact-match template, one bound value each
+            (DataType::Tag, Op::HasAny) => {
+                let items = any_values(&v);
+                if items.is_empty() {
+                    return None;
+                }
+                if pg {
+                    let sep = FOLDING_SEPARATOR;
+                    let p = self.bind(items.join(sep));
+                    format!("{col} ?| string_to_array({p}, '{sep}')")
+                } else {
+                    let sep = FOLDING_SEPARATOR;
+                    let any = items
+                        .iter()
+                        .map(|t| {
+                            let p = self.bind(t.to_string());
+                            format!(
+                                "LOCATE(CONCAT('{sep}', {p}, '{sep}'), CONCAT('{sep}', {col}, '{sep}')) > 0"
+                            )
+                        })
+                        .join(" OR ");
+                    format!("({any})")
+                }
+            }
+
+            // the postgres enum has no text comparison, hence the cast; the only enum
+            // field is media.media_type
+            (DataType::Enum(_), Op::Eq) => {
+                let p = self.bind(v);
+                if pg {
+                    format!("{col} = {p}::text::media_type")
+                } else {
+                    format!("{col} = {p}")
+                }
+            }
+
+            // dates are strings, and a partial date is a prefix: date:2020-06 is all of
+            // June, so > and <= treat the value as a prefix rather than comparing past it
+            (DataType::Date, Op::Eq) => {
+                let p = self.bind(format!("{}%", escape_like(&v)));
+                format!("{col} LIKE {p}")
+            }
+            (DataType::Date, Op::Ge) => {
+                let p = self.bind(v);
+                format!("{col} >= {p}")
+            }
+            (DataType::Date, Op::Lt) => {
+                let p = self.bind(v);
+                format!("{col} < {p}")
+            }
+            (DataType::Date, Op::Gt) => {
+                let p = self.bind(v.clone());
+                let q = self.bind(format!("{}%", escape_like(&v)));
+                format!("({col} > {p} AND {col} NOT LIKE {q})")
+            }
+            (DataType::Date, Op::Le) => {
+                let p = self.bind(v.clone());
+                let q = self.bind(format!("{}%", escape_like(&v)));
+                format!("({col} <= {p} OR {col} LIKE {q})")
+            }
+            (DataType::Date, Op::Range) => {
+                let (a, b) = v.split_once("..")?;
+                let pa = self.bind(a.to_string());
+                let pb = self.bind(b.to_string());
+                let pc = self.bind(format!("{}%", escape_like(b)));
+                format!("({col} >= {pa} AND ({col} <= {pb} OR {col} LIKE {pc}))")
+            }
+
+            _ => return None,
+        };
+
+        Some(sql)
+    }
+
+    fn resolve<C: SearchClass>(&mut self, query: &SearchQuery, free_text_cols: &str) -> String {
+        let mut sql = String::new();
+
+        if let Some(t) = self.text_sql::<C>(&query.text, free_text_cols) {
+            sql.push_str(" AND ");
+            sql.push_str(&t);
+        }
+
+        for clause in &query.clauses {
+            sql.push_str(" AND ");
+            match self.clause_sql::<C>(clause) {
+                Some(c) => sql.push_str(&c),
+                None => sql.push_str("FALSE"),
+            }
+        }
+
+        sql
+    }
+}
+
+impl SearchQuery {
+    // postgres fragment and parameters for this query; free text goes against ts_col (the
+    // tsvector column) and the first placeholder is $first_param
+    pub fn postgres_filter<C: SearchClass>(
+        &self,
+        ts_col: &str,
+        first_param: usize,
+    ) -> (String, Vec<String>) {
+        let mut r = Resolver {
+            dialect: Dialect::Postgres,
+            first: first_param,
+            params: Vec::new(),
+        };
+        let sql = r.resolve::<C>(self, ts_col);
+        (sql, r.params)
+    }
+
+    // mariadb fragment and named parameters (:f0, :f1, ...); free text goes against the
+    // comma-separated column list cols
+    pub fn mariadb_filter<C: SearchClass>(&self, cols: &str) -> (String, Vec<(String, String)>) {
+        let mut r = Resolver {
+            dialect: Dialect::MariaDb,
+            first: 0,
+            params: Vec::new(),
+        };
+        let sql = r.resolve::<C>(self, cols);
+        let params = r
+            .params
+            .into_iter()
+            .enumerate()
+            .map(|(n, v)| (format!("f{n}"), v))
+            .collect();
+        (sql, params)
     }
 }
 
@@ -358,6 +734,47 @@ pub struct SearchResponse {
     pub comments: Vec<CommentUuid>,
 }
 
+http_endpoint!(GetCounts);
+
+// exact counts for several scopes in one round trip.  each scope counts what the
+// matching search endpoint would return for an empty filter, so the numbers always agree
+// with the lists and the same access rules apply (a collection or library the user can't
+// see counts as 0)
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum CountScope {
+    // all media visible to the user
+    Media,
+    Collections,
+    Libraries,
+    MediaInCollection {
+        collection_uuid: CollectionUuid,
+    },
+    MediaInLibrary {
+        library_uuid: LibraryUuid,
+        hidden: Option<bool>,
+    },
+}
+
+// the most scopes a single request may ask for
+pub const MAX_COUNT_SCOPES: usize = 16;
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct GetCountsReq {
+    pub scopes: Vec<CountScope>,
+}
+
+// one entry per requested scope, in request order
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct GetCountsResp {
+    pub counts: Vec<ScopeCount>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ScopeCount {
+    pub scope: CountScope,
+    pub count: u64,
+}
+
 http_endpoint!(BatchSearchAndSort);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -376,6 +793,17 @@ pub struct BatchSearchAndSortResp {
     // None from older servers, in which case media.len() is the best guess
     #[serde(default)]
     pub page_len: Option<u64>,
+    // paging metadata; meta.row_count is the same pre-hydration count as page_len
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for BatchSearchAndSortResp {
+    type Item = SearchResponse;
+
+    fn into_parts(self) -> (Vec<SearchResponse>, PageMeta) {
+        (self.media, self.meta)
+    }
 }
 
 #[cfg(test)]
@@ -394,10 +822,73 @@ mod tests {
     }
 
     #[test]
+    fn every_filter_form_gets_the_text_checks() {
+        let long: String = "x".repeat(crate::query::MAX_FILTER_CHARS + 1);
+        // 50 two-letter terms: each short, 149 characters together
+        let many: Vec<String> = (0..50).map(|i| format!("{i:02}")).collect();
+        let many: Vec<&str> = many.iter().map(String::as_str).collect();
+        for bad in [
+            SearchFilter::Fulltext {
+                filter: long.clone(),
+            },
+            SearchFilter::Fulltext {
+                filter: "a\0".into(),
+            },
+            SearchFilter::SubstringAny {
+                filter: set(&["a\0"]),
+            },
+            SearchFilter::SubstringAll { filter: set(&many) },
+            SearchFilter::Keyword {
+                filter: set(&[&long]),
+            },
+        ] {
+            assert!(bad.validate_media().is_err(), "{bad}");
+        }
+        assert_eq!(SearchFilter::default().validate_media(), Ok(()));
+        assert_eq!(
+            SearchFilter::SubstringAll {
+                filter: set(&["beach", "sunset"])
+            }
+            .validate_media(),
+            Ok(())
+        );
+
+        assert!(ListFilter::Literal(long).validate::<Media>().is_err());
+        assert!(
+            ListFilter::Literal("a\0".into())
+                .validate::<Media>()
+                .is_err()
+        );
+        assert_eq!(
+            ListFilter::Literal("c007".into()).validate::<Media>(),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn count_scopes_wire_format() {
+        let json = r#"{"scopes":["Media","Libraries",
+            {"MediaInLibrary":{"library_uuid":"00000000-0000-0000-0000-000000000001","hidden":false}}]}"#;
+        let req: GetCountsReq = serde_json::from_str(json).unwrap();
+        assert_eq!(req.scopes.len(), 3);
+        assert_eq!(req.scopes[0], CountScope::Media);
+        assert!(matches!(
+            req.scopes[2],
+            CountScope::MediaInLibrary {
+                hidden: Some(false),
+                ..
+            }
+        ));
+        let back: GetCountsReq =
+            serde_json::from_value(serde_json::to_value(&req).unwrap()).unwrap();
+        assert_eq!(back.scopes, req.scopes);
+    }
+
+    #[test]
     fn empty_filter_has_no_param() {
         let q = opts(SearchFilter::default()).postgres_sql("ts", 2);
         assert_eq!(q.filter_sql, "");
-        assert_eq!(q.filter_param, None);
+        assert!(q.filter_params.is_empty());
         assert_eq!(q.page_sql, " LIMIT $2 OFFSET $3");
         assert_eq!(q.limit, None);
         assert_eq!(q.offset, 0);
@@ -406,13 +897,13 @@ mod tests {
             filter: set(&["", "  "]),
         })
         .postgres_sql("ts", 2);
-        assert_eq!(q.filter_param, None);
+        assert!(q.filter_params.is_empty());
 
         let q = opts(SearchFilter::Fulltext {
             filter: "   ".into(),
         })
         .postgres_sql("ts", 2);
-        assert_eq!(q.filter_param, None);
+        assert!(q.filter_params.is_empty());
     }
 
     #[test]
@@ -421,8 +912,11 @@ mod tests {
             filter: SearchFilter::SubstringAll {
                 filter: set(&["cat"]),
             },
-            limit: Some(60),
-            offset: 120,
+            page: PageRequest {
+                limit: Some(60),
+                offset: 120,
+                ..Default::default()
+            },
             ..Default::default()
         }
         .postgres_sql("media.ts_vec", 3);
@@ -456,7 +950,7 @@ mod tests {
             let q = opts(filter).postgres_sql("ts", 2);
             assert!(!q.filter_sql.contains("DROP"), "{}", q.filter_sql);
             assert!(!q.filter_sql.contains(evil));
-            assert!(q.filter_param.unwrap().contains("DROP"));
+            assert!(q.filter_params[0].contains("DROP"));
 
             let m = opts(SearchFilter::Fulltext {
                 filter: evil.into(),
@@ -474,16 +968,543 @@ mod tests {
         .postgres_sql("ts", 2);
 
         // terms are sorted for deterministic output
-        assert_eq!(
-            q.filter_param.as_deref(),
-            Some("'a&!(b' | 'back\\\\slash' | 'it''s'")
-        );
+        assert_eq!(q.filter_params, ["'a&!(b' | 'back\\\\slash' | 'it''s'"]);
 
         let q = opts(SearchFilter::SubstringAll {
             filter: set(&["x", "y"]),
         })
         .postgres_sql("ts", 2);
-        assert_eq!(q.filter_param.as_deref(), Some("'x' & 'y'"));
+        assert_eq!(q.filter_params, ["'x' & 'y'"]);
+    }
+
+    fn q(text: &str) -> SearchQuery {
+        let parsed = SearchQuery::parse::<Media>(text);
+        assert!(parsed.issues.is_empty(), "{text}: {:?}", parsed.issues);
+        parsed.query
+    }
+
+    fn pg(text: &str, first: usize) -> (String, Vec<String>) {
+        q(text).postgres_filter::<Media>("media.ts_vec", first)
+    }
+
+    fn maria(text: &str) -> (String, Vec<(String, String)>) {
+        q(text).mariadb_filter::<Media>("media.path, media.note")
+    }
+
+    fn named(v: &[(&str, &str)]) -> Vec<(String, String)> {
+        v.iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn query_free_text_and_tag_sql() {
+        let (sql, params) = pg("beach tag:holiday", 2);
+        assert_eq!(
+            sql,
+            " AND (media.ts_vec @@ to_tsquery('english', $2) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $3) \
+             AND media.tags ? $4"
+        );
+        assert_eq!(params, ["'beach':*", "%beach%", "holiday"]);
+
+        let (sql, params) = maria("beach tag:holiday");
+        assert_eq!(
+            sql,
+            " AND CONCAT_WS(\"|\", media.date, media.note, media.tags) RLIKE :f0 \
+             AND LOCATE(CONCAT('|', :f1, '|'), CONCAT('|', media.tags, '|')) > 0"
+        );
+        assert_eq!(params, named(&[("f0", "(?i)beach"), ("f1", "holiday")]));
+    }
+
+    #[test]
+    fn query_description_and_date_range_sql() {
+        let text = "description:50%_off date:2020-01..2020-06";
+
+        let (sql, params) = pg(text, 1);
+        assert_eq!(
+            sql,
+            " AND media.note ILIKE $1 \
+             AND (media.date >= $2 AND (media.date <= $3 OR media.date LIKE $4))"
+        );
+        assert_eq!(params, ["%50\\%\\_off%", "2020-01", "2020-06", "2020-06%"]);
+
+        let (sql, params) = maria(text);
+        assert_eq!(
+            sql,
+            " AND media.note LIKE :f0 \
+             AND (media.date >= :f1 AND (media.date <= :f2 OR media.date LIKE :f3))"
+        );
+        assert_eq!(
+            params,
+            named(&[
+                ("f0", "%50\\%\\_off%"),
+                ("f1", "2020-01"),
+                ("f2", "2020-06"),
+                ("f3", "2020-06%")
+            ])
+        );
+    }
+
+    #[test]
+    fn any_of_tags_sql() {
+        let (sql, params) = pg("tag:beach,sunset", 2);
+        assert_eq!(sql, " AND media.tags ?| string_to_array($2, '|')");
+        assert_eq!(params, ["beach|sunset"]);
+
+        let (sql, params) = maria("tag:beach,sunset");
+        assert_eq!(
+            sql,
+            " AND (LOCATE(CONCAT('|', :f0, '|'), CONCAT('|', media.tags, '|')) > 0 \
+             OR LOCATE(CONCAT('|', :f1, '|'), CONCAT('|', media.tags, '|')) > 0)"
+        );
+        assert_eq!(params, named(&[("f0", "beach"), ("f1", "sunset")]));
+
+        // collections take it too, with the values only ever in parameters
+        let (sql, params) = list_pg::<crate::collection::Collection>("tag:'x',%y");
+        assert_eq!(sql, " AND collections.tags ?| string_to_array($2, '|')");
+        assert_eq!(params, ["'x'|%y"]);
+    }
+
+    #[test]
+    fn query_type_and_date_comparisons_sql() {
+        let text = "type:Image date:>2020 date:<=2021-03 date:>=2019 date:<2022 date:2020-06";
+
+        let (sql, params) = pg(text, 4);
+        assert_eq!(
+            sql,
+            " AND media.media_type = $4::text::media_type \
+             AND (media.date > $5 AND media.date NOT LIKE $6) \
+             AND (media.date <= $7 OR media.date LIKE $8) \
+             AND media.date >= $9 \
+             AND media.date < $10 \
+             AND media.date LIKE $11"
+        );
+        assert_eq!(
+            params,
+            [
+                "Image", "2020", "2020%", "2021-03", "2021-03%", "2019", "2022", "2020-06%"
+            ]
+        );
+
+        let (sql, params) = maria(text);
+        assert!(sql.starts_with(" AND media.media_type = :f0 AND (media.date > :f1"));
+        assert!(sql.ends_with("AND media.date LIKE :f7"));
+        assert_eq!(params.len(), 8);
+        assert_eq!(params[7], ("f7".to_string(), "2020-06%".to_string()));
+    }
+
+    #[test]
+    fn words_match_inside_words_from_three_characters() {
+        // two-character words are whole words or prefixes only: no trigram index serves them
+        let (sql, params) = pg("ch", 1);
+        assert_eq!(sql, " AND media.ts_vec @@ to_tsquery('english', $1)");
+        assert_eq!(params, ["'ch':*"]);
+
+        // longer ones also match anywhere inside a word, lowercased (media_search_text
+        // lowercases) with LIKE wildcards escaped, each in its own parameter
+        let (sql, params) = pg("EcK%P a_bc", 1);
+        assert_eq!(
+            sql,
+            " AND (media.ts_vec @@ to_tsquery('english', $1) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $2 \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $3)"
+        );
+        // (terms are sorted by bytes first, so the uppercase one leads)
+        assert_eq!(params[1..], ["%eck\\%p%", "%a\\_bc%"]);
+
+        // characters count, not bytes
+        let (_, params) = pg("éé", 1);
+        assert_eq!(params.len(), 1);
+
+        // mariadb matches substrings of the same declared columns, never the path
+        let (sql, _) = maria("eckp");
+        assert_eq!(
+            sql,
+            " AND CONCAT_WS(\"|\", media.date, media.note, media.tags) RLIKE :f0"
+        );
+        assert!(!sql.contains("path"));
+    }
+
+    #[test]
+    fn name_matches_the_file_name_only() {
+        let (sql, params) = pg("name:IMG_20", 1);
+        assert_eq!(sql, " AND substring(media.path from '[^/]*$') ILIKE $1");
+        assert_eq!(params, ["%IMG\\_20%"]);
+
+        let (sql, params) = maria("name:IMG_20");
+        assert_eq!(sql, " AND SUBSTRING_INDEX(media.path, '/', -1) LIKE :f0");
+        assert_eq!(params, named(&[("f0", "%IMG\\_20%")]));
+
+        // a quoted value with a slash is still just text inside the file name
+        let (_, params) = pg(r#"name:"a/b""#, 1);
+        assert_eq!(params, ["%a/b%"]);
+    }
+
+    #[test]
+    fn query_text_terms_are_or_and_deduped() {
+        // only "c d" is long enough to match inside words
+        let (sql, params) = pg("b a b \"c d\"", 1);
+        assert_eq!(
+            sql,
+            " AND (media.ts_vec @@ to_tsquery('english', $1) \
+             OR media_search_text(media.date, media.note, media.tags) LIKE $2)"
+        );
+        assert_eq!(params, ["'a':* | 'b':* | 'c d':*", "%c d%"]);
+
+        let (_, params) = maria("b a b \"c d\" x.y");
+        assert_eq!(params, named(&[("f0", "(?i)a|b|c d|x\\.y")]));
+    }
+
+    #[test]
+    fn empty_query_has_no_sql_or_params() {
+        let opts = opts(SearchFilter::Query(SearchQuery::default()));
+        let p = opts.postgres_sql("media.ts_vec", 2);
+        assert_eq!(p.filter_sql, "");
+        assert!(p.filter_params.is_empty());
+        assert_eq!(p.page_sql, " LIMIT $2 OFFSET $3");
+
+        let m = opts.mariadb_sql("cols");
+        assert_eq!(m.filter_sql, "");
+        assert!(m.filter_params.is_empty());
+    }
+
+    #[test]
+    fn query_placeholders_number_after_all_filter_params() {
+        let o = SearchOptions {
+            filter: SearchFilter::Query(q("a tag:x date:2020")),
+            ..Default::default()
+        };
+        let p = o.postgres_sql("media.ts_vec", 3);
+        assert_eq!(p.filter_params.len(), 3);
+        assert_eq!(p.page_sql, " LIMIT $6 OFFSET $7");
+
+        let m = o.mariadb_sql("cols");
+        let names: Vec<_> = m.filter_params.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(names, ["f0", "f1", "f2"]);
+        for n in names {
+            assert!(m.filter_sql.contains(&format!(":{n}")), "{n}");
+        }
+    }
+
+    // whatever the user types, it is only ever in the parameters
+    #[test]
+    fn query_user_input_never_reaches_sql_text() {
+        let evils = [
+            "'; DROP TABLE media; --",
+            "$1",
+            "100%_\\",
+            "\") OR 1=1 --",
+            ":f0",
+        ];
+        for evil in evils {
+            let query = SearchQuery {
+                text: vec![evil.to_string()],
+                clauses: [
+                    ("tag", Op::Has),
+                    ("description", Op::Contains),
+                    ("date", Op::Eq),
+                    ("date", Op::Gt),
+                    ("date", Op::Le),
+                    ("type", Op::Eq),
+                ]
+                .into_iter()
+                .map(|(f, op)| Clause {
+                    field: f.into(),
+                    op,
+                    value: evil.into(),
+                })
+                .chain([Clause {
+                    field: "date".into(),
+                    op: Op::Range,
+                    value: format!("{evil}..{evil}"),
+                }])
+                .collect(),
+            };
+
+            let (sql, params) = query.postgres_filter::<Media>("media.ts_vec", 1);
+            let (msql, mparams) = query.mariadb_filter::<Media>("cols");
+
+            assert!(params.len() >= 10 && mparams.len() >= 10);
+            for fragment in ["DROP", "OR 1=1", "100%", "\\"] {
+                assert!(!sql.contains(fragment), "{fragment}: {sql}");
+                assert!(!msql.contains(fragment), "{fragment}: {msql}");
+            }
+            // the only quote characters in the sql are the fixed templates' (the
+            // mariadb tag match has four separator literals)
+            assert_eq!(sql.matches('\'').count(), 2);
+            assert_eq!(msql.matches('\'').count(), 8);
+            // every $N is a bound parameter, and nothing past the last one exists
+            assert!(sql.contains(&format!("${}", params.len())));
+            assert!(!sql.contains(&format!("${}", params.len() + 1)));
+        }
+    }
+
+    #[test]
+    fn query_with_undeclared_fields_matches_nothing() {
+        let query = SearchQuery {
+            text: vec![],
+            clauses: vec![
+                Clause {
+                    field: "tags; DROP TABLE media".into(),
+                    op: Op::Has,
+                    value: "x".into(),
+                },
+                // declared field, undeclared operator
+                Clause {
+                    field: "tag".into(),
+                    op: Op::Gt,
+                    value: "x".into(),
+                },
+                // a field of another class
+                Clause {
+                    field: "path".into(),
+                    op: Op::Contains,
+                    value: "x".into(),
+                },
+                // a range without both ends
+                Clause {
+                    field: "date".into(),
+                    op: Op::Range,
+                    value: "2020".into(),
+                },
+            ],
+        };
+        let (sql, params) = query.postgres_filter::<Media>("ts", 1);
+        assert_eq!(sql, " AND FALSE AND FALSE AND FALSE AND FALSE");
+        assert!(params.is_empty());
+        let (sql, params) = query.mariadb_filter::<Media>("cols");
+        assert_eq!(sql, " AND FALSE AND FALSE AND FALSE AND FALSE");
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn query_filter_wire_format_and_validation() {
+        let json = r#"{"Query":{"text":["a"],"clauses":[{"field":"tag","op":"Has","value":"x"}]}}"#;
+        let f: SearchFilter = serde_json::from_str(json).unwrap();
+        assert_eq!(serde_json::to_string(&f).unwrap(), json);
+        assert_eq!(f.validate_media(), Ok(()));
+        assert_eq!(f.to_string(), "Query{a tag:x}");
+
+        let bad: SearchFilter = serde_json::from_str(
+            r#"{"Query":{"clauses":[{"field":"zzz","op":"Eq","value":"x"}]}}"#,
+        )
+        .unwrap();
+        assert!(bad.validate_media().is_err());
+
+        // the older filters are untouched
+        let old: SearchFilter =
+            serde_json::from_str(r#"{"SubstringAny":{"filter":["a"]}}"#).unwrap();
+        assert_eq!(old.validate_media(), Ok(()));
+        let p = opts(old.clone()).postgres_sql("ts", 1);
+        assert_eq!(p.filter_sql, " AND ts @@ to_tsquery('english', $1)");
+        assert_eq!(p.filter_params, ["'a'"]);
+        let m = opts(old).mariadb_sql("cols");
+        assert_eq!(m.filter_params, named(&[("filter", "(?i)a")]));
+    }
+
+    fn list_pg<C: SearchClass>(text: &str) -> (String, Vec<String>) {
+        let parsed = SearchQuery::parse::<C>(text);
+        assert!(parsed.issues.is_empty(), "{text}: {:?}", parsed.issues);
+        ListFilter::Query(parsed.query).postgres_sql::<C>(2)
+    }
+
+    fn list_maria<C: SearchClass>(text: &str) -> (String, Vec<(String, String)>) {
+        let parsed = SearchQuery::parse::<C>(text);
+        assert!(parsed.issues.is_empty(), "{text}: {:?}", parsed.issues);
+        ListFilter::Query(parsed.query).mariadb_sql::<C>()
+    }
+
+    #[test]
+    fn collection_query_sql() {
+        use crate::collection::Collection;
+
+        // plain words are an OR of substring matches on the name
+        let (sql, params) = list_pg::<Collection>("holiday trip");
+        assert_eq!(
+            sql,
+            " AND (collections.name ILIKE $2 OR collections.name ILIKE $3)"
+        );
+        assert_eq!(params, ["%holiday%", "%trip%"]);
+        let (sql, params) = list_maria::<Collection>("holiday trip");
+        assert_eq!(
+            sql,
+            " AND (collections.name LIKE :f0 OR collections.name LIKE :f1)"
+        );
+        assert_eq!(params, named(&[("f0", "%holiday%"), ("f1", "%trip%")]));
+
+        // a phrase stays one term; clauses are ANDed after the words
+        let (sql, params) =
+            list_pg::<Collection>(r#"name:"bulk big" description:50%_off tag:family beach"#);
+        assert_eq!(
+            sql,
+            " AND (collections.name ILIKE $2) AND collections.name ILIKE $3 \
+             AND collections.note ILIKE $4 AND collections.tags ? $5"
+        );
+        assert_eq!(params, ["%beach%", "%bulk big%", "%50\\%\\_off%", "family"]);
+
+        let (sql, params) = list_maria::<Collection>("tag:family description:trip");
+        assert_eq!(
+            sql,
+            " AND LOCATE(CONCAT('|', :f0, '|'), CONCAT('|', collections.tags, '|')) > 0 \
+             AND collections.note LIKE :f1"
+        );
+        assert_eq!(params, named(&[("f0", "family"), ("f1", "%trip%")]));
+    }
+
+    #[test]
+    fn library_query_sql() {
+        use crate::library::Library;
+
+        let (sql, params) = list_pg::<Library>("photos raw path:a_b");
+        assert_eq!(
+            sql,
+            " AND (libraries.path ILIKE $2 OR libraries.path ILIKE $3) AND libraries.path ILIKE $4"
+        );
+        assert_eq!(params, ["%photos%", "%raw%", "%a\\_b%"]);
+
+        let (sql, params) = list_maria::<Library>("photos path:raw");
+        assert_eq!(
+            sql,
+            " AND (libraries.path LIKE :f0) AND libraries.path LIKE :f1"
+        );
+        assert_eq!(params, named(&[("f0", "%photos%"), ("f1", "%raw%")]));
+    }
+
+    #[test]
+    fn list_literal_filter_is_unchanged() {
+        use crate::{collection::Collection, library::Library};
+
+        let f = ListFilter::from_req("50%_off".into(), None);
+        let (sql, params) = f.postgres_sql::<Collection>(2);
+        assert_eq!(sql, " AND collections.name LIKE $2");
+        assert_eq!(params, ["%50\\%\\_off%"]);
+        let (sql, params) = f.mariadb_sql::<Library>();
+        assert_eq!(sql, " AND libraries.path LIKE :f0");
+        assert_eq!(params, named(&[("f0", "%50\\%\\_off%")]));
+        assert_eq!(f.validate::<Collection>(), Ok(()));
+
+        // a query, when present, replaces the filter text
+        let q = SearchQuery::parse::<Collection>("x").query;
+        assert_eq!(
+            ListFilter::from_req("ignored".into(), Some(q.clone())),
+            ListFilter::Query(q)
+        );
+    }
+
+    #[test]
+    fn list_query_validation_is_per_class() {
+        use crate::{collection::Collection, library::Library};
+
+        let path = SearchQuery::parse::<Library>("path:x").query;
+        let tag = SearchQuery::parse::<Collection>("tag:x").query;
+
+        assert_eq!(
+            ListFilter::Query(path.clone()).validate::<Library>(),
+            Ok(())
+        );
+        assert!(
+            ListFilter::Query(path.clone())
+                .validate::<Collection>()
+                .is_err()
+        );
+        assert_eq!(
+            ListFilter::Query(tag.clone()).validate::<Collection>(),
+            Ok(())
+        );
+        assert!(
+            ListFilter::Query(tag.clone())
+                .validate::<Library>()
+                .is_err()
+        );
+
+        // media-only fields on a collection, and bad operators
+        for (field, op) in [("date", Op::Eq), ("type", Op::Eq), ("tag", Op::Gt)] {
+            let q = SearchQuery {
+                text: vec![],
+                clauses: vec![Clause {
+                    field: field.into(),
+                    op,
+                    value: "x".into(),
+                }],
+            };
+            assert!(q.validate::<Collection>().is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn list_queries_keep_hostile_values_bound() {
+        use crate::{collection::Collection, library::Library};
+
+        let evils = [
+            "'; DROP TABLE collections; --",
+            "\") OR 1=1 --",
+            "100%_\\",
+            ":f0",
+            "$1",
+        ];
+        for evil in evils {
+            let query = SearchQuery {
+                text: vec![evil.to_string()],
+                clauses: [
+                    ("name", Op::Contains),
+                    ("description", Op::Contains),
+                    ("tag", Op::Has),
+                ]
+                .into_iter()
+                .map(|(f, op)| Clause {
+                    field: f.into(),
+                    op,
+                    value: evil.into(),
+                })
+                .collect(),
+            };
+            let f = ListFilter::Query(query);
+            let (sql, params) = f.postgres_sql::<Collection>(2);
+            let (msql, mparams) = f.mariadb_sql::<Collection>();
+            assert_eq!(params.len(), 4);
+            assert_eq!(mparams.len(), 4);
+            for fragment in ["DROP", "OR 1=1", "100%"] {
+                assert!(
+                    !sql.contains(fragment) && !msql.contains(fragment),
+                    "{fragment}"
+                );
+            }
+            assert_eq!(sql.matches('\'').count(), 0);
+
+            let query = SearchQuery {
+                text: vec![evil.to_string()],
+                clauses: vec![Clause {
+                    field: "path".into(),
+                    op: Op::Contains,
+                    value: evil.into(),
+                }],
+            };
+            let f = ListFilter::Query(query);
+            let (sql, params) = f.postgres_sql::<Library>(2);
+            assert_eq!(params.len(), 2);
+            assert!(!sql.contains("DROP") && !sql.contains("OR 1=1"));
+        }
+    }
+
+    #[test]
+    fn list_requests_take_an_optional_query() {
+        use crate::{collection::SearchCollectionsReq, library::SearchLibrariesReq};
+
+        // old request shapes still deserialize, with no query
+        let r: SearchCollectionsReq = serde_json::from_str(r#"{"filter":"a"}"#).unwrap();
+        assert_eq!(r.query, None);
+        let r: SearchLibrariesReq = serde_json::from_str(r#"{"filter":"a","limit":3}"#).unwrap();
+        assert_eq!(r.query, None);
+
+        let r: SearchCollectionsReq = serde_json::from_str(
+            r#"{"filter":"","query":{"text":["a"],"clauses":[{"field":"tag","op":"Has","value":"x"}]},"limit":5}"#,
+        )
+        .unwrap();
+        let q = r.query.unwrap();
+        assert_eq!(q.text, ["a"]);
+        assert_eq!(q.clauses.len(), 1);
+        assert_eq!(r.page.limit, Some(5));
     }
 
     #[test]
@@ -504,8 +1525,11 @@ mod tests {
     #[test]
     fn huge_limits_are_clamped() {
         let q = SearchOptions {
-            limit: Some(u64::MAX),
-            offset: u64::MAX,
+            page: PageRequest {
+                limit: Some(u64::MAX),
+                offset: u64::MAX,
+                ..Default::default()
+            },
             ..Default::default()
         }
         .postgres_sql("ts", 1);
@@ -534,6 +1558,102 @@ mod tests {
         let o: SearchOptions =
             serde_json::from_str(r#"{"filter":{"SubstringAny":{"filter":[]}},"order":"DateDesc","limit":null,"offset":0}"#)
                 .unwrap();
-        assert!(!o.with_total);
+        assert!(!o.page.with_total);
+    }
+
+    // the flattened PageRequest must not change the wire format of the requests
+    #[test]
+    fn options_keep_flat_page_keys() {
+        let o: SearchOptions = serde_json::from_str(
+            r#"{"filter":{"SubstringAny":{"filter":[]}},"order":"DateDesc","limit":60,"offset":120,"with_total":true}"#,
+        )
+        .unwrap();
+        assert_eq!(o.page.limit, Some(60));
+        assert_eq!(o.page.offset, 120);
+        assert!(o.page.with_total);
+
+        let v = serde_json::to_value(&o).unwrap();
+        assert_eq!(v["limit"], 60);
+        assert_eq!(v["offset"], 120);
+        assert_eq!(v["with_total"], true);
+        assert!(v.get("page").is_none());
+        assert!(v.get("cursor").is_none());
+
+        let back: SearchOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back.page, o.page);
+    }
+
+    #[test]
+    fn other_requests_keep_flat_page_keys() {
+        use crate::{collection::SearchCollectionsReq, library::SearchLibrariesReq};
+
+        let r: SearchCollectionsReq =
+            serde_json::from_str(r#"{"filter":"a","limit":5,"offset":10,"with_total":true}"#)
+                .unwrap();
+        assert_eq!(r.page.limit, Some(5));
+        assert_eq!(r.page.offset, 10);
+        assert!(r.page.with_total);
+
+        // every page field is optional
+        let r: SearchCollectionsReq = serde_json::from_str(r#"{"filter":"a"}"#).unwrap();
+        assert_eq!(r.page, PageRequest::default());
+        let r: SearchLibrariesReq = serde_json::from_str(r#"{"filter":""}"#).unwrap();
+        assert_eq!(r.page, PageRequest::default());
+
+        let v = serde_json::to_value(SearchLibrariesReq {
+            filter: "x".into(),
+            query: None,
+            page: PageRequest::first(3, true),
+        })
+        .unwrap();
+        assert_eq!(v["limit"], 3);
+        assert_eq!(v["with_total"], true);
+    }
+
+    #[test]
+    fn responses_without_meta_get_a_default() {
+        use crate::{
+            collection::{SearchCollectionsResp, SearchMediaInCollectionResp},
+            library::{SearchLibrariesResp, SearchMediaInLibraryResp},
+            media::SearchMediaResp,
+        };
+
+        let r: BatchSearchAndSortResp =
+            serde_json::from_str(r#"{"media":[],"total":5,"page_len":0}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+
+        let r: SearchMediaResp = serde_json::from_str(r#"{"media":[],"total":1}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchMediaInCollectionResp = serde_json::from_str(r#"{"media":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchMediaInLibraryResp = serde_json::from_str(r#"{"media":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchCollectionsResp = serde_json::from_str(r#"{"collections":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+        let r: SearchLibrariesResp = serde_json::from_str(r#"{"libraries":[]}"#).unwrap();
+        assert_eq!(r.meta, PageMeta::default());
+    }
+
+    #[test]
+    fn meta_round_trips_and_into_parts() {
+        use crate::{media::SearchMediaResp, page::PageCursor};
+
+        let meta = PageMeta {
+            total: Some(10),
+            row_count: 2,
+            offset: 4,
+            limit: Some(2),
+            has_more: Some(true),
+            next_cursor: Some(PageCursor("c".into())),
+        };
+        let resp = SearchMediaResp {
+            media: Vec::new(),
+            total: Some(10),
+            meta: meta.clone(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let back: SearchMediaResp = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, resp);
+        assert_eq!(back.into_parts().1, meta);
     }
 }

@@ -21,9 +21,13 @@ docker exec -i entanglement-postgres-1 psql -U entanglement -d entanglement -v O
 ## Checks
 | Script | Run with | Checks |
 |---|---|---|
-| `api_check.sh` | `zsh docker/devtest/api_check.sh` | Paging, counts, search fields, prefixes, rejections, hostile input, paging integrity |
-| `rbac_check.py` | `python3 -I docker/devtest/rbac_check.py` | Out-of-group records never surface anywhere |
+| `api_check.sh` | `zsh docker/devtest/api_check.sh` | Paging, counts, search fields, prefixes and inside-word matching, `GetSlugs`, `OmniSearch`, rejections, hostile input, paging integrity |
+| `rbac_check.py` | `python3 -I docker/devtest/rbac_check.py` | Out-of-group records never surface anywhere, including the tag values `GetSlugs` offers; forbidden and unknown ids get the same 404; hostile search text is a 400 |
+| `search_cancel_check.py` | `python3 -I docker/devtest/search_cancel_check.py` | Searches that time out or lose their client stop running in Postgres; `STATEMENT_TIMEOUT=1` also checks the 60s cap (adds a minute) |
+| `group_refresh_check.py` | `python3 -I docker/devtest/group_refresh_check.py` | A group added to or removed from `users.toml` takes effect within 30s, no restart (edits the file in place, always restores it) |
 | `ui_check.js` | `PW_MODULE=… node docker/devtest/ui_check.js` | Search bar, chips, hints, `?q=` URLs, back-navigation |
+| `ui_palette_check.js` | `PW_MODULE=… node docker/devtest/ui_palette_check.js` | The ⌘K palette: the header search box on every page, opening and closing, group totals vs raw SQL, keyboard navigation, See all → prefilled page, opening a hit, debouncing, the 100-character box, no foreign records |
+| `ui_sidebar_check.js` | `PW_MODULE=… node docker/devtest/ui_sidebar_check.js` | Advanced sidebar Collection Labels tab: scrolls as a whole with its collection search pinned (desktop and phone) |
 | `ui_modal_check.js` | `PW_MODULE=… node docker/devtest/ui_modal_check.js` | Collection modal layout and tag entry |
 
 The Playwright scripts need `playwright` installed: `npm i playwright && npx playwright install chromium` in any folder, then point `PW_MODULE` at its `node_modules`. Some scripts arrive with later branches of the search/paging stack.

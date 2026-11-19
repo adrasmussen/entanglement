@@ -104,6 +104,7 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
             Link {
                 to: Route::CollectionDetail {
                     collection_uuid: collection_uuid.to_string(),
+                    q: String::new(),
                 },
                 div {
                     class: "collection-thumbnail",
@@ -139,6 +140,7 @@ fn CollectionCardInner(props: CollectionCardProps) -> Element {
                 Link {
                     to: Route::CollectionDetail {
                         collection_uuid: collection_uuid.to_string(),
+                        q: String::new(),
                     },
                     h3 {
                         class: "collection-title",

@@ -19,6 +19,7 @@ use api::{
     WebError,
     collection::CollectionUuid,
     media::MediaUuid,
+    page::{PageMeta, PagedResp},
     search::{MAX_PAGE, PAGE_SIZE, SearchResponse},
 };
 
@@ -58,17 +59,25 @@ impl PageItem for CollectionUuid {
 // what a fetch callback returns
 pub struct Page<T> {
     pub items: Vec<T>,
-    pub total: Option<u64>,
-    // how many rows the page held on the server, when that can be more than items.len()
-    // (see BatchSearchAndSortResp::page_len); None means items.len()
-    pub page_len: Option<u64>,
+    pub meta: PageMeta,
 }
 
 impl<T> Page<T> {
-    // how many rows the page held on the server, which is what decides whether it was the
-    // last one (not to be confused with items.len())
-    fn row_count(&self) -> u64 {
-        self.page_len.unwrap_or(self.items.len() as u64)
+    // the page of any paged response
+    pub fn from_resp<R: PagedResp<Item = T>>(resp: R) -> Self {
+        let (items, meta) = resp.into_parts();
+        Self { items, meta }
+    }
+
+    // the meta, with row_count filled in from the items when it is missing (hand-built
+    // pages).  row_count is what the server's page held before hydration, which can be more
+    // than items.len() and is what decides whether the page was the last one
+    fn meta(&self) -> PageMeta {
+        let mut meta = self.meta.clone();
+        if meta.row_count == 0 && !self.items.is_empty() {
+            meta.row_count = self.items.len() as u64;
+        }
+        meta
     }
 }
 
@@ -163,10 +172,14 @@ fn append_dedup<T: PageItem>(old: &mut Vec<T>, new: Vec<T>) -> usize {
     old.len() - before
 }
 
-// whether a page of `requested` rows that came back with `page_len` of them ends the results,
-// with `loaded` items now in the grid
-fn is_last_page(requested: u64, page_len: u64, loaded: usize, total: Option<u64>) -> bool {
-    page_len < requested || total.is_some_and(|t| loaded as u64 >= t)
+// whether a page of `requested` rows that came back with `meta` ends the results, with
+// `loaded` items now in the grid.  has_more is exact when the server says it; without it
+// (a count-only or hand-built page) a short page or a reached total is the end
+fn is_last_page(requested: u64, meta: &PageMeta, loaded: usize) -> bool {
+    match meta.has_more {
+        Some(more) => !more,
+        None => meta.row_count < requested || meta.total.is_some_and(|t| loaded as u64 >= t),
+    }
 }
 
 // whether the page about to load at `offset` should also re-count the results: always for
@@ -203,14 +216,8 @@ enum AfterLoad {
 }
 
 // `stalled` is whether a page added nothing since the last one that did
-fn after_load(
-    page_len: u64,
-    added: usize,
-    loaded: usize,
-    total: Option<u64>,
-    stalled: bool,
-) -> AfterLoad {
-    if is_last_page(PAGE_SIZE, page_len, loaded, total) {
+fn after_load(meta: &PageMeta, added: usize, loaded: usize, stalled: bool) -> AfterLoad {
+    if is_last_page(PAGE_SIZE, meta, loaded) {
         AfterLoad::Done
     } else if added > 0 {
         AfterLoad::More
@@ -275,12 +282,14 @@ where
             Err(err) => return Some(Err(err)),
         };
 
+        // the total only comes with the first page, and stays the one to compare against
+        let mut meta = page.meta();
         if offset == 0 {
-            out.total = page.total;
+            out.total = meta.total;
         }
-        let page_len = page.row_count();
+        meta.total = out.total;
         append_dedup(&mut out.items, page.items);
-        if is_last_page(limit, page_len, out.items.len(), out.total) {
+        if is_last_page(limit, &meta, out.items.len()) {
             out.done = true;
             break;
         }
@@ -604,14 +613,14 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
 
     // the first page after a reset; `seq` is the edit log position from before it was fetched
     fn set_first_page(&mut self, page: Page<T>, seq: u64) {
-        let page_len = page.row_count();
+        let meta = page.meta();
         let mut list = Vec::new();
         append_dedup(&mut list, page.items);
 
-        let last = is_last_page(PAGE_SIZE, page_len, list.len(), page.total);
+        let last = is_last_page(PAGE_SIZE, &meta, list.len());
         self.tail.set(if last { Tail::Ended } else { Tail::Open });
         self.items.set(Rc::new(list));
-        self.total.set(page.total);
+        self.total.set(meta.total);
         self.synced_seq.set(seq);
         self.store();
     }
@@ -620,12 +629,12 @@ impl<K: Clone + Hash + 'static, T: PageItem> PagedState<K, T> {
     fn append_page(&mut self, page: Page<T>) -> AfterLoad {
         // only a total that came with this very page can end the results: the stored one is
         // from the first page, and rows added since would otherwise end the results early
-        let total = page.total;
-        let page_len = page.row_count();
+        let meta = page.meta();
+        let total = meta.total;
         let (added, loaded) = self.edit_items(|list| (append_dedup(list, page.items), list.len()));
 
         let stalled = *self.tail.peek() == Tail::Stalled;
-        let step = after_load(page_len, added, loaded, total, stalled);
+        let step = after_load(&meta, added, loaded, stalled);
         let stored = *self.total.peek();
         self.total
             .set(shown_total(stored, total, loaded, step == AfterLoad::Done));
@@ -1037,11 +1046,15 @@ mod tests {
                 .take(limit as usize)
                 .copied()
                 .collect();
-            ready(Ok(Page {
+            let meta = PageMeta {
                 total: with_total.then_some(data.len() as u64),
-                page_len: Some(items.len() as u64),
-                items,
-            }))
+                row_count: items.len() as u64,
+                offset,
+                limit: Some(limit),
+                has_more: Some(((offset + limit) as usize) < data.len()),
+                next_cursor: None,
+            };
+            ready(Ok(Page { items, meta }))
         }
     }
 
@@ -1128,59 +1141,118 @@ mod tests {
         assert!(matches!(res, Some(Err(_))));
     }
 
+    // a page's meta as the server would send it
+    fn meta(row_count: u64, total: Option<u64>, has_more: Option<bool>) -> PageMeta {
+        PageMeta {
+            total,
+            row_count,
+            has_more,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn short_page_only_ends_the_results_by_its_server_length() {
         // media deleted before hydration: 55 items of a full 60 row page
         let page = Page {
             items: items(0..55),
-            total: None,
-            page_len: Some(60),
+            meta: meta(60, None, None),
         };
-        assert!(!is_last_page(PAGE_SIZE, page.row_count(), 55, None));
+        assert!(!is_last_page(PAGE_SIZE, &page.meta(), 55));
 
-        // older servers do not say, so the item count is all there is
+        // a hand-built page does not say, so the item count is all there is
         let page = Page {
             items: items(0..55),
-            total: None,
-            page_len: None,
+            meta: PageMeta::default(),
         };
-        assert!(is_last_page(PAGE_SIZE, page.row_count(), 55, None));
+        assert!(is_last_page(PAGE_SIZE, &page.meta(), 55));
 
         // a known total is reached
-        assert!(is_last_page(PAGE_SIZE, 60, 120, Some(120)));
-        assert!(!is_last_page(PAGE_SIZE, 60, 120, Some(121)));
+        assert!(is_last_page(PAGE_SIZE, &meta(60, Some(120), None), 120));
+        assert!(!is_last_page(PAGE_SIZE, &meta(60, Some(121), None), 120));
+    }
+
+    #[test]
+    fn has_more_decides_when_the_server_says_it() {
+        assert!(is_last_page(PAGE_SIZE, &meta(60, None, Some(false)), 60));
+        assert!(!is_last_page(PAGE_SIZE, &meta(60, None, Some(true)), 60));
+        // even a short page keeps going if the server says there is more
+        assert!(!is_last_page(PAGE_SIZE, &meta(55, None, Some(true)), 55));
+    }
+
+    #[test]
+    fn an_exact_fit_last_page_ends_without_an_extra_request() {
+        // 120 rows is exactly two pages: the second says has_more = false, so no third
+        let data = items(0..120);
+        let requests = RefCell::new(Vec::new());
+        let fresh = block_on(refetch(120, server(&data, &requests), || true))
+            .unwrap()
+            .unwrap();
+        assert_eq!(fresh.items.len(), 120);
+        assert!(fresh.done);
+        assert_eq!(*requests.borrow(), vec![(0, 120)]);
+
+        let page = block_on(server(&data, &requests)(60, 60, false)).unwrap();
+        assert_eq!(after_load(&page.meta(), 60, 120, false), AfterLoad::Done);
+        assert_eq!(requests.borrow().len(), 2);
+    }
+
+    #[test]
+    fn has_more_keeps_loading_past_a_stale_total() {
+        // the stored total is 120 and 120 are loaded, but rows were added since and the
+        // server still has more
+        let m = meta(60, None, Some(true));
+        assert_eq!(after_load(&m, 60, 120, false), AfterLoad::More);
+        let m = meta(60, Some(120), Some(true));
+        assert_eq!(after_load(&m, 60, 120, false), AfterLoad::More);
     }
 
     #[test]
     fn a_page_of_known_items_refreshes_once_then_stops() {
-        assert_eq!(after_load(60, 60, 120, None, false), AfterLoad::More);
-        assert_eq!(after_load(60, 0, 120, None, false), AfterLoad::Refresh);
-        assert_eq!(after_load(60, 0, 120, None, true), AfterLoad::GiveUp);
+        let full = meta(60, None, None);
+        assert_eq!(after_load(&full, 60, 120, false), AfterLoad::More);
+        assert_eq!(after_load(&full, 0, 120, false), AfterLoad::Refresh);
+        assert_eq!(after_load(&full, 0, 120, true), AfterLoad::GiveUp);
         // a page that adds something clears the stall (see append_page)
-        assert_eq!(after_load(60, 1, 121, None, true), AfterLoad::More);
+        assert_eq!(after_load(&full, 1, 121, true), AfterLoad::More);
         // the end of the results wins over everything else
-        assert_eq!(after_load(10, 0, 120, None, true), AfterLoad::Done);
-        assert_eq!(after_load(60, 0, 120, Some(120), false), AfterLoad::Done);
+        assert_eq!(
+            after_load(&meta(10, None, None), 0, 120, true),
+            AfterLoad::Done
+        );
+        assert_eq!(
+            after_load(&meta(60, Some(120), None), 0, 120, false),
+            AfterLoad::Done
+        );
     }
 
     #[test]
     fn a_full_page_without_a_total_is_not_the_end() {
         // load_more only asks for the total on the first page, so a later page past an old
         // total of 120 (rows were added since) comes without one and keeps going
-        assert_eq!(after_load(60, 60, 120, None, false), AfterLoad::More);
-        assert_eq!(after_load(60, 60, 180, None, false), AfterLoad::More);
+        assert_eq!(
+            after_load(&meta(60, None, None), 60, 120, false),
+            AfterLoad::More
+        );
+        assert_eq!(
+            after_load(&meta(60, None, None), 60, 180, false),
+            AfterLoad::More
+        );
         // whereas the stored total would have ended it
-        assert_eq!(after_load(60, 60, 120, Some(120), false), AfterLoad::Done);
+        assert_eq!(
+            after_load(&meta(60, Some(120), None), 60, 120, false),
+            AfterLoad::Done
+        );
     }
 
     #[test]
     fn a_stall_refreshes_once_then_gives_up_unless_something_clears_it() {
         // a page of known items stalls, and the refresh that asks for keeps the stall
-        let tail = Tail::after_page(after_load(60, 0, 120, None, false));
+        let tail = Tail::after_page(after_load(&meta(60, None, None), 0, 120, false));
         assert_eq!(tail, Tail::Stalled);
         let tail = Tail::after_refresh(false, RefreshCause::Stall);
         assert_eq!(tail, Tail::Stalled);
-        let step = after_load(60, 0, 120, None, tail == Tail::Stalled);
+        let step = after_load(&meta(60, None, None), 0, 120, tail == Tail::Stalled);
         assert_eq!(Tail::after_page(step), Tail::GaveUp);
         assert!(!Tail::GaveUp.can_load());
 

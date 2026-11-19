@@ -1,32 +1,39 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     common::{
         paging::{CacheCfg, use_paged},
+        query_ui::q_param,
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
-        storage::try_local_storage,
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::ModalBox,
-        search::SearchBar,
+        query_bar::{QueryBar, use_search_state},
         sidebar::AdvancedSidebar,
     },
     gallery::MEDIA_SEARCH_KEY,
 };
 use api::{
-    media::SearchMediaReq,
+    media::{Media, SearchMediaReq},
     search::{SearchRequest, SearchResponse},
 };
 
 #[component]
-pub fn GallerySearch() -> Element {
+pub fn GallerySearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::GallerySearch { q: q_param(&text) });
+    });
+    let search = use_search_state(MEDIA_SEARCH_KEY, &q, on_commit);
+    let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
@@ -92,10 +99,8 @@ pub fn GallerySearch() -> Element {
                     GridDensityMenu {}
                 }
 
-                SearchBar {
-                    search_signal: media_search_signal,
-                    storage_key: MEDIA_SEARCH_KEY,
-                    placeholder: "Search by date, description or tags...",
+                QueryBar::<Media> {
+                    search,
                     status: paged.pager.status(paged.items.read().len(), "results"),
                     action_button,
                 }
@@ -104,7 +109,7 @@ pub fn GallerySearch() -> Element {
                     show_signal: advanced_expanded,
                     tabs: HashMap::from([
                         ("Advanced Search".to_owned(), rsx! {
-                            AdvancedSearchTab { media_search_signal }
+                            AdvancedSearchTab::<Media> { search }
                         }),
                         ("Bulk Edit".to_owned(), rsx! {
                             BulkEditTab {

@@ -36,6 +36,9 @@ CREATE EXTENSION IF NOT EXISTS hstore;
 
 CREATE TYPE "media_type" AS ENUM ('Image', 'Video', 'VideoSlice', 'Audio');
 
+-- matching inside words (db/migrations/2026-11-18_trigram_search.sql)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE OR REPLACE FUNCTION make_ts_vec(
     p text,
     n text,
@@ -62,6 +65,8 @@ CREATE TABLE "libraries" (
 );
 
 CREATE INDEX "idx_libraries_gid" ON "libraries" ("gid");
+-- path:/plain words inside the path (see 2026-11-18_trigram_search.sql)
+CREATE INDEX "idx_library_path_trgm" ON "libraries" USING GIN ("path" gin_trgm_ops);
 
 --
 -- media
@@ -101,13 +106,36 @@ CREATE INDEX "idx_media_visible_path" ON "media" ("path", "media_uuid") WHERE "h
 -- library detail (hidden filter optional); also covers lookups by library_uuid alone
 CREATE INDEX "idx_media_library_date" ON "media" ("library_uuid", "date" DESC, "media_uuid" DESC);
 
+-- count queries (see db/migrations/2026-11-13_count_indexes.sql): index-only library
+-- counts with any hidden filter, and visible-media lookups by uuid for collection counts
+CREATE INDEX "idx_media_library_hidden" ON "media" ("library_uuid", "hidden");
+
+CREATE INDEX "idx_media_visible_uuid" ON "media" ("media_uuid") WHERE "hidden" = FALSE;
+
 CREATE INDEX "idx_media_path" ON "media" ("path");
 
 CREATE INDEX "idx_media_chash" ON "media" ("chash");
 
 CREATE INDEX "idx_media_cdate" ON "media" ("cdate");
 
+-- date:YYYY-MM prefix searches (LIKE 'x%'; see db/migrations/2026-11-14_search_field_indexes.sql).
+-- text_pattern_ops because the usual en_US collation can't use a plain btree for LIKE
+CREATE INDEX "idx_media_date_prefix" ON "media" ("date" text_pattern_ops);
+
 CREATE INDEX "idx_media_tags" ON "media" USING GIN ("tags");
+
+-- the text plain words search, lowercased: the same fields as ts_vec.  IMMUTABLE so it can
+-- be indexed; queries call it with the same arguments for the index to apply
+CREATE OR REPLACE FUNCTION media_search_text(d text, n text, t hstore) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT lower(d || ' ' || n || ' ' || array_to_string(public.akeys(t), ' '));
+$$;
+
+-- trigram indexes: words, description: and name: matching inside words
+-- (see db/migrations/2026-11-18_trigram_search.sql; mariadb has no equivalent)
+CREATE INDEX "idx_media_search_trgm" ON "media" USING GIN (media_search_text("date", "note", "tags") gin_trgm_ops);
+CREATE INDEX "idx_media_note_trgm" ON "media" USING GIN ("note" gin_trgm_ops);
+CREATE INDEX "idx_media_name_trgm" ON "media" USING GIN ((substring("path" from '[^/]*$')) gin_trgm_ops);
 
 CREATE INDEX "idx_media_fulltext" ON "media" USING GIN ("ts_vec");
 
@@ -157,6 +185,10 @@ CREATE INDEX "idx_collection_name" ON "collections" ("name", "collection_uuid");
 CREATE INDEX "idx_collection_tags" ON "collections" USING GIN ("tags");
 
 CREATE INDEX "idx_collection_fulltext" ON "collections" USING GIN ("ts_vec");
+
+-- trigram indexes for name:/description: and plain words (see 2026-11-18_trigram_search.sql)
+CREATE INDEX "idx_collection_name_trgm" ON "collections" USING GIN ("name" gin_trgm_ops);
+CREATE INDEX "idx_collection_note_trgm" ON "collections" USING GIN ("note" gin_trgm_ops);
 
 --
 -- collection contents

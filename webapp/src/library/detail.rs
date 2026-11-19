@@ -8,14 +8,14 @@ use crate::{
     common::{
         grid_cache::{LIBRARY_META, LIBRARY_SHOW_HIDDEN},
         paging::{CacheCfg, use_paged},
+        query_ui::q_param,
         search::{GridScope, fetch_media_page, reconcile_media, search_opts},
-        storage::*,
     },
     components::{
         advanced::{AdvancedSearchTab, BulkEditMode, BulkEditTab, CollectionColorTab},
         media_grid::{GridDensityMenu, MediaGrid},
         modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
+        query_bar::{QueryBar, use_search_state},
         sidebar::AdvancedSidebar,
     },
     library::{MEDIA_SEARCH_KEY, taskbar::TaskBar},
@@ -23,6 +23,7 @@ use crate::{
 use api::{
     UuidSource,
     library::*,
+    media::Media,
     search::{SearchRequest, SearchResponse},
 };
 
@@ -30,6 +31,8 @@ use api::{
 pub struct LibraryDetailProps {
     // This is a String because we get it from the Router
     library_uuid: String,
+    // the escaped search text from ?q=, see q_param
+    q: String,
 }
 
 #[component]
@@ -48,7 +51,11 @@ pub fn LibraryDetail(props: LibraryDetailProps) -> Element {
                     }
                 }
             },
-            LibraryInner { update_signal, library_uuid: props.library_uuid }
+            LibraryInner {
+                update_signal,
+                library_uuid: props.library_uuid,
+                q: props.q,
+            }
         }
     }
 }
@@ -64,7 +71,7 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
         div { class: "container error-state",
             h1 { "Error Loading Library" }
             p { "There was an error loading the library: {props.message}" }
-            Link { to: Route::LibrarySearch {}, class: "btn btn-primary", "Return to Libraries" }
+            Link { to: Route::LibrarySearch { q: String::new() }, class: "btn btn-primary", "Return to Libraries" }
         }
     }
 }
@@ -73,6 +80,7 @@ fn LibraryError(props: LibraryErrorProps) -> Element {
 struct LibraryInnerProps {
     update_signal: Signal<()>,
     library_uuid: String,
+    q: String,
 }
 
 impl UuidSource for LibraryInnerProps {}
@@ -113,7 +121,15 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
         let v = show_hidden();
         LIBRARY_SHOW_HIDDEN.write().insert(*library_uuid.peek(), v);
     });
-    let media_search_signal = use_signal::<String>(|| try_local_storage(MEDIA_SEARCH_KEY));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::LibraryDetail {
+            library_uuid: library_uuid.peek().to_string(),
+            q: q_param(&text),
+        });
+    });
+    let search = use_search_state(MEDIA_SEARCH_KEY, &props.q, on_commit);
+    let media_search_signal = search.signal;
     let mut advanced_expanded = use_signal(|| false);
     let mut bulk_edit_signal = use_signal(|| None);
     let mut collection_color_signal = use_signal(HashMap::new);
@@ -250,10 +266,8 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     }
                 }
 
-                SearchBar {
-                    search_signal: media_search_signal,
-                    storage_key: MEDIA_SEARCH_KEY,
-                    placeholder: "Search media in this library...",
+                QueryBar::<Media> {
+                    search,
                     status: paged.pager.status(paged.items.read().len(), if show_hidden() { "hidden results" } else { "results" }),
                     action_button,
                 }
@@ -262,7 +276,7 @@ fn LibraryInner(props: LibraryInnerProps) -> Element {
                     show_signal: advanced_expanded,
                     tabs: HashMap::from([
                         ("Advanced Search".to_owned(), rsx! {
-                            AdvancedSearchTab { media_search_signal }
+                            AdvancedSearchTab::<Media> { search }
                         }),
                         ("Bulk Edit".to_owned(), rsx! {
                             BulkEditTab {

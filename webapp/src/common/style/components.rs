@@ -132,17 +132,41 @@ pub const BASE_COMPONENTS: &str = r#"
   box-shadow: var(--shadow-md);
 }
 
+/* the frame carries the aspect ratio, so a card's height never depends on its image having
+   loaded (a broken <img> has no natural size and ignores aspect-ratio) */
 .media-card-image {
   position: relative;
   overflow: hidden;
   width: 100%;
+  aspect-ratio: 4/3;
 }
 
 .media-card-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  aspect-ratio: 4/3;
+  height: 100%;
   object-fit: cover;
   transition: transform var(--transition-slow) var(--easing-standard);
+}
+
+/* shown in place of a thumbnail that failed to load */
+.media-card-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  background-color: var(--surface-raised);
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.media-card-placeholder-icon {
+  font-size: 1.75rem;
+  opacity: 0.6;
 }
 
 .media-card:hover .media-card-image img {
@@ -536,7 +560,7 @@ pub const BASE_COMPONENTS: &str = r#"
 
 /* flatter crop than the default 4:3 -- cards are ~17% shorter regardless of how
    many columns fit (object-fit: cover crops rather than squashes) */
-.media-grid.compact .media-card-image img {
+.media-grid.compact .media-card-image {
   aspect-ratio: 16 / 10;
 }
 
@@ -829,6 +853,288 @@ body:has(.modal-overlay) {
   margin-right: var(--space-2);
 }
 
+/* Query bar: typed field:value text, chips, completions and parse issues */
+.search-bar { flex-wrap: wrap; }
+
+.query-form {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.query-input-wrap { position: relative; }
+
+.query-suggestions {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  list-style: none;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.query-suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.query-suggestion:hover,
+.query-suggestion.active { background-color: var(--neutral-100); }
+
+.query-suggestion.active { box-shadow: inset 3px 0 0 var(--primary); }
+
+.query-suggestion-title { font-weight: 600; color: var(--text-primary); }
+
+.query-suggestion-help {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.query-suggestion-example {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+}
+
+.query-chips,
+.query-issues,
+.query-help { flex-basis: 100%; }
+
+.query-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.query-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  background-color: var(--neutral-100);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.query-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-full);
+  color: var(--text-tertiary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-fast) var(--easing-standard);
+}
+
+.query-chip-remove:hover {
+  background-color: var(--neutral-300);
+  color: var(--text-primary);
+}
+
+.query-issues {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.query-issue {
+  padding-left: var(--space-2);
+  border-left: 3px solid var(--warning);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.query-help {
+  padding: var(--space-3);
+  background-color: var(--neutral-50);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.query-help-intro { margin-bottom: var(--space-2); }
+
+.query-help-table { width: 100%; border-collapse: collapse; }
+
+.query-help-table th,
+.query-help-table td {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.query-help-table th { color: var(--text-primary); font-weight: 600; }
+
+/* the filter builder in the advanced tab */
+.filter-builder-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.filter-builder-row .form-group { flex: 1; min-width: 140px; margin-bottom: 0; }
+
+.filter-builder-error { margin-top: var(--space-2); color: var(--error); font-size: 0.875rem; }
+
+/* the header's search box: opens the palette.  sits between the logo and the nav links */
+.header-search {
+  flex: 1 1 auto;
+  max-width: 360px;
+  min-width: 0;
+  margin: 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  background-color: var(--neutral-50);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: text;
+  text-align: left;
+  transition: border-color var(--transition-fast) var(--easing-standard),
+              background-color var(--transition-fast) var(--easing-standard);
+}
+.header-search:hover { border-color: var(--neutral-300); background-color: var(--surface); }
+.header-search:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.header-search-icon { flex: none; }
+.header-search-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 768px) {
+  .header-search { flex: none; margin: 0 var(--space-2); padding: var(--space-2); cursor: pointer; }
+  .header-search-text { display: none; }
+}
+
+/* the ⌘K search palette (components/palette.rs): a panel near the top of the screen with
+   the box, a hint line and grouped results; the active row follows the arrow keys */
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--space-4) var(--space-4);
+  z-index: 60;
+  animation: fade-in var(--transition-normal) var(--easing-standard);
+}
+.palette-panel {
+  width: 100%;
+  max-width: 640px;
+  background-color: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.palette-input {
+  font: inherit;
+  font-size: 1.125rem;
+  padding: var(--space-4);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+}
+.palette-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+.palette-hint code { font-size: 0.8125rem; }
+.palette-keys { margin-left: auto; }
+.palette-list { max-height: 60vh; overflow-y: auto; padding: var(--space-1) 0; }
+.palette-heading {
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+.palette-row.active { background-color: var(--background); box-shadow: inset 3px 0 0 var(--primary); }
+.palette-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background-color: var(--background);
+}
+.palette-text { min-width: 0; }
+.palette-title, .palette-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-title { color: var(--text-primary); }
+.palette-subtitle { font-size: 0.8125rem; color: var(--text-tertiary); }
+.palette-see-all { font-size: 0.875rem; color: var(--primary); padding-left: calc(var(--space-4) + 40px + var(--space-3)); }
+.palette-note { padding: var(--space-2) var(--space-4); font-size: 0.875rem; color: var(--text-tertiary); }
+@media (max-width: 768px) {
+  .palette-overlay { padding-top: var(--space-4); }
+  .palette-keys { display: none; }
+}
+
+/* the values picker (GetSlugs): a filter box, the picked values as chips, and a scrolling
+   list of the values in the user's data with how many records carry each */
+.slug-picker { display: flex; flex-direction: column; gap: var(--space-2); }
+/* the picker takes the builder row's full width, so "Add filter" wraps below it */
+.filter-builder-row .form-group:has(.slug-picker) { flex-basis: 100%; }
+.slug-picked { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.slug-options {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  padding: var(--space-1) 0;
+}
+.slug-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.slug-option:hover { background-color: var(--background); }
+.slug-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slug-count { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.slug-empty { display: block; padding: var(--space-2) var(--space-3); color: var(--text-tertiary); font-size: 0.875rem; }
+
 .sticky-header {
   position: sticky;
   /* sticks just below the app header once the page (not an inner box)
@@ -933,6 +1239,25 @@ body:has(.modal-overlay) {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* fill the sidebar so .sidebar-body, not the page, is what scrolls */
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-body {
+  min-height: 0;
+}
+
+/* the Collection Labels search: the tab's text and colored list scroll away under it,
+   and the matching collections scroll as one long list below it */
+.collection-color-search {
+  position: sticky;
+  /* sticky stops at .sidebar-body's padding edge; this pulls it flush with the top */
+  top: calc(-1 * var(--space-6));
+  z-index: 1;
+  margin: 0 calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--surface);
 }
 
 .sidebar-header {

@@ -98,6 +98,7 @@ pub fn LibraryTable(props: LibraryTableProps) -> Element {
                                         Link {
                                             to: Route::LibraryDetail {
                                                 library_uuid: library_uuid.to_string(),
+                                                q: String::new(),
                                             },
                                             style: "color: var(--primary); font-weight: 500; text-decoration: none;",
                                             "{library.path}"

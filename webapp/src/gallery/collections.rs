@@ -118,6 +118,7 @@ fn CollectionTableInner(props: CollectionTableInnerProps) -> Element {
                                                     Link {
                                                         to: Route::CollectionDetail {
                                                             collection_uuid: collection_id.to_string(),
+                                                            q: String::new(),
                                                         },
                                                         style: "font-weight: 500; color: var(--primary);",
                                                         "{collection.name}"

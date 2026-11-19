@@ -2,7 +2,14 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{http_endpoint, media::MediaUuid, search::SearchOptions, uuid_newtype};
+use crate::{
+    http_endpoint,
+    media::MediaUuid,
+    page::{PageMeta, PageRequest, PagedResp},
+    query::SearchQuery,
+    search::SearchOptions,
+    uuid_newtype,
+};
 
 // structs
 
@@ -113,12 +120,11 @@ http_endpoint!(SearchCollections);
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct SearchCollectionsReq {
     pub filter: String,
+    // when present it replaces `filter`, which is then ignored
     #[serde(default)]
-    pub limit: Option<u64>,
-    #[serde(default)]
-    pub offset: u64,
-    #[serde(default)]
-    pub with_total: bool,
+    pub query: Option<SearchQuery>,
+    #[serde(flatten)]
+    pub page: PageRequest,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -126,6 +132,16 @@ pub struct SearchCollectionsResp {
     pub collections: Vec<CollectionUuid>,
     #[serde(default)]
     pub total: Option<u64>,
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for SearchCollectionsResp {
+    type Item = CollectionUuid;
+
+    fn into_parts(self) -> (Vec<CollectionUuid>, PageMeta) {
+        (self.collections, self.meta)
+    }
 }
 
 // search media inside a particular collection
@@ -142,4 +158,14 @@ pub struct SearchMediaInCollectionResp {
     pub media: Vec<MediaUuid>,
     #[serde(default)]
     pub total: Option<u64>,
+    #[serde(default)]
+    pub meta: PageMeta,
+}
+
+impl PagedResp for SearchMediaInCollectionResp {
+    type Item = MediaUuid;
+
+    fn into_parts(self) -> (Vec<MediaUuid>, PageMeta) {
+        (self.media, self.meta)
+    }
 }

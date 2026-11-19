@@ -5,7 +5,8 @@ use api::{
     WebError,
     collection::{CollectionUuid, search_media_in_collection},
     library::search_media_in_library,
-    media::{GetMediaReq, GetMediaResp, MediaUuid, get_media, search_media},
+    media::{GetMediaReq, GetMediaResp, Media, MediaUuid, get_media, search_media},
+    query::{SearchClass, SearchQuery},
     search::{
         BatchSearchAndSortReq, SearchFilter, SearchOptions, SearchRequest, SearchResponse,
         SortMethod, batch_search_and_sort,
@@ -17,9 +18,9 @@ use api::{
 pub async fn fetch_all_uuids(mut req: SearchRequest) -> Result<HashSet<MediaUuid>, WebError> {
     {
         let opts = req.opts_mut();
-        opts.limit = None;
-        opts.offset = 0;
-        opts.with_total = false;
+        opts.page.limit = None;
+        opts.page.offset = 0;
+        opts.page.with_total = false;
     }
 
     let uuids: Vec<MediaUuid> = match req {
@@ -31,12 +32,23 @@ pub async fn fetch_all_uuids(mut req: SearchRequest) -> Result<HashSet<MediaUuid
     Ok(uuids.into_iter().collect())
 }
 
+// the collection and library search boxes match one literal substring, so the words of the
+// box are rejoined with single spaces (collecting them straight into a String would glue
+// them together: "my trip" would search for "mytrip")
+pub fn literal_filter(search: &str) -> String {
+    search.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+// the structured query for a search box string.  parse issues are shown by the search bar and
+// never sent: a dropped clause simply isn't in the query
+pub fn parse_query<C: SearchClass>(search: &str) -> SearchQuery {
+    SearchQuery::parse::<C>(search).query
+}
+
 // the (unpaged) options for a media search box string
 pub fn search_opts(search: &str) -> SearchOptions {
     SearchOptions {
-        filter: SearchFilter::SubstringAny {
-            filter: search.split_whitespace().map(|s| s.to_owned()).collect(),
-        },
+        filter: SearchFilter::Query(parse_query::<Media>(search)),
         order: SortMethod::DateDesc,
         ..Default::default()
     }
@@ -51,18 +63,14 @@ pub async fn fetch_media_page(
 ) -> Result<Page<SearchResponse>, WebError> {
     {
         let opts = req.opts_mut();
-        opts.offset = offset;
-        opts.limit = Some(limit);
-        opts.with_total = with_total;
+        opts.page.offset = offset;
+        opts.page.limit = Some(limit);
+        opts.page.with_total = with_total;
     }
 
     let resp = batch_search_and_sort(&BatchSearchAndSortReq { req }).await?;
 
-    Ok(Page {
-        items: resp.media,
-        total: resp.total,
-        page_len: resp.page_len,
-    })
+    Ok(Page::from_resp(resp))
 }
 
 // which grid an item sits in, for deciding what an edit of it means (see reconcile_media)
@@ -131,11 +139,53 @@ pub async fn reconcile_media(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_filter_keeps_the_spaces() {
+        assert_eq!(literal_filter("my trip"), "my trip");
+        assert_eq!(literal_filter("  my   trip\t"), "my trip");
+        assert_eq!(literal_filter("   "), "");
+    }
+
     use api::{
         UuidSource,
         library::LibraryUuid,
-        media::{Media, MediaMetadata},
+        media::MediaMetadata,
+        query::{Clause, Op},
     };
+
+    #[test]
+    fn media_search_text_becomes_a_query() {
+        let opts = search_opts("beach  tag:ct-mod7 date:2022 oops:x");
+        let SearchFilter::Query(q) = opts.filter else {
+            panic!("expected a structured query");
+        };
+        // unknown fields stay text, so nothing the user typed is dropped silently
+        assert_eq!(q.text, ["beach", "oops:x"]);
+        assert_eq!(
+            q.clauses,
+            [
+                Clause {
+                    field: "tag".into(),
+                    op: Op::Has,
+                    value: "ct-mod7".into()
+                },
+                Clause {
+                    field: "date".into(),
+                    op: Op::Eq,
+                    value: "2022".into()
+                },
+            ]
+        );
+        assert_eq!(q.validate::<Media>(), Ok(()));
+
+        // a clause that doesn't parse never reaches the request
+        let q = parse_query::<Media>("type:Pdf date:soon");
+        assert!(q.is_empty());
+
+        // old saved searches are plain words
+        assert_eq!(parse_query::<Media>("my trip").text, ["my", "trip"]);
+    }
 
     struct Src;
     impl UuidSource for Src {}

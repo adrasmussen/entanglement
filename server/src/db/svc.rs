@@ -84,9 +84,25 @@ pub struct DbRunner<B: DbBackend> {
 #[async_trait]
 impl<B: DbBackend> ESInner for DbRunner<B> {
     async fn new(config: Arc<ESConfig>, registry: ESMRegistry) -> anyhow::Result<Self> {
+        let backend = B::new(config.clone()).await?;
+
+        // the searchable fields are declared in api::query and become sql by name, so refuse
+        // to start (rather than fail on the first search) if the schema lacks any of them
+        let columns = api::query::all_declared_columns();
+        match backend.check_columns(&columns).await {
+            Ok(()) => info!(
+                { columns = columns.len() },
+                "search columns present in database schema"
+            ),
+            Err(err) => {
+                error!({ error = %err }, "database schema check failed");
+                return Err(err);
+            }
+        }
+
         Ok(DbRunner {
             registry: registry.clone(),
-            backend: B::new(config.clone()).await?,
+            backend,
         })
     }
 
@@ -152,7 +168,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     .await
                 }
                 DbMsg::SearchMedia { resp, gid, opts } => {
-                    self.respond(resp, self.backend.search_media(gid, opts))
+                    self.respond_or_abandon(resp, self.backend.search_media(gid, opts))
                         .await
                 }
                 DbMsg::SimilarMedia {
@@ -246,7 +262,20 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     filter,
                     page,
                 } => {
-                    self.respond(resp, self.backend.search_collections(gid, filter, page))
+                    self.respond_or_abandon(
+                        resp,
+                        self.backend.search_collections(gid, filter, page),
+                    )
+                    .await
+                }
+                DbMsg::TagSlugs {
+                    resp,
+                    gid,
+                    kind,
+                    prefix,
+                    limit,
+                } => {
+                    self.respond(resp, self.backend.tag_slugs(gid, kind, prefix, limit))
                         .await
                 }
                 DbMsg::SearchMediaInCollection {
@@ -255,7 +284,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     collection_uuid,
                     opts,
                 } => {
-                    self.respond(
+                    self.respond_or_abandon(
                         resp,
                         self.backend
                             .search_media_in_collection(gid, collection_uuid, opts),
@@ -279,8 +308,13 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     self.respond(resp, self.backend.update_library(library_uuid, update))
                         .await
                 }
-                DbMsg::SearchLibraries { resp, gid, filter } => {
-                    self.respond(resp, self.backend.search_libraries(gid, filter))
+                DbMsg::SearchLibraries {
+                    resp,
+                    gid,
+                    filter,
+                    page,
+                } => {
+                    self.respond_or_abandon(resp, self.backend.search_libraries(gid, filter, page))
                         .await
                 }
                 DbMsg::SearchMediaInLibrary {
@@ -290,7 +324,7 @@ impl<B: DbBackend> ESInner for DbRunner<B> {
                     hidden,
                     opts,
                 } => {
-                    self.respond(
+                    self.respond_or_abandon(
                         resp,
                         self.backend
                             .search_media_in_library(gid, library_uuid, hidden, opts),

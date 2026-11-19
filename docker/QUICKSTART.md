@@ -74,6 +74,10 @@ docker compose exec -T postgres psql -U entanglement -d entanglement \
   -v ON_ERROR_STOP=1 < db/migrations/2026-11-12_paging_indexes.sql
 ```
 
+Apply them in date order. `2026-11-18_trigram_search.sql` is required, not just
+faster: it adds the `media_search_text()` function that word searches call, and
+the server refuses to start without it (the error names the file).
+
 ## 4. Register a library
 
 ```sh
@@ -219,6 +223,9 @@ sudo security add-trusted-cert -d -r trustRoot \
 
 When your browser is prompted for a client certificate, pick the one with
 subject `entanglement-dev` / CN `dev`.
+
+To check the API against the database, run `zsh docker/devtest/api_check.sh`: it
+compares raw SQL with the paging and count endpoints and prints a grid of results.
 
 ## Inspecting the database
 

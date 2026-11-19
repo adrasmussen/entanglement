@@ -1,24 +1,31 @@
 use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 use crate::{
+    Route,
     collection::{COLLECTION_SEARCH_KEY, grid::CollectionGrid},
     common::{
         paging::{Page, use_paged},
-        storage::*,
+        query_ui::q_param,
+        search::parse_query,
     },
     components::{
         modal::{MODAL_STACK, Modal, ModalBox},
-        search::SearchBar,
+        query_bar::{QueryBar, use_search_state},
     },
 };
-use api::collection::*;
+use api::{collection::*, page::PageRequest};
 
 #[component]
-pub fn CollectionSearch() -> Element {
+pub fn CollectionSearch(q: String) -> Element {
     let update_signal = use_signal(|| ());
 
-    let collection_search_signal =
-        use_signal::<String>(|| try_local_storage(COLLECTION_SEARCH_KEY));
+    let nav = use_navigator();
+    let on_commit = use_callback(move |text: String| {
+        let _ = nav.replace(Route::CollectionSearch { q: q_param(&text) });
+    });
+    let search = use_search_state(COLLECTION_SEARCH_KEY, &q, on_commit);
+    let collection_search_signal = search.signal;
 
     let paged = use_paged(
         move || collection_search_signal.cloned(),
@@ -26,21 +33,20 @@ pub fn CollectionSearch() -> Element {
         // cards here load their own data, so heights are not stable on a first frame
         None,
         |search: String, offset, limit, with_total| async move {
-            let filter = search.split_whitespace().map(|s| s.to_owned()).collect();
             let resp = search_collections(&SearchCollectionsReq {
-                filter,
-                limit: Some(limit),
-                offset,
-                with_total,
+                filter: String::new(),
+                query: Some(parse_query::<Collection>(&search)),
+                page: PageRequest {
+                    limit: Some(limit),
+                    offset,
+                    with_total,
+                    ..Default::default()
+                },
             })
             .await?;
 
             // uuid-only, so nothing goes missing between the search and the response
-            Ok(Page {
-                items: resp.collections,
-                total: resp.total,
-                page_len: None,
-            })
+            Ok(Page::from_resp(resp))
         },
     );
     let pager = paged.pager;
@@ -70,10 +76,8 @@ pub fn CollectionSearch() -> Element {
                     p { "Organize and browse your media collections" }
                 }
 
-                SearchBar {
-                    search_signal: collection_search_signal,
-                    storage_key: COLLECTION_SEARCH_KEY,
-                    placeholder: "Search by collection name...",
+                QueryBar::<Collection> {
+                    search,
                     status,
                     action_button,
                 }

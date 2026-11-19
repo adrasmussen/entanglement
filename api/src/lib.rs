@@ -9,7 +9,11 @@ pub mod collection;
 pub mod comment;
 pub mod library;
 pub mod media;
+pub mod omni;
+pub mod page;
+pub mod query;
 pub mod search;
+pub mod slug;
 pub mod task;
 
 // entanglment api
