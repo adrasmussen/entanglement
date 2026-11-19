@@ -548,9 +548,12 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
             div { class: "add-collection-color",
                 h4 { class: "tab-section-title", "Add Collection Color" }
 
-                CompactSearchBar {
-                    search_signal: collection_search_signal,
-                    placeholder: "Search collections to add color...",
+                // pinned to the top of the sidebar while the rest of the tab scrolls away
+                div { class: "collection-color-search",
+                    CompactSearchBar {
+                        search_signal: collection_search_signal,
+                        placeholder: "Search collections to add color...",
+                    }
                 }
 
                 if let Some(collections) = available_collections {
@@ -561,7 +564,7 @@ pub fn CollectionColorTab(props: CollectionColorTabProps) -> Element {
                     } else {
                         div {
                             class: "available-collections",
-                            style: "max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md);",
+                            style: "border: 1px solid var(--border); border-radius: var(--radius-md);",
                             for collection_uuid in collections {
                                 AvailableCollectionItem {
                                     key: "{collection_uuid}",

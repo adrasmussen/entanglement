@@ -1209,6 +1209,25 @@ body:has(.modal-overlay) {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* fill the sidebar so .sidebar-body, not the page, is what scrolls */
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-body {
+  min-height: 0;
+}
+
+/* the Collection Labels search: the tab's text and colored list scroll away under it,
+   and the matching collections scroll as one long list below it */
+.collection-color-search {
+  position: sticky;
+  /* sticky stops at .sidebar-body's padding edge; this pulls it flush with the top */
+  top: calc(-1 * var(--space-6));
+  z-index: 1;
+  margin: 0 calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--surface);
 }
 
 .sidebar-header {
