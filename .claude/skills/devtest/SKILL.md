@@ -71,6 +71,7 @@ Some scripts arrive with later branches of the search/paging stack (PR #8 and th
 | `api_check.sh` (zsh + python) | Paging metadata (`meta`, `has_more`, clamps), count-only requests, `GetCounts`, structured field queries, prefix matching of plain words, rejections (400), hostile values, old request shapes, paging integrity (pages vs unpaged: equal, no dupes), all vs raw SQL | counttest seeds; the `pagetest`/`bulktest` libraries for the older grids |
 | `rbac_check.py` | Out-of-group records never surface: media searches and totals, batch labels, scoped searches, collection and library lists, `GetCounts`, direct lookups (401), `SimilarMedia`, streams, and writes (DB unchanged) | `seed_rbac.sql` (the richer version also uses the search seeds) |
 | `ui_check.js` (Playwright) | Search bar: chips, completions, double-click field hints, parse issues, filter builder, `?q=` prefill/commit/reload, local-storage fallback, back-navigation landing on the same card, "No preview" tiles | counttest and search seeds |
+| `cert_check.sh` | The dev certs from `docker/certgen/generate.sh`: CA name constraints, server cert validity <= 825 days with serverAuth EKU, a rogue cert the CA signs for another site is rejected (openssl and macOS), live TLS verified with `--cacert` (no `-k`) | the dev stack (signs one throwaway cert in a temp dir) |
 | `ui_modal_check.js` (Playwright) | Create/edit collection modal: width and padding, the close button, tags typed with any separator stored as a set, help text | the dev stack only (creates and deletes its own `counttest-modal-*` collection) |
 
 **Reading the output:**
@@ -100,6 +101,7 @@ Some scripts arrive with later branches of the search/paging stack (PR #8 and th
 ## Pitfalls seen before
 - The server speaks HTTP/2 only: use curl or Playwright, not Python urllib. Retry on curl exit 16.
 - `docker/dev-certs/` is gitignored. Run scripts from the main checkout, or symlink the certs into a worktree. Never copy the keys around.
+- Browser access needs `client.p12` imported (macOS keychain or Firefox; it is AES-256, since current Firefox rejects the old RC2-40 encoding as a wrong password). Playwright needs neither: it takes `clientCertificates` directly. Its `ignoreHTTPSErrors: true` stays, because Playwright's client-cert proxy verifies the server with Node's CA list, not the dev CA.
 - Seeded counttest media have no files. Use media with real files (e.g. `type:Image` on the gallery, or the `pagetest`/`bulktest` libraries) when a check depends on images loading.
 - `prevent_default()` in a Dioxus `onsubmit` reloads the page (see `CLAUDE.md`). A Playwright `framenavigated` to `?<input name>=…` is the tell.
 - A full Docker disk breaks Postgres writes ("No space left on device"). Check `docker system df` and prune the build cache.
